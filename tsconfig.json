@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@earendil-works/pi-coding-agent": [
+        "./test/__mocks__/@earendil-works/pi-coding-agent.ts"
+      ]
+    }
+  },
+  "include": ["index.ts", "src/**/*", "test/**/*"]
+}
