@@ -6,7 +6,6 @@ import { runGates, formatFailures } from "./gates";
 import * as GP from "./generic-prompts";
 import * as T from "./transitions";
 import { getLanguageConfig } from "./languages";
-import * as Gfy from "./graphify-integration";
 
 // --- Types ---
 
@@ -561,12 +560,6 @@ function handleAdvanceEffect(
   state.current.turnsThisPhase = 1;
   debug(`Advance → ${effect.phase}`);
 
-  if (effect.phase === "negotiate") {
-    Gfy.ensureGraph(ctx.cwd, "build", debug);
-  } else if (effect.phase === "C") {
-    Gfy.ensureGraph(ctx.cwd, "build", debug);
-  }
-
   ctx.ui.notify(effect.notify, "info");
   ctx.ui.setStatus("loop", effect.status);
   if (effect.prompt) {
@@ -600,7 +593,6 @@ function handleDoneEffect(
 ): boolean {
   state.current.turnsThisPhase = 1;
   debug(`Done`);
-  Gfy.ensureGraph(ctx.cwd, "build", debug);
   ctx.ui.notify(effect.notify, "info");
   ctx.ui.setStatus("loop", effect.status);
   return true;

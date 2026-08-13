@@ -6,7 +6,6 @@ import { formatStatus, parseLoopArgs } from "./selectors";
 import { formatFailures } from "./gates";
 import * as GP from "./generic-prompts";
 import { getLanguageConfig, detectProject, DetectedProject } from "./languages";
-import * as Gfy from "./graphify-integration";
 
 // --- Types ---
 
@@ -146,9 +145,6 @@ export function cmdLoop(
       ctx.ui.notify(`Loop started (${language}). Phase A: Tester writes contract.`, "info");
       ctx.ui.setStatus("loop", "Phase A — round 1");
       pi.appendEntry("loop-state", { ...state.current });
-
-      // Graphify: build knowledge graph of the existing project for the Tester's context
-      Gfy.ensureGraph(ctx.cwd, "build", debug);
 
       pi.sendUserMessage(
         lang.prompts.promptTesterPhaseA(state.current.specPath, state.current.buildTool),
