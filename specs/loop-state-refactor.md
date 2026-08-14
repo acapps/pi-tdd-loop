@@ -93,6 +93,7 @@ interface PhaseMachine {
   maxNegotiate: number;
   maxB: number;
   maxC: number;
+  maxTurnsPerPhase: number;    // escalation threshold — read by events dispatcher
   // Transient — cleared on session restore
   justTransitioned: boolean;
   negotiateReprompted: boolean;
@@ -139,8 +140,9 @@ Each module accesses only the sub-structures it needs:
 function createInitialState(specPath: string, language: LanguageKey, buildTool: BuildTool, coverage?: number): LoopState {
   return {
     identity: { specPath, language, buildTool, coverageThreshold: coverage ?? 80 },
-    machine: { phase: "A" as Phase, round: 1, lastPhase: "A" as Phase, turnsThisPhase: 1,
-               maxA: 3, maxNegotiate: 3, maxB: 5, maxC: 3,
+    machine: { phase: "A" as Phase, round: 1, lastPhase: null,
+               turnsThisPhase: 1, maxA: 3, maxNegotiate: 3, maxB: 5, maxC: 3,
+               maxTurnsPerPhase: 5,
                justTransitioned: false, negotiateReprompted: false },
     negotiation: { lastProposal: "" },
     dispute: { mode: false, count: 0, max: 3, awaitFix: false, awaitReview: false },
@@ -149,10 +151,32 @@ function createInitialState(specPath: string, language: LanguageKey, buildTool: 
   };
 }
 
+// Validation rules:
+//   1. done phase ⇒ round must be 0, turnsThisPhase must be 0
+//   2. escalated phase ⇒ lastPhase must be B or C (can only escalate from active phases)
+//   3. dispute mode on ⇒ disputeCount must be > 0 (can't be in mode without triggering it)
+//   4. round must be ≥ 1 for all non-done phases
+//   5. turnsThisPhase must be ≥ 1 for all non-done phases
 function validateState(state: LoopState): string[] {
   const errors: string[] = [];
   if (state.machine.phase === "done" && state.machine.round > 0) {
     errors.push("done phase should have round 0");
+  }
+  if (state.machine.phase === "done" && state.machine.turnsThisPhase > 0) {
+    errors.push("done phase should have turnsThisPhase 0");
+  }
+  if (state.machine.phase === "escalated" &&
+      (!state.machine.lastPhase || !["B", "C"].includes(state.machine.lastPhase))) {
+    errors.push("escalated phase must come from B or C");
+  }
+  if (state.dispute.mode && state.dispute.count === 0) {
+    errors.push("dispute mode requires disputeCount > 0");
+  }
+  if (state.machine.phase !== "done" && state.machine.round < 1) {
+    errors.push("non-done phase must have round >= 1");
+  }
+  if (state.machine.phase !== "done" && state.machine.turnsThisPhase < 1) {
+    errors.push("non-done phase must have turnsThisPhase >= 1");
   }
   return errors;
 }
@@ -162,6 +186,12 @@ function validateState(state: LoopState): string[] {
 
 ```typescript
 // events/session-start.ts
+// Transient flags are ephemeral session state. They represent the *current*
+// interaction flow (e.g., "did we just transition?", "is the dispute tool awaiting
+// a response?"). They are NOT persistent user preferences.
+//
+// dispute.mode is cleared here because it reflects the active dispute state
+// (awaiting a human response), not a toggle that survives across sessions.
 function clearTransientFlags(state: LoopState): void {
   state.machine.justTransitioned = false;
   state.machine.negotiateReprompted = false;
@@ -198,6 +228,16 @@ describe("validateState", () => {
     const state = makeState({ machine: { ...defaultMachine, phase: "done", round: 5 } });
     expect(validateState(state)).toContain("done phase should have round 0");
   });
+
+  it("rejects escalated phase without B or C as lastPhase", () => {
+    const state = makeState({ machine: { ...defaultMachine, phase: "escalated", lastPhase: "A" } });
+    expect(validateState(state)).toContain("escalated phase must come from B or C");
+  });
+
+  it("rejects dispute mode with zero disputeCount", () => {
+    const state = makeState({ dispute: { ...defaultDispute, mode: true, count: 0 } });
+    expect(validateState(state)).toContain("dispute mode requires disputeCount > 0");
+  });
 });
 ```
 
@@ -220,8 +260,8 @@ describe("validateState", () => {
 ## Migration Plan
 
 1. **Phase 1**: Add sub-structures alongside flat fields (dual-state)
-2. **Phase 1**: Update transitions.ts to use sub-structures
-3. **Phase 2**: Update tools.ts to use sub-structures
-4. **Phase 3**: Update commands.ts and events.ts
-5. **Phase 4**: Remove flat fields, keep only sub-structures
-6. **Phase 4**: Add validation tests
+2. **Phase 2**: Update transitions.ts to use sub-structures
+3. **Phase 3**: Update tools.ts to use sub-structures
+4. **Phase 4**: Update commands.ts and events.ts
+5. **Phase 5**: Remove flat fields, keep only sub-structures
+6. **Phase 6**: Add validation tests and validateState unit tests
