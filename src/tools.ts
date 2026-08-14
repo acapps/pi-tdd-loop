@@ -19,10 +19,7 @@ interface ToolCtx {
 
 // --- Helpers ---
 
-function buildProposeResult(phase: Phase, inNegotiate: boolean): { content: { text: string }[] } {
-  if (inNegotiate) {
-    return { content: [{ text: "Proposal recorded. Awaiting review." }] };
-  }
+function buildProposeResult(): { content: { text: string }[] } {
   return { content: [{ text: "Proposal recorded. Awaiting review." }] };
 }
 
@@ -36,11 +33,11 @@ function buildReviewResult(
   return { content: [{ text: "Feedback recorded." }] };
 }
 
-function isNegotiatePhase(phase: string): boolean {
+function isNegotiatePhase(phase: string): phase is "negotiate" {
   return phase === "negotiate";
 }
 
-function isPhaseB(phase: string): boolean {
+function isPhaseB(phase: string): phase is "B" {
   return phase === "B";
 }
 
@@ -89,7 +86,7 @@ function handlePropose(
   if (isPhaseB(phase)) {
     return handleBDisputePropose(state, pi, debug, ctx, plan);
   }
-  return buildProposeResult(phase, false);
+  return buildProposeResult();
 }
 
 function handleNegotiatePropose(

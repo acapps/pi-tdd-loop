@@ -82,13 +82,13 @@ describe("computeNegotiateTransition", () => {
   });
 });
 
-// --- computePhaseATransition ---
+// --- Phase A transitions ---
 
-describe("computePhaseATransition", () => {
+describe("Phase A transitions (via computeTransition)", () => {
   it("compile pass: advances to negotiate", () => {
     const state = makeState({ phase: "A", round: 1 });
     const gateResult = makeGateResult({ compile: true, tests: true, coverage: 85, allPassed: true });
-    const result = T.computePhaseATransition(state, gateResult);
+    const result = T.computeTransition(state, gateResult);
 
     expect(result.effect.type).toBe("advance");
     expect(result.state.phase).toBe("negotiate");
@@ -99,7 +99,7 @@ describe("computePhaseATransition", () => {
   it("compile fail: retries within maxA", () => {
     const state = makeState({ phase: "A", round: 1, maxA: 3 });
     const gateResult = makeGateResult({ compile: false, compileError: "type mismatch" });
-    const result = T.computePhaseATransition(state, gateResult);
+    const result = T.computeTransition(state, gateResult);
 
     expect(result.effect.type).toBe("retry");
     expect(result.state.phase).toBe("A");
@@ -109,7 +109,7 @@ describe("computePhaseATransition", () => {
   it("compile fail: escalates at maxA", () => {
     const state = makeState({ phase: "A", round: 3, maxA: 3 });
     const gateResult = makeGateResult({ compile: false, compileError: "type mismatch" });
-    const result = T.computePhaseATransition(state, gateResult);
+    const result = T.computeTransition(state, gateResult);
 
     expect(result.effect.type).toBe("escalated");
     expect(result.state.phase).toBe("escalated");
@@ -117,13 +117,13 @@ describe("computePhaseATransition", () => {
   });
 });
 
-// --- computePhaseBTransition ---
+// --- Phase B transitions ---
 
-describe("computePhaseBTransition", () => {
+describe("Phase B transitions (via computeTransition)", () => {
   it("allPassed: advances to Phase C", () => {
     const state = makeState({ phase: "B", round: 1 });
     const gateResult = makeGateResult({ compile: true, tests: true, coverage: 85, allPassed: true });
-    const result = T.computePhaseBTransition(state, gateResult);
+    const result = T.computeTransition(state, gateResult);
 
     expect(result.effect.type).toBe("advance");
     expect(result.state.phase).toBe("C");
@@ -133,7 +133,7 @@ describe("computePhaseBTransition", () => {
   it("failure: retries within maxB", () => {
     const state = makeState({ phase: "B", round: 1, maxB: 5 });
     const gateResult = makeGateResult({ compile: true, tests: false, coverage: 0, failures: [{ test: "T", subtest: "", output: "" }] });
-    const result = T.computePhaseBTransition(state, gateResult);
+    const result = T.computeTransition(state, gateResult);
 
     expect(result.effect.type).toBe("retry");
     expect(result.state.phase).toBe("B");
@@ -143,20 +143,20 @@ describe("computePhaseBTransition", () => {
   it("failure: escalates at maxB", () => {
     const state = makeState({ phase: "B", round: 5, maxB: 5 });
     const gateResult = makeGateResult({ compile: true, tests: false, coverage: 0, failures: [{ test: "T", subtest: "", output: "" }] });
-    const result = T.computePhaseBTransition(state, gateResult);
+    const result = T.computeTransition(state, gateResult);
 
     expect(result.effect.type).toBe("escalated");
     expect(result.state.phase).toBe("escalated");
   });
 });
 
-// --- computePhaseCTransition ---
+// --- Phase C transitions ---
 
-describe("computePhaseCTransition", () => {
+describe("Phase C transitions (via computeTransition)", () => {
   it("tests pass: done", () => {
     const state = makeState({ phase: "C", round: 1 });
     const gateResult = makeGateResult({ compile: true, tests: true, coverage: 85, allPassed: true });
-    const result = T.computePhaseCTransition(state, gateResult);
+    const result = T.computeTransition(state, gateResult);
 
     expect(result.effect.type).toBe("done");
     expect(result.state.phase).toBe("done");
@@ -165,7 +165,7 @@ describe("computePhaseCTransition", () => {
   it("tests fail: retries within maxC", () => {
     const state = makeState({ phase: "C", round: 1, maxC: 3 });
     const gateResult = makeGateResult({ compile: true, tests: false, coverage: 0, failures: [{ test: "T", subtest: "", output: "" }] });
-    const result = T.computePhaseCTransition(state, gateResult);
+    const result = T.computeTransition(state, gateResult);
 
     expect(result.effect.type).toBe("retry");
     expect(result.state.phase).toBe("C");
@@ -175,7 +175,7 @@ describe("computePhaseCTransition", () => {
   it("tests fail: done (cleaner failed) at maxC", () => {
     const state = makeState({ phase: "C", round: 3, maxC: 3 });
     const gateResult = makeGateResult({ compile: true, tests: false, coverage: 0, failures: [{ test: "T", subtest: "", output: "" }] });
-    const result = T.computePhaseCTransition(state, gateResult);
+    const result = T.computeTransition(state, gateResult);
 
     expect(result.effect.type).toBe("done");
     expect(result.state.phase).toBe("done");
@@ -185,13 +185,13 @@ describe("computePhaseCTransition", () => {
   });
 });
 
-// --- computeDisputeFixTransition ---
+// --- Dispute fix transitions ---
 
-describe("computeDisputeFixTransition", () => {
+describe("Dispute fix transitions (via computeTransition)", () => {
   it("allPassed: advances to Phase C", () => {
     const state = makeState({ phase: "B", round: 1, disputeMode: true });
     const gateResult = makeGateResult({ compile: true, tests: true, coverage: 85, allPassed: true });
-    const result = T.computeDisputeFixTransition(state, gateResult);
+    const result = T.computeTransition(state, gateResult);
 
     expect(result.effect.type).toBe("advance");
     expect(result.state.phase).toBe("C");
@@ -201,7 +201,7 @@ describe("computeDisputeFixTransition", () => {
   it("tests fail: Writer retries", () => {
     const state = makeState({ phase: "B", round: 1, disputeMode: true });
     const gateResult = makeGateResult({ compile: true, tests: false, coverage: 0, failures: [{ test: "T", subtest: "", output: "" }] });
-    const result = T.computeDisputeFixTransition(state, gateResult);
+    const result = T.computeTransition(state, gateResult);
 
     expect(result.effect.type).toBe("retry");
     expect(result.state.phase).toBe("B");
@@ -212,7 +212,7 @@ describe("computeDisputeFixTransition", () => {
   it("compile fail: Tester retries", () => {
     const state = makeState({ phase: "B", round: 1, disputeMode: true });
     const gateResult = makeGateResult({ compile: false, compileError: "type mismatch" });
-    const result = T.computeDisputeFixTransition(state, gateResult);
+    const result = T.computeTransition(state, gateResult);
 
     expect(result.effect.type).toBe("retry");
     expect(result.state.phase).toBe("B");
@@ -275,7 +275,7 @@ describe("immutability", () => {
     const originalPhase = state.phase;
     const originalRound = state.round;
 
-    T.computePhaseATransition(state, gateResult);
+    T.computeTransition(state, gateResult);
 
     expect(state.phase).toBe(originalPhase);  // unchanged
     expect(state.round).toBe(originalRound);    // unchanged

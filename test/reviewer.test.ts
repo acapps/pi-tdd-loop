@@ -9,6 +9,7 @@ import {
   buildClarificationAddendum,
   formatAddendum,
   buildSummaryTable,
+  readSpec,
 } from "../src/reviewer";
 import {
   type Finding,
@@ -603,6 +604,161 @@ describe("finding categories", () => {
 
     for (const cat of categories) {
       expect(output).toContain(cat);
+    }
+  });
+});
+
+// ================================================================
+// analyzeSpec — correctness tests (findIssues)
+// ================================================================
+
+describe("analyzeSpec — correctness", () => {
+  it("detects vague phrases like 'properly'", () => {
+    const spec = `# API\n\nParseConfig(config string) Config — parses the config properly.`;
+    const result = analyzeSpec(spec);
+    expect(result.findings.length).toBeGreaterThan(0);
+    const vagueFinding = result.findings.find(f => f.category === "Ambiguous phrase" && f.ambiguity.includes("properly"));
+    expect(vagueFinding).toBeDefined();
+  });
+
+  it("detects vague phrases like 'correctly'", () => {
+    const spec = `# API\n\nValidate(s string) bool — validates the input correctly.`;
+    const result = analyzeSpec(spec);
+    const vagueFinding = result.findings.find(f => f.category === "Ambiguous phrase" && f.ambiguity.includes("correctly"));
+    expect(vagueFinding).toBeDefined();
+  });
+
+  it("detects I/O without error handling", () => {
+    const spec = `# API\n\nReadFile(path string) string — reads the file and returns its contents.\nWriteFile(path string, data string) — writes data to disk.`;
+    const result = analyzeSpec(spec);
+    const ioFinding = result.findings.find(f => f.category === "Type contract gap" && f.title.includes("error handling"));
+    expect(ioFinding).toBeDefined();
+  });
+
+  it("does not flag I/O error handling when errors are mentioned", () => {
+    const spec = `# API\n\nReadFile(path string) (string, error) — reads the file. Returns error on failure.`;
+    const result = analyzeSpec(spec);
+    const ioFinding = result.findings.find(f => f.category === "Type contract gap" && f.title.includes("error handling"));
+    expect(ioFinding).toBeUndefined();
+  });
+
+  it("detects missing empty-string edge case for string functions", () => {
+    // extractFunctions requires ## header to associate description with function
+    const spec = `# API\n\n## Capitalize(s string) string\n\nCapitalizes the first character of the input.`;
+    const result = analyzeSpec(spec);
+    const emptyFinding = result.findings.find(f => f.category === "Edge case missing" && f.title.toLowerCase().includes("empty"));
+    expect(emptyFinding).toBeDefined();
+  });
+
+  it("does not flag empty-string edge case when spec mentions empty input", () => {
+    const spec = `# API\n\n## Reverse(s string) string\n\nReverses the string. Returns empty string for empty input.`;
+    const result = analyzeSpec(spec);
+    const emptyFinding = result.findings.find(f => f.category === "Edge case missing" && f.title.toLowerCase().includes("empty") && f.title.toLowerCase().includes("reverse"));
+    expect(emptyFinding).toBeUndefined();
+  });
+
+  it("detects missing false cases for boolean-returning functions", () => {
+    // extractFunctions requires ## header; params don't need 'string' here
+    const spec = `# API\n\n## IsPalin(s string) bool\n\nReturns true if palindrome.`;
+    const result = analyzeSpec(spec);
+    const boolFinding = result.findings.find(f => f.category === "Edge case missing" && f.title.toLowerCase().includes("false"));
+    expect(boolFinding).toBeDefined();
+  });
+
+  it("does not flag false cases when spec mentions false", () => {
+    const spec = `# API\n\n## IsPalin(s string) bool\n\nReturns true if palindrome, false otherwise.`;
+    const result = analyzeSpec(spec);
+    const boolFinding = result.findings.find(f => f.category === "Edge case missing" && f.title.toLowerCase().includes("false") && f.title.toLowerCase().includes("ispalin"));
+    expect(boolFinding).toBeUndefined();
+  });
+
+  it("detects no test strategy when spec lacks test mentions", () => {
+    const spec = `# API\n\nAdd(a int, b int) int — returns the sum.`;
+    const result = analyzeSpec(spec);
+    const noTestFinding = result.findings.find(f => f.title.includes("test strategy"));
+    expect(noTestFinding).toBeDefined();
+  });
+
+  it("does not flag missing test strategy when tests are mentioned", () => {
+    const spec = `# API\n\nAdd(a int, b int) int — returns the sum.\n\nTests should cover overflow and underflow cases.`;
+    const result = analyzeSpec(spec);
+    const noTestFinding = result.findings.find(f => f.title.includes("test strategy"));
+    expect(noTestFinding).toBeUndefined();
+  });
+
+  it("deduplicates findings — same vague phrase only reported once", () => {
+    const spec = `# API\n\nDoIt properly. Also handle it properly. The result must be obtained properly.`;
+    const result = analyzeSpec(spec);
+    const vagueFindings = result.findings.filter(f => f.ambiguity.includes("properly"));
+    expect(vagueFindings.length).toBe(1); // deduplicated
+  });
+
+  it("has fewer edge case findings for well-specified spec than underspecified", () => {
+    // Well-specified: empty, false, UTF-8, normalization all mentioned
+    const wellSpec = `
+# API
+
+## Capitalize(s string) string
+
+Capitalizes the first character. Returns empty string for empty input.
+
+## IsPalin(s string) bool
+
+Returns true if palindrome, false otherwise. Uses ToLower. Tests cover edge cases.
+`;
+    // Underspecified: nothing about empty, false, etc.
+    const underSpec = `
+# API
+
+## Capitalize(s string) string
+
+Capitalize the input.
+
+## IsPalin(s string) bool
+
+Check if palindrome.
+`;
+    const wellResult = analyzeSpec(wellSpec);
+    const underResult = analyzeSpec(underSpec);
+    // The well-specified spec should have fewer edge case findings
+    const wellEdgeCases = wellResult.findings.filter(f => f.category === "Edge case missing");
+    const underEdgeCases = underResult.findings.filter(f => f.category === "Edge case missing");
+    expect(wellEdgeCases.length).toBeLessThan(underEdgeCases.length);
+  });
+});
+
+// ================================================================
+// readSpec — path resolution
+// ================================================================
+
+describe("readSpec", () => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+
+  it("reads absolute paths", () => {
+    const tmpfile = `${os.tmpdir()}/loop-spec-test-${Date.now()}.md`;
+    fs.writeFileSync(tmpfile, "# Test Spec\n\nSome content.");
+    try {
+      const content = readSpec(tmpfile);
+      expect(content).toContain("Test Spec");
+    } finally {
+      fs.unlinkSync(tmpfile);
+    }
+  });
+
+  it("returns null for non-existent absolute path", () => {
+    const content = readSpec("/nonexistent/path-" + Date.now() + ".md");
+    expect(content).toBeNull();
+  });
+
+  it("resolves relative path against baseDir", () => {
+    const tmpdir = fs.mkdtempSync(`${os.tmpdir()}/loop-test-`);
+    fs.writeFileSync(`${tmpdir}/spec.md`, "# Spec in baseDir");
+    try {
+      const content = readSpec("spec.md", tmpdir);
+      expect(content).toContain("Spec in baseDir");
+    } finally {
+      fs.rmSync(tmpdir, { recursive: true });
     }
   });
 });

@@ -490,12 +490,12 @@ describe("formatMetrics", () => {
   });
 
   it("includes coverage as percentage", () => {
-    accumulateGate(createMetrics(makeState()), makeGateResult({ coverage: 87 }));
-    const finalized = finalize(createMetrics(makeState()), "done");
-    // Re-create with coverage
-    metrics = finalize(createMetrics(makeState()), "done");
-    // Just check format structure
-    expect(formatMetrics(metrics)).toBeDefined();
+    const m = createMetrics(makeState());
+    accumulateGate(m, makeGateResult({ coverage: 87 }));
+    const finalized = finalize(m, "done");
+    const output = formatMetrics(finalized);
+
+    expect(output).toContain("87%");
   });
 
   it("includes gate runs count", () => {

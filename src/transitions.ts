@@ -1,28 +1,18 @@
 // --- Transition logic (pure functions) ---
 
 import type { LoopState, Phase, GateResult } from "./types";
+import { RETRY_PROMPTS, ADVANCE_PROMPTS, REPROMPT_KEYS } from "./constants";
+import type { RetryPromptType, AdvancePromptType } from "./constants";
 
 // --- Types ---
 
 type TransitionEffect =
   | { type: "noop" }
-  | { type: "retry"; phase: Phase; round: number; status: string; notify?: string; level?: string; prompt?: RetryPrompt }
-  | { type: "advance"; phase: Phase; status: string; notify: string; prompt?: AdvancePrompt }
+  | { type: "retry"; phase: Phase; round: number; status: string; notify?: string; level?: string; prompt?: RetryPromptType }
+  | { type: "advance"; phase: Phase; status: string; notify: string; prompt?: AdvancePromptType }
   | { type: "done"; status: string; notify: string }
   | { type: "escalated"; status: string; notify: string }
   | { type: "reprompt"; notify: string; level: string; prompt: string };
-
-type RetryPrompt =
-  | "tester_compile_retry"
-  | "writer_phase_b_retry"
-  | "cleaner_retry"
-  | "writer_dispute_fix_incomplete"
-  | "tester_dispute_fix_compile_fail";
-
-type AdvancePrompt =
-  | "writer_negotiate"
-  | "cleaner_phase_c"
-  | string;
 
 // --- Public API ---
 
@@ -38,11 +28,16 @@ export function computeTransition(
     return handleDisputeFixIncomplete(state, gate);
   }
   if (state.phase === "A" && gate.compile) {
-    return { state: advanceToNegotiate(state), effect: advanceEffect("negotiate", "writer_negotiate") };
+    return { state: advanceToNegotiate(state), effect: advanceEffect("negotiate", ADVANCE_PROMPTS.WRITER_NEGOTIATE) };
   }
   if (state.phase === "B") {
     return handlePhaseBTransition(state, gate);
   }
+
+  if (state.phase === "C") {
+    return handlePhaseCTransition(state, gate);
+  }
+  return { state, effect: { type: "noop" } };
   if (state.phase === "C") {
     return handlePhaseCTransition(state, gate);
   }
@@ -81,7 +76,7 @@ function repromptWriter(state: LoopState): { state: LoopState; effect: Transitio
       type: "reprompt",
       notify: "Writer must use negotiate_propose tool.",
       level: "warning",
-      prompt: "negotiate_reprompt_writer",
+      prompt: REPROMPT_KEYS.WRITER,
     },
   };
 }
@@ -93,7 +88,7 @@ function repromptTester(state: LoopState): { state: LoopState; effect: Transitio
       type: "reprompt",
       notify: "Tester must use negotiate_review tool.",
       level: "warning",
-      prompt: "negotiate_reprompt_tester",
+      prompt: REPROMPT_KEYS.TESTER,
     },
   };
 }
@@ -120,7 +115,7 @@ function handleTesterCompileFail(
   if (state.round < state.maxA) {
     return {
       state: incrementRound(state),
-      effect: retryEffect(state, "tester_compile_retry"),
+      effect: retryEffect(state, RETRY_PROMPTS.TESTER_COMPILE_RETRY),
     };
   }
   return {
@@ -149,17 +144,17 @@ function handleDisputeFixIncomplete(
         status: `Phase ${state.phase} — round ${state.round + 1}`,
         notify: "compile failed after dispute fix.",
         level: "warning",
-        prompt: "tester_dispute_fix_compile_fail",
+        prompt: RETRY_PROMPTS.TESTER_DISPUTE_FIX_COMPILE_FAIL,
       },
     };
   }
   if (!gate.tests) {
     return {
       state: clearDisputeMode(state),
-      effect: retryEffect(state, "writer_dispute_fix_incomplete"),
+      effect: retryEffect(state, RETRY_PROMPTS.WRITER_DISPUTE_FIX_INCOMPLETE),
     };
   }
-  return { state: advanceToPhaseC(state), effect: advanceEffect("C", "cleaner_phase_c") };
+  return { state: advanceToPhaseC(state), effect: advanceEffect("C", ADVANCE_PROMPTS.CLEANER_PHASE_C) };
 }
 
 function handlePhaseBTransition(
@@ -170,15 +165,15 @@ function handlePhaseBTransition(
     if (state.round >= state.maxB) {
       return { state: escalateTo(state, "B"), effect: escalatedEffect("B") };
     }
-    return { state: incrementRound(state), effect: retryEffect(state, "writer_phase_b_retry") };
+    return { state: incrementRound(state), effect: retryEffect(state, RETRY_PROMPTS.WRITER_PHASE_B_RETRY) };
   }
   if (!gate.allPassed) {
     if (state.round >= state.maxB) {
       return { state: escalateTo(state, "B"), effect: escalatedEffect("B") };
     }
-    return { state: incrementRound(state), effect: retryEffect(state, "writer_phase_b_retry") };
+    return { state: incrementRound(state), effect: retryEffect(state, RETRY_PROMPTS.WRITER_PHASE_B_RETRY) };
   }
-  return { state: advanceToPhaseC(state), effect: advanceEffect("C", "cleaner_phase_c") };
+  return { state: advanceToPhaseC(state), effect: advanceEffect("C", ADVANCE_PROMPTS.CLEANER_PHASE_C) };
 }
 
 // --- Phase C ---
@@ -189,7 +184,7 @@ function handlePhaseCTransition(
 ): { state: LoopState; effect: TransitionEffect } {
   if (!gate.tests) {
     if (state.round < state.maxC) {
-      return { state: incrementRound(state), effect: retryEffect(state, "cleaner_retry") };
+      return { state: incrementRound(state), effect: retryEffect(state, RETRY_PROMPTS.CLEANER_RETRY) };
     }
     return {
       state: markDone(state),
@@ -256,7 +251,7 @@ function clearDisputeMode(state: LoopState): LoopState {
 
 function retryEffect(
   state: LoopState,
-  prompt: RetryPrompt,
+  prompt: RetryPromptType,
 ): TransitionEffect {
   const phase = state.phase as Phase;
   const round = state.round + 1;
@@ -271,7 +266,7 @@ function retryEffect(
   };
 }
 
-function advanceEffect(phase: Phase, prompt: AdvancePrompt): TransitionEffect {
+function advanceEffect(phase: Phase, prompt: AdvancePromptType): TransitionEffect {
   return {
     type: "advance",
     phase,
@@ -291,45 +286,6 @@ function escalatedEffect(phase: string): TransitionEffect {
     status: `escalated (Phase ${phase} exhausted)`,
     notify: `Phase ${phase} exhausted. Escalating to human.`,
   };
-}
-
-function repromptEffect(role: string, promptKey: string): TransitionEffect {
-  return {
-    type: "reprompt",
-    notify: `${role} hasn't used a negotiation tool.`,
-    level: "warning",
-    prompt: promptKey,
-  };
-}
-
-// --- Phase-specific exports (for tests) ---
-
-export function computePhaseATransition(
-  state: LoopState,
-  gate: GateResult | null,
-): { state: LoopState; effect: TransitionEffect } {
-  return computeTransition(state, gate);
-}
-
-export function computePhaseBTransition(
-  state: LoopState,
-  gate: GateResult | null,
-): { state: LoopState; effect: TransitionEffect } {
-  return computeTransition(state, gate);
-}
-
-export function computePhaseCTransition(
-  state: LoopState,
-  gate: GateResult | null,
-): { state: LoopState; effect: TransitionEffect } {
-  return computeTransition(state, gate);
-}
-
-export function computeDisputeFixTransition(
-  state: LoopState,
-  gate: GateResult | null,
-): { state: LoopState; effect: TransitionEffect } {
-  return computeTransition(state, gate);
 }
 
 function getPhaseMax(state: LoopState, phase: string): number {

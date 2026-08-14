@@ -205,42 +205,13 @@ export function buildSummaryTable(findings: Finding[]): string {
 
 // --- Threshold helpers ---
 
-function countFunctions(specText: string): number {
-  const patterns = [
-    /^function\s+\w+/im,
-    /^\w+\s*\(.*\)\s*:?\s*\w+/m,
-    /`(\w+)\(`/g,
-    /- \w+\(/g,
-  ];
-
-  const uniqueNames = new Set<string>();
-  for (const pattern of patterns) {
-    const matches = specText.match(new RegExp(pattern.source, pattern.flags));
-    if (matches) {
-      for (const match of matches) {
-        const name = match.replace(/[^a-zA-Z0-9_$]/g, "").trim();
-        if (name.length > 2) uniqueNames.add(name);
-      }
-    }
-  }
-
-  return uniqueNames.size;
-}
 
 function mentionsErrors(text: string): boolean {
   const patterns = [/\berror\b/i, /\berrors\b/i, /\bpanic\b/i, /\bfail\b/i];
   return patterns.some(p => p.test(text));
 }
 
-function mentionsIO(text: string): boolean {
-  const patterns = [/\bI\/O\b/i, /\bfile\b/i, /\bread\b/i, /\bwrite\b/i, /\bstdin\b/i, /\bstdout\b/i];
-  return patterns.some(p => p.test(text));
-}
 
-function mentionsConcurrency(text: string): boolean {
-  const patterns = [/\bconcurrency\b/i, /\bgoroutine\b/i, /\bthread\b/i, /\basync\b/i, /\bparallel\b/i];
-  return patterns.some(p => p.test(text));
-}
 
 // --- Finding detectors ---
 

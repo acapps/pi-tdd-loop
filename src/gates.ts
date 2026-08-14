@@ -4,6 +4,10 @@
 import { execSync } from "node:child_process";
 import type { LanguageKey, BuildTool, Phase, GateResult } from "./types";
 
+// Coverage sentinel: -1 means coverage tool is unavailable or errored.
+// Distinguishes from 0 (which means the tool ran and reported 0%).
+const COVERAGE_UNAVAILABLE = -1;
+
 // --- Public API ---
 
 export function runGates(
@@ -36,7 +40,10 @@ export function runGates(
   if (phase === "A") return result; // Phase A only checks compile + basic tests
 
   // 3. Coverage check (Phase B/C)
-  result.coverage = checkCoverage(cwd, language, coverageThreshold);
+  const coverage = checkCoverage(cwd, language);
+  if (coverage > 0) {
+    result.coverage = coverage;
+  }
 
   return result;
 }
@@ -92,7 +99,7 @@ function getTestCommand(language: LanguageKey): string {
   }
 }
 
-function parseTestOutput(output: string, language: LanguageKey): TestResult {
+export function parseTestOutput(output: string, language: LanguageKey): TestResult {
   const failures: { test: string; subtest: string; output: string }[] = [];
 
   // Go JSON output
@@ -124,15 +131,15 @@ function parseTestOutput(output: string, language: LanguageKey): TestResult {
 
 // --- Coverage Check ---
 
-function checkCoverage(cwd: string, language: LanguageKey, threshold: number): number {
+function checkCoverage(cwd: string, language: LanguageKey): number {
   const cmd = getCoverageCommand(language);
   try {
     const output = execSync(cmd, { cwd, timeout: 60000, encoding: "utf-8", stdio: "pipe" });
     const match = output.match(/coverage:\s+(\d+\.?\d*)%/);
     if (match) return parseFloat(match[1]);
-    return 0;
+    return COVERAGE_UNAVAILABLE;
   } catch {
-    return 0;
+    return COVERAGE_UNAVAILABLE;
   }
 }
 

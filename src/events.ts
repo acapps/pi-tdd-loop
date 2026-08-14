@@ -6,6 +6,7 @@ import { runGates, formatFailures } from "./gates";
 import * as GP from "./generic-prompts";
 import * as T from "./transitions";
 import { getLanguageConfig } from "./languages";
+import { RETRY_PROMPTS, ADVANCE_PROMPTS, REPROMPT_KEYS } from "./constants";
 
 // --- Types ---
 
@@ -453,7 +454,7 @@ function handleNegotiateSettled(
 
   if (effect.type === "reprompt") {
     ctx.ui.notify(effect.notify, effect.level);
-    const prompt = effect.prompt === "negotiate_reprompt_writer"
+    const prompt = effect.prompt === REPROMPT_KEYS.WRITER
       ? GP.promptNegotiateRepromptWriter()
       : GP.promptNegotiateRepromptTester();
     pi.sendUserMessage(prompt, { triggerTurn: true });
@@ -569,15 +570,15 @@ function buildRetryPrompt(
   const count = failures.length;
 
   switch (promptType) {
-    case "tester_compile_retry":
+    case RETRY_PROMPTS.TESTER_COMPILE_RETRY:
       return lang.prompts.promptTesterCompileRetry(gateResult.compileError);
-    case "writer_phase_b_retry":
+    case RETRY_PROMPTS.WRITER_PHASE_B_RETRY:
       return lang.prompts.promptWriterPhaseBContinue(summary, count);
-    case "cleaner_retry":
+    case RETRY_PROMPTS.CLEANER_RETRY:
       return lang.prompts.promptCleanerRetry(summary, count);
-    case "writer_dispute_fix_incomplete":
+    case RETRY_PROMPTS.WRITER_DISPUTE_FIX_INCOMPLETE:
       return lang.prompts.promptWriterPhaseBContinue(summary, count);
-    case "tester_dispute_fix_compile_fail":
+    case RETRY_PROMPTS.TESTER_DISPUTE_FIX_COMPILE_FAIL:
       return lang.prompts.promptTesterCompileRetry(gateResult.compileError);
     default:
       return "Fix the issues and try again.";
@@ -610,9 +611,9 @@ function buildAdvancePrompt(
   lang: ReturnType<typeof getLanguageConfig>,
 ): string {
   switch (promptType) {
-    case "writer_negotiate":
+    case ADVANCE_PROMPTS.WRITER_NEGOTIATE:
       return GP.promptWriterNegotiate(state.current.specPath, lang.testFilePattern);
-    case "cleaner_phase_c":
+    case ADVANCE_PROMPTS.CLEANER_PHASE_C:
       return lang.prompts.promptCleanerPhaseC();
     default:
       return promptType;
