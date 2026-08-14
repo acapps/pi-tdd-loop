@@ -26,7 +26,12 @@ interface LoopState {
   disputeCount: number;            // tools writes
   turnsThisPhase: number;          // events writes, transitions reads
   lastProposal: string;            // tools writes, events reads
-  lastPhase: Phase | null;        // transitions writes, commands reads — null until first transition
+  // NOTE: current code initializes lastPhase to "A" (commands.ts:111). The refactored
+  // state factory uses null initially (Phase | null). This is safe because:
+  // - commands.ts:234 reads lastPhase only on resume from escalated (lastPhase is always
+  //   set by transitions.ts before escalation)
+  // - All other readers (commands.ts:283, tools.ts:139/273, events.ts:376) only write it
+  // - The null value represents "no prior phase" which is semantically correct
   justTransitioned: boolean;       // transitions writes, events reads/writes
   negotiateReprompted: boolean;    // transitions writes, events reads
   awaitDisputeFix: boolean;        // tools writes, events reads/writes
@@ -80,7 +85,7 @@ interface LoopState {
 interface LoopIdentity {
   specPath: string;
   language: LanguageKey;
-  buildTool: BuildTool;
+  buildTool: BuildTool;    // NOTE: current code casts as "maven" | "gradle" (excludes "go")
   coverageThreshold: number;
 }
 
@@ -106,7 +111,7 @@ interface NegotiationState {
 interface DisputeState {
   mode: boolean;
   count: number;
-  max: number;
+  max: number;    // was maxDispute at top level — tools.ts:118 reads this
   awaitFix: boolean;
   awaitReview: boolean;
 }
@@ -119,7 +124,24 @@ interface PhaseZeroState {
   findings?: Finding[];
   awaitingReview: boolean;
 }
+
+// skipPhase0 is only set (commands.ts:116), never read. It is dead code and
+// removed from the target architecture.
+//
+// PhaseZeroThresholds (types.ts) is NOT part of LoopState. It is passed as
+// an argument to shouldActivatePhase0() in reviewer.ts and stays external to state.
 ```
+
+### State validation — where it runs
+
+`validateState()` is called at these boundaries:
+1. **After createInitialState** — ensures initial state is valid
+2. **After applySubStructures** — ensures mutations preserved invariants
+3. **After session restore** — ensures persisted state survived correctly
+4. **At module boundaries** (optional, debug mode) — catches cross-module inconsistencies
+
+In production, violations are logged as warnings but not thrown (defensive).
+In tests, violations throw immediately.
 
 ### Module-specific access patterns
 
@@ -294,7 +316,10 @@ Each module is updated incrementally:
 1. Add the sub-structure types alongside the flat fields
 2. Update one module to use sub-structures internally
 3. At module boundaries, convert via `toSubStructures` / `applySubStructures`
-4. When all modules use sub-structures, remove flat fields
+4. **applySubStructures is called immediately after any mutation** to keep flat fields
+   in sync. The flat fields are source of truth — if a module mutates sub-structures,
+   it must call applySubStructures before returning.
+5. When all modules use sub-structures, remove flat fields
 
 ### Steps
 
