@@ -4,6 +4,8 @@ Adversarial 3-agent test-driven development loop for [pi](https://pi.dev).
 
 Three AI agent roles take turns — **Tester** writes the contract (stubs + tests), **Writer** implements to pass them, **Cleaner** refactors for readability. Each phase is gated by independent build/test/coverage checks. If the Writer disagrees with a test, it can **dispute** and the Tester must defend or concede.
 
+Before any code is written, **Phase 0** reviews your spec for ambiguities and missing edge cases so you can clarify once, up front — not mid-loop.
+
 ## Language Support
 
 - **Go** — `go build`, `go test -json`, `go test -cover`
@@ -35,7 +37,8 @@ pi -e ./path/to/pi-tdd-loop
 
 | Command | Description |
 |---|---|
-| `/loop [options] <spec>` | Start the loop at Phase A |
+| `/loop [options] <spec>` | Start the loop (Phase 0 review first) |
+| `/loop-approve` | Approve Phase 0 review and proceed to Phase A |
 | `/loop-status` | Show current phase, round, gate results |
 | `/loop-continue` | Resume from current phase after escalation |
 | `/loop-restart <phase>` | Jump to a specific phase |
@@ -45,12 +48,16 @@ pi -e ./path/to/pi-tdd-loop
 ## How It Works
 
 ```
-Phase A (Tester) → Negotiate → Phase B (Writer) → Phase C (Cleaner) → Done
-     │                    │               │                  │
-     ▼                    ▼               ▼                  ▼
-  Compile gate       Approve or       Test +           Test gate
-  (stubs + tests)    feedback         Coverage gate    (refactor safe)
+Phase 0 (Review) → Phase A (Tester) → Negotiate → Phase B (Writer) → Phase C (Cleaner) → Done
+     │                   │                │               │                  │
+     ▼                   ▼                ▼               ▼                  ▼
+  Ambiguity check    Compile gate     Approve or       Test +           Test gate
+  (always runs)      (stubs + tests)  feedback         Coverage gate    (refactor safe)
 ```
+
+### Phase 0 — Spec review (always runs)
+
+Reviewer reads your spec and surfaces ambiguities, missing edge cases, and underspecified behavior. You approve, reject, or modify each finding before any code is written. This shifts you from firefighter (reacting to disputes mid-loop) to reviewer (approving clarifications up front).
 
 ### Phase A — Tester writes the contract
 

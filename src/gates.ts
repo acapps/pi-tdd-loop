@@ -148,9 +148,18 @@ function getCoverageCommand(language: LanguageKey): string {
 // --- Format Failures ---
 
 export function formatFailures(failures: { test: string; subtest: string; output: string }[]): string {
-  if (failures.length === 0) return "No specific failures captured (test runner returned non-zero exit code).";
-  return failures.map(f => {
-    const name = f.subtest ? `${f.test} > ${f.subtest}` : f.test;
-    return `  - ${name}`;
+  if (failures.length === 0) return "(unknown failures)";
+
+  // Deduplicate by test/subtest pair (last entry wins)
+  const seen = new Map<string, { test: string; subtest: string; output: string }>();
+  for (const f of failures) {
+    const key = f.subtest ? `${f.test}/${f.subtest}` : f.test;
+    seen.set(key, f);
+  }
+
+  return Array.from(seen.values()).map(f => {
+    const name = f.subtest ? `${f.test}/${f.subtest}` : f.test;
+    const output = f.output.length > 1000 ? f.output.slice(0, 1000) + "... (truncated)" : f.output;
+    return `  - ${name}\n${output.trim()}`;
   }).join("\n");
 }

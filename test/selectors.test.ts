@@ -135,4 +135,27 @@ describe("parseLoopArgs", () => {
     const result = parseLoopArgs("  spec.md  ");
     expect(result.specPath).toBe("spec.md");
   });
+
+  it("strips @ prefix from pi paths", () => {
+    const result = parseLoopArgs("@/Users/alancapps/project/spec.md");
+    expect(result.specPath).toBe("/Users/alancapps/project/spec.md");
+  });
+
+  it("strips @ prefix with flags", () => {
+    const result = parseLoopArgs("--coverage 90 @/path/to/spec.md");
+    expect(result.specPath).toBe("/path/to/spec.md");
+    expect(result.coverage).toBe(90);
+  });
+
+  it("expands ~ to home directory", () => {
+    const result = parseLoopArgs("~/project/spec.md");
+    const os = require("node:os");
+    expect(result.specPath).toBe(`${os.homedir()}/project/spec.md`);
+  });
+
+  it("expands ~ and strips @ together", () => {
+    const result = parseLoopArgs("@~/project/spec.md");
+    const os = require("node:os");
+    expect(result.specPath).toBe(`${os.homedir()}/project/spec.md`);
+  });
 });

@@ -1,10 +1,11 @@
 // --- Command handlers ---
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import type { Phase, LoopState, LanguageKey, BuildTool } from "./types";
+import type { Phase, LoopState, LanguageKey, BuildTool, SpecAnalysis } from "./types";
 import { formatStatus, parseLoopArgs } from "./selectors";
 import { formatFailures } from "./gates";
 import * as GP from "./generic-prompts";
+import * as R from "./reviewer";
 import { getLanguageConfig, detectProject, DetectedProject } from "./languages";
 
 // --- Types ---
@@ -112,6 +113,7 @@ function createInitialState(
     negotiateReprompted: false,
     awaitDisputeFix: false,
     awaitDisputeReview: false,
+    skipPhase0: false,
   };
 }
 
@@ -123,14 +125,21 @@ export function cmdLoop(
   debug: DebugFn,
 ) {
   return {
-    description: "Start adversarial loop: [--language go|java|typescript] [--coverage N] <spec-path>",
+    description: "Start adversarial loop: [--language go|java|typescript] [--coverage N] [--skip-review] <spec-path>",
     handler: async (args: string, ctx: CommandContext) => {
       const { specPath, coverage, language: argLanguage } = parseLoopArgs(args);
       if (!specPath) {
         ctx.ui.notify(
-          "Usage: /loop [--language go|java|typescript] [--coverage N] <spec-path>",
+          "Usage: /loop [--language go|java|typescript] [--coverage N] [--skip-review] <spec-path>",
           "warning",
         );
+        return;
+      }
+
+      // Validate spec file exists
+      const specText = R.readSpec(specPath, ctx.cwd);
+      if (specText === null) {
+        ctx.ui.notify(`Spec file not found: ${specPath}`, "error");
         return;
       }
 
@@ -138,20 +147,66 @@ export function cmdLoop(
       const language = (argLanguage || detected?.language || "go") as LanguageKey;
       const buildTool = (detected?.buildTool || "maven") as BuildTool;
 
+      // Validate test runner is available
+      const runnerCheck = R.validateTestRunner(ctx.cwd, language);
+      if (!runnerCheck.ok) {
+        ctx.ui.notify(
+          `Test runner not available: ${runnerCheck.error}. Setup project first.`,
+          "warning",
+        );
+      }
+
       state.current = createInitialState(specPath, language, buildTool, coverage);
       const lang = getLanguageConfig(language);
 
-      debug(`Command: /loop ${state.current.specPath} [lang=${language}] → phase A, round 1`);
-      ctx.ui.notify(`Loop started (${language}). Phase A: Tester writes contract.`, "info");
-      ctx.ui.setStatus("loop", "Phase A — round 1");
-      pi.appendEntry("loop-state", { ...state.current });
+      // Phase 0: Spec Review (always runs)
+      const analysis = R.analyzeSpec(specText);
+      debug(`Phase 0: reviewing spec (${analysis.findings.length} findings)`);
+      state.current.phase = "review" as Phase;
+      state.current.specFindings = analysis.findings;
+      state.current.awaitingReview = true;
 
-      pi.sendUserMessage(
-        lang.prompts.promptTesterPhaseA(state.current.specPath, state.current.buildTool),
-        { triggerTurn: true },
+      const reviewPrompt = buildPhaseZeroPrompt(specText, analysis);
+      ctx.ui.notify(
+        `Phase 0: Review findings before starting.`,
+        "info",
       );
+      ctx.ui.setStatus("loop", "Phase 0 — review pending");
+      pi.appendEntry("loop-state", { ...state.current });
+      pi.sendUserMessage(reviewPrompt, { triggerTurn: true });
+      return;
     },
   };
+}
+
+function buildPhaseZeroPrompt(specText: string, analysis: SpecAnalysis): string {
+  const findingCount = analysis.findings.length;
+  const reasons = analysis.reasons.join(", ");
+
+  const lines = [
+    "Phase 0: Spec Review",
+    "",
+    `The spec meets the threshold for review: ${reasons}`,
+    "",
+    "Review the spec below and check for ambiguities, missing edge cases, or underspecified behavior.",
+    "",
+    "Use negotiate_propose to approve (plan='approve') or provide feedback on findings.",
+    "",
+    `Spec content (${findingCount} potential findings):`,
+    "",
+    specText,
+  ];
+
+  if (findingCount > 0) {
+    lines.push("");
+    lines.push(R.buildSummaryTable(analysis.findings));
+    for (const f of analysis.findings) {
+      lines.push("");
+      lines.push(R.formatFinding(f));
+    }
+  }
+
+  return lines.join("\n");
 }
 
 export function cmdStatus(state: { current: LoopState }) {
@@ -280,6 +335,38 @@ export function cmdCancel(
       ctx.ui.notify("Loop cancelled.", "info");
       ctx.ui.setStatus("loop", "idle");
       pi.appendEntry("loop-state", { ...state.current });
+    },
+  };
+}
+
+export function cmdApprove(
+  state: { current: LoopState },
+  pi: ExtensionAPI,
+  debug: DebugFn,
+) {
+  return {
+    description: "Approve Phase 0 review and proceed to Phase A",
+    handler: async (_args: string, ctx: CommandContext) => {
+      if (state.current.phase !== "review") {
+        ctx.ui.notify("Not in Phase 0 review. Run /loop <spec-path> to start.", "warning");
+        return;
+      }
+
+      debug("Command: /loop-approve → Phase A, round 1");
+      state.current.phase = "A";
+      state.current.round = 1;
+      state.current.awaitingReview = false;
+      state.current.turnsThisPhase = 1;
+
+      const lang = getLanguageConfig(state.current.language);
+      ctx.ui.notify("Spec review approved. Phase A: Tester writes contract.", "info");
+      ctx.ui.setStatus("loop", "Phase A — round 1");
+      pi.appendEntry("loop-state", { ...state.current });
+
+      pi.sendUserMessage(
+        lang.prompts.promptTesterPhaseA(state.current.specPath, state.current.buildTool),
+        { triggerTurn: true },
+      );
     },
   };
 }

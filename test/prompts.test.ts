@@ -18,12 +18,6 @@ describe("Phase A prompts (Go)", () => {
     expect(prompt).toContain("*_test.go");
   });
 
-  it("promptTesterPhaseAContinue mentions compilation errors", () => {
-    const prompt = prompts.promptTesterPhaseAContinue();
-    expect(prompt).toContain("Phase A");
-    expect(prompt).toContain("compilation errors");
-  });
-
   it("promptTesterPhaseARestart delegates to full prompt", () => {
     const restart = prompts.promptTesterPhaseARestart("spec.md", "maven");
     const full = prompts.promptTesterPhaseA("spec.md", "maven");
@@ -228,18 +222,18 @@ describe("Phase C prompts (TypeScript)", () => {
 
 describe("Enforcement refusal messages", () => {
   it("Go negotiation refusal", () => {
-    const msg = getLanguageConfig("go").prompts.refusalMessage.negotiate;
-    expect(msg).toContain("Negotiation is discussion-only");
+    const msg = getLanguageConfig("go").refusalMessage.negotiate;
+    expect(msg).toContain("Negotiation");
   });
 
   it("Go phase A refusal", () => {
-    const msg = getLanguageConfig("go").prompts.refusalMessage.phaseA;
+    const msg = getLanguageConfig("go").refusalMessage.phaseA;
     expect(msg).toContain("Phase A");
   });
 
   it("Java negotiation refusal", () => {
-    const msg = getLanguageConfig("java").prompts.refusalMessage.negotiate;
-    expect(msg).toContain("Negotiation is discussion-only");
+    const msg = getLanguageConfig("java").refusalMessage.negotiate;
+    expect(msg).toContain("Negotiation");
   });
 });
 

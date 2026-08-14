@@ -334,6 +334,7 @@ export function computeDisputeFixTransition(
 
 function getPhaseMax(state: LoopState, phase: string): number {
   switch (phase) {
+    case "review": return state.maxNegotiate; // reuse maxNegotiate for review
     case "A": return state.maxA;
     case "negotiate": return state.maxNegotiate;
     case "B": return state.maxB;

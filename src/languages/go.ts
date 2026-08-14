@@ -9,9 +9,11 @@ Go conventions:
 - Use go test -cover ./... for coverage
 - Package name matches directory
 - Exported names use PascalCase
+- Error handling without explicit error types, prefer errors.Is and errors.As
 `;
 
 const config: LanguageConfig = {
+  key: "go",
   sourceFilePattern: "*.go (non-test files)",
   testFilePattern: "*_test.go",
   isTestFile: (path: string) => /\b\w+_test\.go$/.test(path),
@@ -19,10 +21,10 @@ const config: LanguageConfig = {
 
   prompts: {
     promptTesterPhaseA: (specPath: string, _buildTool: string) =>
-`Phase A (Tester). Write contract tests.
+`You are the TESTER. Write contract tests.
 
 Read ${specPath}. Design the test contract that defines correct behavior.
-Write both ${""}*_${"test.go"} (tests) and stub .go files (empty implementations).
+Write both *_test.go and *.go (tests) and Stubs (.go files with empty implementations).
 
 Tests must:
 - Cover all spec requirements
@@ -33,10 +35,16 @@ Tests must:
 When done, stop producing tool calls.`,
 
     promptTesterPhaseARestart: (specPath: string, _buildTool: string) =>
-`Phase A (Tester). Rewrite contract tests.
+`You are the TESTER. Write contract tests.
 
-Read ${specPath}. The tests are inadequate. Rewrite them from scratch.
-Write both *_test.go and stub .go files.
+Read ${specPath}. Design the test contract that defines correct behavior.
+Write both *_test.go and *.go (tests) and Stubs (.go files with empty implementations).
+
+Tests must:
+- Cover all spec requirements
+- Include edge cases: empty, single-char, UTF-8, whitespace, case
+- Use table-driven tests where applicable
+- Be comprehensive enough to catch real bugs
 
 When done, stop producing tool calls.`,
 
@@ -56,10 +64,11 @@ Do not modify *_test.go. Dispute wrong tests via negotiate_propose.
 When done, stop producing tool calls.`,
 
     promptNegotiateAutoAdvance: () =>
-`Advancing to Phase B. Write Go source files to pass all tests.
+`Advancing to Phase B without explicit approval. Write Go source files.
 
 Read *_test.go and *.go stubs. Implement the logic. Preserve stub signatures.
-Do not modify *_test.go. Dispute wrong tests via negotiate_propose.
+
+${CONVENTIONS}
 
 When done, stop producing tool calls.`,
 
@@ -85,6 +94,7 @@ When done, stop producing tool calls.`,
 `Phase C (Cleaner). Refactor Go source files for readability:
 
 - Return early. Extract helpers. Clear names.
+- No method over 200 lines
 - You may only write *.go (non-test files). Do not modify *_test.go.
 - All tests must pass.
 
@@ -93,17 +103,23 @@ ${CONVENTIONS}
 When done, stop producing tool calls.`,
 
     promptCleanerRetry: (failureSummary: string, failureCount: number) =>
-`Phase C (Cleaner). Tests failed after refactoring:
+`Phase C (Cleaner). Refactoring broke ${failureCount} test. Fix the broken code:
 
 ${failureSummary}
 
-Fix the broken tests by restoring working code. Do not modify *_test.go.
+Do not modify *_test.go. All tests must pass.
 When done, stop producing tool calls.`,
 
     promptCleanerRestart: () =>
-`Phase C (Cleaner). Restart. Refactor Go source files for readability.
+`Phase C (Cleaner). Refactor Go source files for readability:
 
-Do not modify *_test.go. All tests must pass.
+- Return early. Extract helpers. Clear names.
+- No method over 200 lines
+- You may only write *.go (non-test files). Do not modify *_test.go.
+- All tests must pass.
+
+${CONVENTIONS}
+
 When done, stop producing tool calls.`,
 
     promptTesterDisputeFix: () =>
@@ -113,8 +129,8 @@ Do not modify non-test Go files. When done, stop producing tool calls.`,
 
   refusalMessage: {
     phaseA: "Phase A only: write test files and stubs. Cannot write other files.",
-    negotiate: "Negotiation phase: discussion only. No file writes allowed.",
-    phaseC: "Phase B/C: you may only write source files (non-test). Cannot modify test files.",
+    negotiate: "Negotiation is discussion-only. No file writes allowed.",
+    phaseC: "Phase B/C: you may only write source files (*.go). Cannot modify *_test.go.",
   },
 };
 

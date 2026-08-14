@@ -48,6 +48,7 @@ export default function (pi: ExtensionAPI) {
   // =========================================================================
 
   pi.registerCommand("loop", Cmd.cmdLoop(state, pi, debug));
+  pi.registerCommand("loop-approve", Cmd.cmdApprove(state, pi, debug));
   pi.registerCommand("loop-status", Cmd.cmdStatus(state));
   pi.registerCommand("loop-continue", Cmd.cmdContinue(state, pi, debug));
   pi.registerCommand("loop-restart", Cmd.cmdRestart(state, pi, debug));

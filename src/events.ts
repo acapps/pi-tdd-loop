@@ -100,6 +100,7 @@ function buildPhasePrompt(
   const phase = state.current.phase as Phase;
 
   switch (phase) {
+    case "review": return buildReviewPrompt(lang, systemPrompt);
     case "A": return buildTesterPrompt(lang, systemPrompt);
     case "negotiate": return buildNegotiatePrompt(state.current, debug, systemPrompt);
     case "B": return buildWriterPrompt(state, pi, lang, debug, systemPrompt);
@@ -110,6 +111,20 @@ function buildPhasePrompt(
 
 function buildContextMessage(content: string): Record<string, unknown> {
   return { customType: "loop-context", content, display: false };
+}
+
+function buildReviewPrompt(
+  lang: ReturnType<typeof getLanguageConfig>,
+  systemPrompt: string,
+): { message: Record<string, unknown>; systemPrompt: string } {
+  return {
+    message: buildContextMessage(
+      `REVIEWER (Phase 0). Review the spec for ambiguities and missing edge cases.\n` +
+      `Use negotiate_propose with plan='approve' to proceed, or provide feedback.\n` +
+      `No file writes.`,
+    ),
+    systemPrompt: `${systemPrompt}\n\nPhase 0 (Reviewer). Review the spec. Use negotiate_propose. No file writes.`,
+  };
 }
 
 function buildTesterPrompt(
@@ -333,6 +348,9 @@ export function eventAgentSettled(
     if (handleJustTransitioned(state, pi, lang, debug)) return undefined;
     if (handleDisputeFix(state, pi, lang, ctx)) return undefined;
     if (handleDisputeReview(state, pi, lang, debug, ctx)) return undefined;
+    if (state.current.phase === "review") {
+      return handleReviewSettled(state, pi, ctx, lang, debug);
+    }
     if (state.current.phase === "negotiate") {
       return handleNegotiateSettled(state, pi, ctx, lang, debug);
     }
@@ -358,6 +376,23 @@ function checkLoopEscalation(
   state.current.phase = "escalated";
   ctx.ui.notify(`Loop detected in Phase ${state.current.lastPhase}. Escalating to human.`, "warning");
   ctx.ui.setStatus("loop", "escalated (loop detected)");
+  return true;
+}
+
+function handleReviewSettled(
+  state: { current: LoopState },
+  pi: ExtensionAPI,
+  ctx: EventCtx,
+  lang: ReturnType<typeof getLanguageConfig>,
+  debug: DebugFn,
+): boolean {
+  if (!state.current.awaitingReview) return false;
+
+  debug("Phase 0 review: agent settled, awaiting human /loop-approve");
+  // Don't advance — wait for human to use /loop-approve or negotiate_propose
+  ctx.ui.notify("Phase 0: Review findings. Use /loop-approve to proceed.", "info");
+  ctx.ui.setStatus("loop", "Phase 0 — review pending");
+  pi.appendEntry("loop-state", { ...state.current });
   return true;
 }
 

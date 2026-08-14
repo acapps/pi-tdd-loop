@@ -1,6 +1,6 @@
 // --- Types ---
 
-export type Phase = "A" | "negotiate" | "B" | "C" | "done" | "escalated" | "idle";
+export type Phase = "review" | "A" | "negotiate" | "B" | "C" | "done" | "escalated" | "idle";
 export type LanguageKey = "go" | "java" | "typescript";
 export type BuildTool = "maven" | "gradle" | "go";
 
@@ -27,6 +27,10 @@ export interface LoopState {
   awaitDisputeFix: boolean;
   awaitDisputeReview: boolean;
   lastGateResult?: GateResult;
+  // Phase 0
+  specFindings?: Finding[];
+  awaitingReview?: boolean;
+  skipPhase0?: boolean;
 }
 
 export interface LoopMetrics {
@@ -54,4 +58,61 @@ export interface GateResult {
   allPassed: boolean;
   coverage: number;
   failures: FailingTest[];
+}
+
+// --- Phase 0: Spec Review Types ---
+
+export type FindingCategory =
+  | "Ambiguous phrase"
+  | "Edge case missing"
+  | "Underspecified behavior"
+  | "Example-prose conflict"
+  | "Type contract gap";
+
+export interface Interpretation {
+  label: string;
+  description: string;
+  testCases: string[];
+}
+
+export interface Finding {
+  id: number;
+  category: FindingCategory;
+  title: string;
+  ambiguity: string;
+  interpretations: Interpretation[];
+  recommendation: string;
+}
+
+export interface Clarification {
+  findingId: number;
+  status: "approved" | "rejected" | "modified";
+  chosenInterpretation?: string;
+  notes?: string;
+}
+
+export interface PhaseZeroThresholds {
+  minFunctions: number;
+  checkErrorMentions: boolean;
+  checkIoMentions: boolean;
+  checkConcurrencyMentions: boolean;
+}
+
+export const DEFAULT_PHASE_ZERO_THRESHOLDS: PhaseZeroThresholds = {
+  minFunctions: 3,
+  checkErrorMentions: true,
+  checkIoMentions: true,
+  checkConcurrencyMentions: true,
+};
+
+export interface SpecAnalysis {
+  findings: Finding[];
+  shouldActivatePhase0: boolean;
+  reasons: string[];
+}
+
+export interface ClarificationAddendum {
+  findings: Finding[];
+  clarifications: Clarification[];
+  appliedInterpretations: string[];
 }

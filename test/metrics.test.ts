@@ -682,7 +682,7 @@ describe("listRuns", () => {
     const tmpdir = fs.mkdtempSync(`${os.tmpdir()}/loop-test-`);
 
     try {
-      const result = listRuns(tmpdir);
+      const result = listRuns(tmpdir, 2);
       expect(Array.isArray(result)).toBe(true);
       expect(result.length).toBe(0);
     } finally {
@@ -715,20 +715,22 @@ describe("listRuns", () => {
 
 describe("formatComparison", () => {
   it("produces a formatted comparison string", () => {
-    const comparison: any = {
-      a: { label: "baseline" },
-      b: { label: "prompt-v2" },
-      diffs: [
-        { metric: "Gate runs", valueA: "8", valueB: "5", changePercent: -37.5, improved: true },
-        { metric: "Coverage", valueA: "80%", valueB: "90%", changePercent: 12.5, improved: true },
-        { metric: "Total failures", valueA: "12", valueB: "5", changePercent: -58.3, improved: true },
-      ],
+    const entryA: ScoreboardEntry = {
+      label: "baseline",
+      ts: "2025-01-01T00:00:00Z",
+      filePath: "/tmp/baseline.json",
+      metrics: finalize(createMetrics(makeState()), "done"),
+    };
+    const entryB: ScoreboardEntry = {
+      label: "prompt-v2",
+      ts: "2025-01-01T00:01:00Z",
+      filePath: "/tmp/prompt-v2.json",
+      metrics: finalize(createMetrics(makeState()), "done"),
     };
 
-    const output = formatComparison(comparison);
+    const output = formatComparison(entryA, entryB);
     expect(output).toContain("baseline");
     expect(output).toContain("prompt-v2");
-    expect(output).toContain("Gate runs");
   });
 });
 

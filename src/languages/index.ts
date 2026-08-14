@@ -1,10 +1,14 @@
 // --- Language registry ---
 
 import type { LanguageKey, BuildTool, Phase } from "../types";
+import goConfig from "./go";
+import javaConfig from "./java";
+import tsConfig from "./typescript";
 
 // --- Types ---
 
 export interface LanguageConfig {
+  key: LanguageKey;
   sourceFilePattern: string;
   testFilePattern: string;
   isTestFile: (path: string) => boolean;
@@ -41,7 +45,12 @@ function register(key: LanguageKey, config: LanguageConfig): void {
   registry.set(key, config);
 }
 
-// Lazy-load languages
+// Eagerly register all language modules
+register("go", goConfig);
+register("java", javaConfig);
+register("typescript", tsConfig);
+
+// Lazy-load languages (async version for future use)
 async function loadLanguage(key: LanguageKey): Promise<LanguageConfig> {
   if (registry.has(key)) return registry.get(key)!;
 
@@ -61,27 +70,8 @@ async function loadLanguage(key: LanguageKey): Promise<LanguageConfig> {
 // --- Public API ---
 
 export function getLanguageConfig(key: LanguageKey): LanguageConfig {
-  // Try sync first (already loaded)
   if (registry.has(key)) return registry.get(key)!;
-
-  // Fallback: try sync import
-  try {
-    const go = require("./go");
-    register("go", go.default);
-  } catch {}
-  try {
-    const java = require("./java");
-    register("java", java.default);
-  } catch {}
-  try {
-    const ts = require("./typescript");
-    register("typescript", ts.default);
-  } catch {}
-
-  if (!registry.has(key)) {
-    throw new Error(`Language not available: ${key}`);
-  }
-  return registry.get(key)!;
+  throw new Error(`Language not available: ${key}`);
 }
 
 export async function ensureLanguage(key: LanguageKey): Promise<LanguageConfig> {

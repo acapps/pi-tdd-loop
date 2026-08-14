@@ -8,9 +8,13 @@ Java conventions:
 - Use ${""}mvn compile${""} for compilation check
 - Package names use lowercase with dots
 - Class names use PascalCase
+- Prefer AssertJ assertions over JUnit assert methods
+- Use Records for data classes where applicable
+- Keep methods under 50 lines
 `;
 
 const config: LanguageConfig = {
+  key: "java",
   sourceFilePattern: "*.java (non-test files)",
   testFilePattern: "*Test.java",
   isTestFile: (path: string) => /\b\w+Test\.java$/.test(path),
@@ -18,7 +22,7 @@ const config: LanguageConfig = {
 
   prompts: {
     promptTesterPhaseA: (specPath: string, buildTool: string) =>
-`Phase A (Tester). Write contract tests.
+`You are the TESTER. Write contract tests.
 
 Read ${specPath}. Design the test contract that defines correct behavior.
 Write both *Test.java (tests) and stub .java files (empty implementations).
@@ -26,16 +30,25 @@ Write both *Test.java (tests) and stub .java files (empty implementations).
 Tests must:
 - Cover all spec requirements
 - Include edge cases: null, empty, single element, whitespace
-- Use @ParameterizedTest or table-driven tests where applicable
+- Use JUnit @ParameterizedTest or table-driven tests where applicable
+- Use AssertJ assertions ( assertThat() )
 
-Build tool: ${buildTool}.
+Build tool: ${buildTool}. Config file: ${buildTool === "gradle" ? "build.gradle" : "pom.xml"}.
 When done, stop producing tool calls.`,
 
     promptTesterPhaseARestart: (specPath: string, buildTool: string) =>
-`Phase A (Tester). Rewrite contract tests.
+`You are the TESTER. Write contract tests.
 
-Read ${specPath}. Rewrite from scratch.
-Build tool: ${buildTool}.
+Read ${specPath}. Design the test contract that defines correct behavior.
+Write both *Test.java (tests) and stub .java files (empty implementations).
+
+Tests must:
+- Cover all spec requirements
+- Include edge cases: null, empty, single element, whitespace
+- Use JUnit @ParameterizedTest or table-driven tests where applicable
+- Use AssertJ assertions ( assertThat() )
+
+Build tool: ${buildTool}. Config file: ${buildTool === "gradle" ? "build.gradle" : "pom.xml"}.
 When done, stop producing tool calls.`,
 
     promptTesterCompileRetry: (compileError: string) =>
@@ -54,10 +67,12 @@ Do not modify *Test.java. Dispute wrong tests via negotiate_propose.
 When done, stop producing tool calls.`,
 
     promptNegotiateAutoAdvance: () =>
-`Advancing to Phase B. Write Java source files to pass all tests.
+`Advancing to Phase B without explicit approval. Write Java source files.
 
 Read *Test.java and *.java stubs. Implement the logic. Preserve stub signatures.
-Do not modify *Test.java. Dispute wrong tests via negotiate_propose.
+Use AssertJ for any new assertions.
+
+${CONVENTIONS}
 
 When done, stop producing tool calls.`,
 
@@ -83,6 +98,8 @@ When done, stop producing tool calls.`,
 `Phase C (Cleaner). Refactor Java source files for readability:
 
 - Return early. Extract helpers. Clear names.
+- Keep methods under 50 lines
+- Use Records for data classes where applicable
 - You may only write *.java (non-test files). Do not modify *Test.java.
 - All tests must pass.
 
@@ -111,7 +128,7 @@ Do not modify non-test Java files. When done, stop producing tool calls.`,
 
   refusalMessage: {
     phaseA: "Phase A only: write test files and stubs. Cannot write other files.",
-    negotiate: "Negotiation phase: discussion only. No file writes allowed.",
+    negotiate: "Negotiation is discussion-only. No file writes allowed.",
     phaseC: "Phase B/C: you may only write source files (non-test). Cannot modify test files.",
   },
 };

@@ -449,7 +449,7 @@ export function assertMetrics(
 }
 
 function checkThresholdPhase(
-  actual: Phase,
+  actual: string,
   expected: string,
 ): { pass: boolean; message: string } {
   if (actual === expected) return { pass: true, message: "ok" };
@@ -542,7 +542,7 @@ export function buildScorecard(
     negotiate: "agree",
     phaseB: ["pass"],
     phaseC: ["pass"],
-    expectedPhase: metrics.finalPhase,
+    expectedPhase: metrics.finalPhase as Phase,
   });
 
   return {

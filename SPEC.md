@@ -26,6 +26,7 @@ Automated test-driven development cycle using three AI agent roles that take tur
 
 | Role | Phases | Responsibility | Allowed Writes |
 |------|--------|----------------|----------------|
+| **Reviewer** | 0 | Identify ambiguities, missing edge cases, propose clarifications | None (read-only) |
 | **Tester** | A | Write the contract: stubs + tests | Test files + source stubs |
 | **Writer** | negotiate, B | Propose approach, implement to pass tests, dispute incorrect tests | Source files only |
 | **Cleaner** | C | Refactor for readability | Source files only (not test files) |
@@ -65,6 +66,42 @@ Three languages are supported. Language is auto-detected from project files, or 
 - **Enforcement:** Phase A allows `*.ts`, `package.json`, `tsconfig.json`
 
 ## Conversation Phases
+
+### Phase 0 — Spec Review (optional, auto-activated)
+
+Reviewer reads the spec, identifies ambiguities and missing edge cases, proposes concrete test-case clarifications, and surfaces them to the human for approval. The human answers focused questions once, then the loop runs unattended.
+
+**Activates automatically** when the spec meets any threshold:
+- 3+ functions described
+- Any mention of errors, I/O, or concurrency
+- Flagged manually via `/loop --review`
+
+For trivial specs (1–2 functions, no I/O, no errors), Phase 0 is skipped.
+
+**Flow:**
+1. Reviewer reads the spec.
+2. Reviewer enumerates every ambiguity, missing edge case, underspecified behavior.
+3. Reviewer proposes concrete test cases for each finding.
+4. Reviewer outputs structured findings in Finding format.
+5. Human approves, rejects, or modifies each finding.
+6. Clarification addendum appended to spec.
+7. Phase A receives spec + addendum.
+
+**Finding format:**
+```
+### Finding N: [Category] — [Function/Feature]
+
+**Ambiguity:** [Quote the unclear phrase]
+**Interpretation A:** [One reading]
+  - Test: `Func("input")` → `expected`
+**Interpretation B:** [Another reading]
+  - Test: `Func("input")` → `expected`
+**Recommendation:** [Agent's preferred interpretation]
+```
+
+**Categories:** Ambiguous phrase, Edge case missing, Underspecified behavior, Example-prose conflict, Type contract gap.
+
+**Enforcement:** Read-only. No file writes. Phase 0 is discussion-only — the Reviewer surfaces findings, the human decides.
 
 ### Phase A — Tester writes the contract
 
@@ -326,6 +363,7 @@ Enforcement is language-specific. File patterns (`*_test.go`, `*Test.java`, `*.t
 
 | Phase | Can Read | Can Write | Blocked |
 |-------|----------|-----------|---------|
+| 0 (Reviewer) | Spec only | N/A | All file writes |
 | A (Tester) | Spec, project files | Test files + source stubs | N/A (Tester owns contract) |
 | negotiate | Spec, test files, stubs | N/A (tools only) | File writes |
 | B (Writer) | All project files | Source files (implementation) | Test files |

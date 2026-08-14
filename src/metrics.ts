@@ -1,7 +1,7 @@
 // --- Metrics ---
 // Collects metrics during a loop run for scoring and comparison.
 
-import { readFileSync, writeFileSync, existsSync, readdirSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { LoopState, GateResult, FailingTest, Phase, LanguageKey } from "./types";
 
@@ -166,11 +166,11 @@ export function formatMetrics(metrics: LoopMetrics): string {
     `Language: ${metrics.language}`,
     `Duration: ${metrics.durationMs ? `${metrics.durationMs}ms` : 'N/A'}`,
     "",
-    `Gate runs: ${metrics.gateRuns}`,
-    `  Compile fails: ${metrics.compileFails}`,
-    `  Test fails: ${metrics.testFails}`,
-    `  Total failures: ${metrics.totalFailures}`,
-    `  Coverage: ${metrics.finalCoverage}%`,
+    `gate runs: ${metrics.gateRuns}`,
+    `  compile fails: ${metrics.compileFails}`,
+    `  test fails: ${metrics.testFails}`,
+    `  total failures: ${metrics.totalFailures}`,
+    `  coverage: ${metrics.finalCoverage}%`,
     "",
     `Phases:`,
   ];
@@ -191,12 +191,15 @@ export function formatMetrics(metrics: LoopMetrics): string {
 
 const DEFAULT_SCOREBOARD_DIR = "scoreboard";
 
+// Label validation: only alphanumeric, hyphens, underscores, dots
+const VALID_LABEL_RE = /^[a-zA-Z0-9._-]+$/;
+
 export function saveMetrics(
   dir: string,
   metrics: LoopMetrics,
   label: string,
 ): void {
-  if (!label) throw new Error(ErrInvalidLabel);
+  if (!label || !VALID_LABEL_RE.test(label)) throw new Error(ErrInvalidLabel);
 
   const entry = {
     label,
@@ -206,7 +209,7 @@ export function saveMetrics(
   };
 
   if (!existsSync(dir)) {
-    require("node:fs").mkdirSync(dir, { recursive: true });
+    mkdirSync(dir, { recursive: true });
   }
 
   const file = join(dir, `${label}.json`);
@@ -214,7 +217,7 @@ export function saveMetrics(
 }
 
 export function loadScoreboard(dir: string = DEFAULT_SCOREBOARD_DIR): ScoreboardEntry[] {
-  if (!existsSync(dir)) throw new Error(ErrInvalidDirectory);
+  if (!existsSync(dir)) throw new Error(ErrNoRuns);
   const entries: ScoreboardEntry[] = [];
   for (const file of readdirSync(dir)) {
     if (file.endsWith(".json")) {
@@ -224,13 +227,20 @@ export function loadScoreboard(dir: string = DEFAULT_SCOREBOARD_DIR): Scoreboard
       } catch { /* skip invalid files */ }
     }
   }
-  if (entries.length === 0) throw new Error(ErrNoRuns);
+  
   return entries;
 }
 
-export function listRuns(dir: string = DEFAULT_SCOREBOARD_DIR): string[] {
-  const entries = loadScoreboard(dir);
-  return entries.map(e => e.label);
+export function listRuns(dir: string = DEFAULT_SCOREBOARD_DIR, limit?: number): string[] {
+  try {
+    const entries = loadScoreboard(dir);
+    const labels = entries.map(e => e.label);
+    return limit ? labels.slice(0, limit) : labels;
+  } catch (err: any) {
+    // If directory doesn't exist or has no runs, return empty array
+    if (err.message === ErrNoRuns) return [];
+    throw err;
+  }
 }
 
 // --- Comparison ---
