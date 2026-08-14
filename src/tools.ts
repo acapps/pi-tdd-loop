@@ -117,7 +117,7 @@ function handleBDisputePropose(
 
   if (state.current.disputeCount >= state.current.maxDispute) {
     logEscalation(state, pi, ctx);
-    return buildProposeResult(state.current.phase as Phase, false);
+    return buildProposeResult();
   }
 
   logDisputeEntry(state, pi, debug, plan);
@@ -165,7 +165,7 @@ function triggerTesterReview(
   const proposal = state.current.lastProposal;
   const prompt = GP.promptNegotiateProposalForReview(proposal);
   sendContextMessage(pi, prompt);
-  return buildProposeResult(state.current.phase as Phase, true);
+  return buildProposeResult();
 }
 
 function triggerDisputeReview(

@@ -38,10 +38,6 @@ export function computeTransition(
     return handlePhaseCTransition(state, gate);
   }
   return { state, effect: { type: "noop" } };
-  if (state.phase === "C") {
-    return handlePhaseCTransition(state, gate);
-  }
-  return { state, effect: { type: "noop" } };
 }
 
 export function computeNegotiateTransition(
