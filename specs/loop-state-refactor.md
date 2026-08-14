@@ -26,7 +26,7 @@ interface LoopState {
   disputeCount: number;            // tools writes
   turnsThisPhase: number;          // events writes, transitions reads
   lastProposal: string;            // tools writes, events reads
-  lastPhase: Phase;                // transitions writes, commands reads
+  lastPhase: Phase | null;        // transitions writes, commands reads — null until first transition
   justTransitioned: boolean;       // transitions writes, events reads/writes
   negotiateReprompted: boolean;    // transitions writes, events reads
   awaitDisputeFix: boolean;        // tools writes, events reads/writes
@@ -58,7 +58,7 @@ interface LoopState {
 // src/types.ts — After
 
 interface LoopState {
-  // Identity — set once, never changes
+  // Identity — set during initialization, may be updated on continue
   identity: LoopIdentity;
   
   // Phase machine — transitions writes, events reads
@@ -87,7 +87,7 @@ interface LoopIdentity {
 interface PhaseMachine {
   phase: Phase;
   round: number;
-  lastPhase: Phase;
+  lastPhase: Phase | null;        // null initially, set after first phase transition
   turnsThisPhase: number;
   maxA: number;
   maxNegotiate: number;
@@ -154,7 +154,10 @@ function createInitialState(specPath: string, language: LanguageKey, buildTool: 
 // Validation rules:
 //   1. done phase ⇒ round must be 0, turnsThisPhase must be 0
 //   2. escalated phase ⇒ lastPhase must be B or C (can only escalate from active phases)
-//   3. dispute mode on ⇒ disputeCount must be > 0 (can't be in mode without triggering it)
+//   3. dispute mode on ⇒ disputeCount must be > 0
+//      (dispute flow: tools.ts sets mode=true first, then increments count;
+//       validation should not enforce this invariant during the transition between
+//       setting mode and incrementing count — skip this rule in validateState)
 //   4. round must be ≥ 1 for all non-done phases
 //   5. turnsThisPhase must be ≥ 1 for all non-done phases
 function validateState(state: LoopState): string[] {
@@ -169,9 +172,9 @@ function validateState(state: LoopState): string[] {
       (!state.machine.lastPhase || !["B", "C"].includes(state.machine.lastPhase))) {
     errors.push("escalated phase must come from B or C");
   }
-  if (state.dispute.mode && state.dispute.count === 0) {
-    errors.push("dispute mode requires disputeCount > 0");
-  }
+  // NOTE: dispute.mode + dispute.count == 0 is NOT an error — the dispute flow sets
+  // mode=true first (tools.ts:304), then increments count. The invariant is violated
+  // transiently between those two operations.
   if (state.machine.phase !== "done" && state.machine.round < 1) {
     errors.push("non-done phase must have round >= 1");
   }
@@ -191,7 +194,9 @@ function validateState(state: LoopState): string[] {
 // a response?"). They are NOT persistent user preferences.
 //
 // dispute.mode is cleared here because it reflects the active dispute state
-// (awaiting a human response), not a toggle that survives across sessions.
+// (awaiting a human response). Evidence: tools.ts:304 sets mode=true on dispute
+// invocation, transitions.ts:243 clears it on phase advance, commands.ts:73 and
+// commands.ts:333 clear it on reset/cancel. It is always session-scoped.
 function clearTransientFlags(state: LoopState): void {
   state.machine.justTransitioned = false;
   state.machine.negotiateReprompted = false;
@@ -233,11 +238,6 @@ describe("validateState", () => {
     const state = makeState({ machine: { ...defaultMachine, phase: "escalated", lastPhase: "A" } });
     expect(validateState(state)).toContain("escalated phase must come from B or C");
   });
-
-  it("rejects dispute mode with zero disputeCount", () => {
-    const state = makeState({ dispute: { ...defaultDispute, mode: true, count: 0 } });
-    expect(validateState(state)).toContain("dispute mode requires disputeCount > 0");
-  });
 });
 ```
 
@@ -259,9 +259,48 @@ describe("validateState", () => {
 
 ## Migration Plan
 
-1. **Phase 1**: Add sub-structures alongside flat fields (dual-state)
-2. **Phase 2**: Update transitions.ts to use sub-structures
-3. **Phase 3**: Update tools.ts to use sub-structures
-4. **Phase 4**: Update commands.ts and events.ts
-5. **Phase 5**: Remove flat fields, keep only sub-structures
+### Dual-state consistency (Phase 1-5)
+
+During the transition from flat fields to sub-structures, both representations exist
+simultaneously. **The flat fields are the source of truth** during migration. The
+sub-structures are derived views that are populated from flat fields via a
+`toSubStructures(state)` helper and written back via `applySubStructures(state, subStructures)`.
+
+```typescript
+// Migration helper — populates sub-structures from flat fields
+function toSubStructures(state: LoopState): LoopSubStructures {
+  return {
+    identity: { specPath: state.specPath, language: state.language,
+                buildTool: state.buildTool, coverageThreshold: state.coverageThreshold },
+    machine: { phase: state.phase, round: state.round, lastPhase: state.lastPhase,
+               turnsThisPhase: state.turnsThisPhase, maxA: state.maxA,
+               maxNegotiate: state.maxNegotiate, maxB: state.maxB, maxC: state.maxC,
+               maxTurnsPerPhase: state.maxTurnsPerPhase,
+               justTransitioned: state.justTransitioned,
+               negotiateReprompted: state.negotiateReprompted },
+    // ... etc
+  };
+}
+
+// Migration helper — writes sub-structures back to flat fields
+function applySubStructures(state: LoopState, ss: LoopSubStructures): void {
+  state.phase = ss.machine.phase;
+  state.round = ss.machine.round;
+  // ... etc
+}
+```
+
+Each module is updated incrementally:
+1. Add the sub-structure types alongside the flat fields
+2. Update one module to use sub-structures internally
+3. At module boundaries, convert via `toSubStructures` / `applySubStructures`
+4. When all modules use sub-structures, remove flat fields
+
+### Steps
+
+1. **Phase 1**: Add sub-structure types and migration helpers (`toSubStructures`, `applySubStructures`)
+2. **Phase 2**: Update transitions.ts to use sub-structures internally, convert at boundaries
+3. **Phase 3**: Update tools.ts to use sub-structures internally, convert at boundaries
+4. **Phase 4**: Update commands.ts and events.ts to use sub-structures, convert at boundaries
+5. **Phase 5**: Remove flat fields, migration helpers, and boundary conversions
 6. **Phase 6**: Add validation tests and validateState unit tests
