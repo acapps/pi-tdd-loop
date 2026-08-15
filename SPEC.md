@@ -67,7 +67,15 @@ Three languages are supported. Language is auto-detected from project files, or 
 
 ## Conversation Phases
 
-### Phase 0 — Spec Review (optional, auto-activated)
+### Phase 0 — Baseline + Spec Review
+
+Phase 0 has two steps.
+
+**1. Baseline check (hard gate, no agent).**
+
+The project's existing test suite is run (`go test ./...`, `mvn test`, `npx vitest run` — same per-language commands as the gate runner). All tests must pass before the loop starts; a project with no test files yet is a valid (trivially green) baseline. On failure, `/loop` aborts with the failing tests and state remains `idle` — the loop does not start. A red baseline is not a starting point: the Phase B gate requires *all* tests to pass, so pre-existing failures would be charged against the Writer's round budget.
+
+**2. Spec Review (Reviewer agent).**
 
 Reviewer reads the spec, identifies ambiguities and missing edge cases, proposes concrete test-case clarifications, and surfaces them to the human for approval. The human answers focused questions once, then the loop runs unattended.
 
@@ -187,6 +195,8 @@ If exhausted: mark done, keep original implementation.
 
 Starts the loop at Phase A. Language is auto-detected from project files (`go.mod`, `pom.xml`, `package.json`), or explicitly set.
 
+Before any agent runs, the Phase 0 baseline check runs: the existing test suite must be green (or absent). If it is red — or the test runner is unavailable — the command aborts with the failing tests, state stays `idle`, and the loop does not start.
+
 ```
 Usage: /loop path/to/spec.md
        /loop --coverage 90 path/to/spec.md
@@ -262,7 +272,7 @@ Stop the loop, return to idle state.
 
 ## Gate Runner
 
-Three independent gates evaluated in order. Commands are language-specific.
+Three independent gates evaluated in order. Commands are language-specific. The Phase 0 baseline check reuses the Tests command before the loop starts; it is exit-code-based (a valid baseline is "all tests pass" or "no tests exist"), not a per-phase gate.
 
 | Gate | Go | Java (Maven) | TypeScript (Vitest) | Parse |
 |------|-----|--------------|---------------------|-------|

@@ -6,6 +6,7 @@ import { formatStatus, parseLoopArgs } from "./selectors";
 import { formatFailures } from "./gates";
 import * as GP from "./generic-prompts";
 import * as R from "./reviewer";
+import { runBaseline, formatBaselineFailure } from "./baseline";
 import { getLanguageConfig, detectProject, DetectedProject } from "./languages";
 
 // --- Types ---
@@ -147,14 +148,27 @@ export function cmdLoop(
       const language = (argLanguage || detected?.language || "go") as LanguageKey;
       const buildTool = (detected?.buildTool || "maven") as BuildTool;
 
-      // Validate test runner is available
-      const runnerCheck = R.validateTestRunner(ctx.cwd, language);
-      if (!runnerCheck.ok) {
+      // Phase 0 baseline: the existing test suite must be green (or absent)
+      // before the loop starts. On failure, state stays idle — the loop
+      // does not start.
+      const baseline = runBaseline(ctx.cwd, language, buildTool);
+      if (!baseline.ok) {
         ctx.ui.notify(
-          `Test runner not available: ${runnerCheck.error}. Setup project first.`,
-          "warning",
+          `Baseline check failed: the existing test suite is not green, so the loop cannot continue.\n` +
+            formatBaselineFailure(baseline),
+          "error",
         );
+        ctx.ui.setStatus("loop", "baseline failed — fix the test suite, then re-run /loop");
+        debug(`Phase 0 baseline: FAIL (${baseline.failures.length} failing) — loop not started`);
+        return;
       }
+      ctx.ui.notify(
+        baseline.noTests
+          ? "Baseline: no existing tests — starting from a clean slate."
+          : "Baseline: existing test suite is green.",
+        "info",
+      );
+      debug(`Phase 0 baseline: OK (${baseline.noTests ? "no existing tests" : "suite green"})`);
 
       state.current = createInitialState(specPath, language, buildTool, coverage);
       const lang = getLanguageConfig(language);

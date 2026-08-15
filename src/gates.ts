@@ -116,12 +116,12 @@ export function parseTestOutput(output: string, language: LanguageKey): TestResu
       } catch { /* not JSON */ }
     }
   } else {
-    // Generic: look for FAIL lines
-    const failLines = output.match(/FAIL\s+[\w/.+-]+/g);
-    if (failLines) {
-      for (const line of failLines) {
-        failures.push({ test: line.trim(), subtest: "", output: "" });
-      }
+    // Generic: line-anchored "FAIL <id>" entries (vitest: "FAIL  test/x.test.ts > …",
+    // maven-style: "FAIL com.example.MyTest"). Passing verbose lines embed
+    // "FAIL" mid-line after "✓ … > " and must not count.
+    for (const line of output.split("\n")) {
+      const match = line.match(/^\s*FAIL\s+([\w/.+-]+)/);
+      if (match) failures.push({ test: `FAIL ${match[1]}`, subtest: "", output: "" });
     }
   }
 

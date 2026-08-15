@@ -4,7 +4,7 @@ Adversarial 3-agent test-driven development loop for [pi](https://pi.dev).
 
 Three AI agent roles take turns — **Tester** writes the contract (stubs + tests), **Writer** implements to pass them, **Cleaner** refactors for readability. Each phase is gated by independent build/test/coverage checks. If the Writer disagrees with a test, it can **dispute** and the Tester must defend or concede.
 
-Before any code is written, **Phase 0** reviews your spec for ambiguities and missing edge cases so you can clarify once, up front — not mid-loop.
+Before any code is written, the loop checks two things: your **existing test suite is green** (baseline), and your **spec** is reviewed for ambiguities and missing edge cases so you can clarify once, up front — not mid-loop.
 
 ## Language Support
 
@@ -37,7 +37,7 @@ pi -e ./path/to/pi-tdd-loop
 
 | Command | Description |
 |---|---|
-| `/loop [options] <spec>` | Start the loop (Phase 0 review first) |
+| `/loop [options] <spec>` | Start the loop (baseline check, then Phase 0 review) |
 | `/loop-approve` | Approve Phase 0 review and proceed to Phase A |
 | `/loop-status` | Show current phase, round, gate results |
 | `/loop-continue` | Resume from current phase after escalation |
@@ -48,16 +48,16 @@ pi -e ./path/to/pi-tdd-loop
 ## How It Works
 
 ```
-Phase 0 (Review) → Phase A (Tester) → Negotiate → Phase B (Writer) → Phase C (Cleaner) → Done
-     │                   │                │               │                  │
-     ▼                   ▼                ▼               ▼                  ▼
-  Ambiguity check    Compile gate     Approve or       Test +           Test gate
-  (always runs)      (stubs + tests)  feedback         Coverage gate    (refactor safe)
+Phase 0 (Baseline + Review) → Phase A (Tester) → Negotiate → Phase B (Writer) → Phase C (Cleaner) → Done
+     │                             │                │               │                  │
+     ▼                             ▼                ▼               ▼                  ▼
+  Suite must be green         Compile gate     Approve or       Test +           Test gate
+  + ambiguity check           (stubs + tests)  feedback         Coverage gate    (refactor safe)
 ```
 
-### Phase 0 — Spec review (always runs)
+### Phase 0 — Baseline + spec review
 
-Reviewer reads your spec and surfaces ambiguities, missing edge cases, and underspecified behavior. You approve, reject, or modify each finding before any code is written. This shifts you from firefighter (reacting to disputes mid-loop) to reviewer (approving clarifications up front).
+First, the loop runs your existing test suite: all tests must pass, or you must have no tests yet. If the suite is red — or the test runner is unavailable — `/loop` stops with the failing tests and will not start a loop on top of a broken baseline. Then the Reviewer reads your spec and surfaces ambiguities, missing edge cases, and underspecified behavior. You approve, reject, or modify each finding before any code is written. This shifts you from firefighter (reacting to disputes mid-loop) to reviewer (approving clarifications up front).
 
 ### Phase A — Tester writes the contract
 

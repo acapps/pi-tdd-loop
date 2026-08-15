@@ -16,7 +16,7 @@ The gates and tool enforcement operate against `ctx.cwd` (the extension director
 // src/types.ts
 
 // Detects whether the loop is working on a golden project or a self-refactor.
-// Golden project specs are under test/golden/. Self-refactor specs are under specs/.
+// Golden project specs are under test/golden/. Self-refactor specs are under internal/ (no test/golden/ prefix).
 export function isGoldenProject(specPath: string): boolean {
   return specPath.startsWith("test/golden/");
 }
@@ -97,7 +97,7 @@ describe("isGoldenProject", () => {
   });
 
   it("rejects self-refactor spec", () => {
-    expect(isGoldenProject("specs/events-architectural-cleanup.md")).toBe(false);
+    expect(isGoldenProject("internal/events-architectural-cleanup.md")).toBe(false);
   });
 });
 
@@ -108,7 +108,7 @@ describe("getWorkspaceRoot", () => {
   });
 
   it("returns dot for self-refactor", () => {
-    expect(getWorkspaceRoot("specs/events-architectural-cleanup.md")).toBe(".");
+    expect(getWorkspaceRoot("internal/events-architectural-cleanup.md")).toBe(".");
   });
 });
 

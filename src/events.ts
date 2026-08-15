@@ -7,6 +7,7 @@ import * as GP from "./generic-prompts";
 import * as T from "./transitions";
 import { getLanguageConfig } from "./languages";
 import { RETRY_PROMPTS, ADVANCE_PROMPTS, REPROMPT_KEYS } from "./constants";
+import { handleSessionStart } from "./events/session-start";
 
 // --- Types ---
 
@@ -33,38 +34,6 @@ function getLang(state: LoopState) {
   return getLanguageConfig(state.language);
 }
 
-function restoreState(
-  state: { current: LoopState },
-  ctx: EventCtx,
-  debug: DebugFn,
-): void {
-  const entries = ctx.sessionManager.getEntries();
-  const entry = findLastLoopState(entries);
-  if (!entry?.data) {
-    debug("session_start: no previous state found");
-    return;
-  }
-  state.current = entry.data as LoopState;
-  clearTransientFlags(state.current);
-  debug(`session_start: restored → ${stateSummary(state.current)}`);
-  ctx.ui.setStatus("loop", `Phase ${state.current.phase} — round ${state.current.round}`);
-}
-
-function findLastLoopState(entries: unknown[]): { data: LoopState } | undefined {
-  return entries
-    .filter((e) => (e as Record<string, unknown>).type === "custom" &&
-      (e as Record<string, unknown>).customType === "loop-state")
-    .pop() as { data: LoopState } | undefined;
-}
-
-function clearTransientFlags(s: LoopState): void {
-  s.disputeMode = false;
-  s.justTransitioned = false;
-  s.negotiateReprompted = false;
-  s.awaitDisputeFix = false;
-  s.awaitDisputeReview = false;
-}
-
 // --- session_start ---
 
 export function eventSessionStart(
@@ -73,7 +42,7 @@ export function eventSessionStart(
   debug: DebugFn,
 ) {
   return async (_event: unknown, ctx: EventCtx) => {
-    restoreState(state, ctx, debug);
+    handleSessionStart({ state, ctx, debug });
   };
 }
 

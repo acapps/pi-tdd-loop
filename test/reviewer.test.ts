@@ -1,5 +1,5 @@
 // --- Contract tests for Phase 0: Spec Reviewer ---
-// Tests every public function, edge case, and business rule from specs/phase-0-spec-review.md
+// Tests every public function, edge case, and business rule from internal/done-phase-0-spec-review.md
 
 import { describe, it, expect } from "vitest";
 import {

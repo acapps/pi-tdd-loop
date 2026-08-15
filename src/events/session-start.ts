@@ -16,20 +16,24 @@ export interface SessionStartHandler {
   (input: SessionStartHandlerInput): void;
 }
 
+// --- Constants ---
+
+const NO_PREVIOUS_STATE = "session_start: no previous state found";
+
 // --- Helpers ---
 
 function stateSummary(s: LoopState): string {
   return `Phase ${s.phase} round ${s.round}`;
 }
 
-function findLastLoopState(entries: unknown[]): { data: LoopState } | undefined {
-  return entries
-    .filter(
-      (e) =>
-        (e as Record<string, unknown>).type === "custom" &&
-        (e as Record<string, unknown>).customType === "loop-state",
-    )
-    .pop() as { data: LoopState } | undefined;
+function isLoopStateEntry(entry: unknown): boolean {
+  if (typeof entry !== "object" || entry === null) return false;
+  const e = entry as Record<string, unknown>;
+  return e.type === "custom" && e.customType === "loop-state";
+}
+
+function findLastLoopState(entries: unknown[]): { data?: LoopState } | undefined {
+  return entries.filter(isLoopStateEntry).pop() as { data?: LoopState } | undefined;
 }
 
 function clearTransientFlags(s: LoopState): void {
@@ -47,27 +51,24 @@ export function handleSessionStart(input: SessionStartHandlerInput): void {
   debug("session_start: restoring state...");
 
   if (!ctx?.sessionManager?.getEntries) {
-    debug("session_start: no previous state found");
+    debug(NO_PREVIOUS_STATE);
     return;
   }
 
   const entries = ctx.sessionManager.getEntries();
   if (!Array.isArray(entries)) {
-    debug("session_start: no previous state found");
+    debug(NO_PREVIOUS_STATE);
     return;
   }
 
   const entry = findLastLoopState(entries);
   if (!entry?.data) {
-    debug("session_start: no previous state found");
+    debug(NO_PREVIOUS_STATE);
     return;
   }
 
-  state.current = entry.data as LoopState;
+  state.current = entry.data;
   clearTransientFlags(state.current);
   debug(`session_start: restored → ${stateSummary(state.current)}`);
-  ctx.ui.setStatus(
-    "loop",
-    `Phase ${state.current.phase} — round ${state.current.round}`,
-  );
+  ctx.ui.setStatus("loop", `Phase ${state.current.phase} — round ${state.current.round}`);
 }
