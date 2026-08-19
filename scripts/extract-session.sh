@@ -69,6 +69,11 @@ for line in sys.stdin:
             action = data.get('action', '')
             text = data.get('text', '')
             print(f'[{ts}] [negotiate] {action}: {text[:80]}')
+        elif ctype == 'loop-context':
+            # loop-context entries carry a top-level content string
+            # (src/events/before-agent.ts buildContextMessage) - no data field.
+            ctx = d.get('content', '')
+            print(f'[{ts}] [context] {ctx[:100]}')
         else:
             print(f'[{ts}] [{ctype}] {json.dumps(data)[:100]}')
     except:

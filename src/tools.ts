@@ -3,8 +3,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { LoopState, Phase } from "./types";
 import * as T from "./transitions";
-import * as GP from "./generic-prompts";
-import { getLanguageConfig } from "./languages";
 
 // --- Types ---
 
@@ -17,21 +15,28 @@ interface ToolCtx {
   hasUI: boolean;
 }
 
-// --- Helpers ---
+type ToolResult = { content: { text: string }[] };
 
-function buildProposeResult(): { content: { text: string }[] } {
+type Debug = (msg: string) => void;
+
+interface StateRef {
+  current: LoopState;
+}
+
+// --- Result builders ---
+
+function buildProposeResult(): ToolResult {
   return { content: [{ text: "Proposal recorded. Awaiting review." }] };
 }
 
-function buildReviewResult(
-  phase: Phase,
-  action: string,
-): { content: { text: string }[] } {
-  if (action === "approve" || action === "approved") {
+function buildReviewResult(phase: Phase, action: string): ToolResult {
+  if (isApproval(action)) {
     return { content: [{ text: "Approved." }] };
   }
   return { content: [{ text: "Feedback recorded." }] };
 }
+
+// --- Phase checks ---
 
 function isNegotiatePhase(phase: string): phase is "negotiate" {
   return phase === "negotiate";
@@ -41,12 +46,102 @@ function isPhaseB(phase: string): phase is "B" {
   return phase === "B";
 }
 
+function isApproval(decision: string): boolean {
+  return decision === "approve" || decision === "approved";
+}
+
+// --- State persistence helpers ---
+
+/** Snapshot the current state into the session log. */
+function persistState(state: StateRef, pi: ExtensionAPI): void {
+  pi.appendEntry("loop-state", { ...state.current });
+}
+
+/** Shared negotiate → Phase B transition: reset transient flags, then apply the effect. */
+function transitionToPhaseB(state: StateRef, pi: ExtensionAPI, ctx: ToolCtx, debug: Debug): void {
+  state.current.phase = "B";
+  state.current.lastPhase = "negotiate";
+  state.current.round = 1;
+  state.current.turnsThisPhase = 1;
+  state.current.justTransitioned = true;
+  state.current.awaitDisputeFix = false;
+  state.current.awaitDisputeReview = false;
+  state.current.negotiateReprompted = false;
+  state.current.negotiateProposed = false;
+  state.current.negotiateFeedback = "";
+  applyTransitionEffect(state, pi, ctx, debug, {
+    type: "advance",
+    phase: "B",
+    status: "Phase B — round 1",
+    notify: "Approved — moving to Phase B.",
+  });
+}
+
+// --- Entry logging ---
+
+function logNegotiateEntry(
+  state: StateRef,
+  pi: ExtensionAPI,
+  debug: Debug,
+  action: string,
+  text: string,
+): void {
+  debug(`negotiate: ${action} — ${text.slice(0, 60)}`);
+  pi.appendEntry("loop-negotiate", {
+    phase: state.current.phase,
+    round: state.current.round,
+    action,
+    text: text.slice(0, 500),
+  });
+}
+
+function logDisputeEntry(state: StateRef, pi: ExtensionAPI, debug: Debug, text: string): void {
+  debug(`dispute: ${text.slice(0, 60)}`);
+  pi.appendEntry("loop-dispute", {
+    phase: state.current.phase,
+    round: state.current.round,
+    disputeCount: state.current.disputeCount,
+    filer: state.current.disputeMode ? "tester" : "writer",
+    claim: text.slice(0, 500),
+    text: text.slice(0, 500),
+  });
+}
+
+function logDisputeConcession(state: StateRef, pi: ExtensionAPI): void {
+  pi.appendEntry("loop-dispute", {
+    phase: state.current.phase,
+    round: state.current.round,
+    action: "concede",
+  });
+}
+
+function logEscalation(state: StateRef, pi: ExtensionAPI, ctx: ToolCtx): void {
+  state.current.phase = "escalated";
+  state.current.awaitDisputeFix = false;
+  state.current.awaitDisputeReview = false;
+  persistState(state, pi);
+  ctx.ui.notify("Dispute limit reached. Escalating to human.", "warning");
+  ctx.ui.setStatus("loop", "escalated (dispute limit)");
+}
+
+function applyTransitionEffect(
+  state: StateRef,
+  pi: ExtensionAPI,
+  ctx: ToolCtx,
+  debug: Debug,
+  effect: ReturnType<typeof T.computeNegotiateTransition>["effect"],
+): void {
+  debug(`applying transition: ${effect.type}`);
+  persistState(state, pi);
+  ctx.ui.setStatus("loop", "status" in effect ? effect.status : "Phase B — round 1");
+}
+
 // --- negotiate_propose ---
 
 export function negotiatePropose(
-  state: { current: LoopState },
+  state: StateRef,
   pi: ExtensionAPI,
-  debug: (msg: string) => void,
+  debug: Debug,
 ) {
   return {
     name: "negotiate_propose",
@@ -69,12 +164,12 @@ export function negotiatePropose(
 }
 
 function handlePropose(
-  state: { current: LoopState },
+  state: StateRef,
   pi: ExtensionAPI,
-  debug: (msg: string) => void,
+  debug: Debug,
   ctx: ToolCtx,
   plan: string,
-): { content: { text: string }[] } {
+): ToolResult {
   const phase = state.current.phase as Phase;
   debug(`negotiate_propose: plan=${plan.slice(0, 80)}... phase=${phase}`);
 
@@ -90,28 +185,28 @@ function handlePropose(
 }
 
 function handleNegotiatePropose(
-  state: { current: LoopState },
+  state: StateRef,
   pi: ExtensionAPI,
-  debug: (msg: string) => void,
+  debug: Debug,
   ctx: ToolCtx,
   plan: string,
-): { content: { text: string }[] } {
+): ToolResult {
   debug(`Writer proposes`);
   logNegotiateEntry(state, pi, debug, "propose", plan);
 
   if (plan === "agree") {
     return executeNegotiateAgree(state, pi, debug, ctx);
   }
-  return executeNegotiateProposal(state, pi, debug, ctx);
+  return executeNegotiateProposal(state, pi, debug);
 }
 
 function handleBDisputePropose(
-  state: { current: LoopState },
+  state: StateRef,
   pi: ExtensionAPI,
-  debug: (msg: string) => void,
+  debug: Debug,
   ctx: ToolCtx,
   plan: string,
-): { content: { text: string }[] } {
+): ToolResult {
   state.current.disputeCount++;
   debug(`Dispute #${state.current.disputeCount}: ${plan.slice(0, 60)}`);
 
@@ -121,71 +216,45 @@ function handleBDisputePropose(
   }
 
   logDisputeEntry(state, pi, debug, plan);
-  return triggerDisputeReview(state, pi, ctx);
+  return triggerDisputeReview(state, pi);
 }
 
 function executeNegotiateAgree(
-  state: { current: LoopState },
+  state: StateRef,
   pi: ExtensionAPI,
-  debug: (msg: string) => void,
+  debug: Debug,
   ctx: ToolCtx,
-): { content: { text: string }[] } {
+): ToolResult {
   debug("Approved → Phase B");
-  state.current.phase = "B" as Phase;
-  state.current.round = 1;
-  state.current.turnsThisPhase = 1;
-  state.current.justTransitioned = true;
-  state.current.negotiateReprompted = false;
-  state.current.lastPhase = "negotiate" as Phase;
-  applyTransitionEffect(state, pi, ctx, debug, {
-    type: "advance",
-    phase: "B" as Phase,
-    status: "Phase B — round 1",
-    notify: "Approved — moving to Phase B.",
-  });
+  transitionToPhaseB(state, pi, ctx, debug);
   return { content: [{ text: "Proposal recorded. Moving to Phase B." }] };
 }
 
 function executeNegotiateProposal(
-  state: { current: LoopState },
+  state: StateRef,
   pi: ExtensionAPI,
-  debug: (msg: string) => void,
-  ctx: ToolCtx,
-): { content: { text: string }[] } {
+  debug: Debug,
+): ToolResult {
   debug("negotiate_propose: proposal recorded");
-  return triggerTesterReview(state, pi, ctx);
-}
-
-function triggerTesterReview(
-  state: { current: LoopState },
-  pi: ExtensionAPI,
-  ctx: ToolCtx,
-): { content: { text: string }[] } {
-  const lang = getLanguageConfig(state.current.language);
-  const proposal = state.current.lastProposal;
-  const prompt = GP.promptNegotiateProposalForReview(proposal);
-  sendContextMessage(pi, prompt);
+  state.current.negotiateProposed = true;
+  persistState(state, pi);
   return buildProposeResult();
 }
 
-function triggerDisputeReview(
-  state: { current: LoopState },
-  pi: ExtensionAPI,
-  _ctx: ToolCtx,
-): { content: { text: string }[] } {
+function triggerDisputeReview(state: StateRef, pi: ExtensionAPI): ToolResult {
   state.current.awaitDisputeReview = true;
-  pi.appendEntry("loop-state", { ...state.current });
+  persistState(state, pi);
   return {
-    content: [{ text: "Dispute filed. STOP producing tool calls. The Tester will review and respond." }],
+    content: [{ text: "Dispute filed. STOP producing tool calls. The review is requested when your turn ends." }],
   };
 }
 
 // --- negotiate_review ---
 
 export function negotiateReview(
-  state: { current: LoopState },
+  state: StateRef,
   pi: ExtensionAPI,
-  debug: (msg: string) => void,
+  debug: Debug,
 ) {
   return {
     name: "negotiate_review",
@@ -208,12 +277,12 @@ export function negotiateReview(
 }
 
 function handleReview(
-  state: { current: LoopState },
+  state: StateRef,
   pi: ExtensionAPI,
-  debug: (msg: string) => void,
+  debug: Debug,
   ctx: ToolCtx,
   decision: string,
-): { content: { text: string }[] } {
+): ToolResult {
   const phase = state.current.phase as Phase;
   debug(`negotiate_review: decision=${decision.slice(0, 80)}... phase=${phase}`);
 
@@ -227,175 +296,106 @@ function handleReview(
 }
 
 function handleNegotiateReview(
-  state: { current: LoopState },
+  state: StateRef,
   pi: ExtensionAPI,
-  debug: (msg: string) => void,
+  debug: Debug,
   ctx: ToolCtx,
   decision: string,
-): { content: { text: string }[] } {
+): ToolResult {
   debug(`Reviewer: ${isApproval(decision) ? "approve" : "feedback"}`);
   logNegotiateEntry(state, pi, debug, "review", decision);
 
   if (isApproval(decision)) {
     return executeNegotiateApprove(state, pi, debug, ctx);
   }
-  return executeNegotiateFeedback(state, pi, debug, ctx, decision);
+  return executeNegotiateFeedback(state, pi, debug, decision);
 }
 
 function handleBDisputeReview(
-  state: { current: LoopState },
+  state: StateRef,
   pi: ExtensionAPI,
-  debug: (msg: string) => void,
+  debug: Debug,
   ctx: ToolCtx,
   decision: string,
-): { content: { text: string }[] } {
+): ToolResult {
   debug(`Dispute review: ${isApproval(decision) ? "conceded" : "defended"}`);
   logDisputeEntry(state, pi, debug, decision);
 
+  // Recorded at decision time, before any cell mutates disputeMode (spec 09,
+  // Filer routing; Table 3 row 1 routes by this recorded value).
+  state.current.disputeFiler = state.current.disputeMode ? "tester" : "writer";
+
   if (isApproval(decision)) {
-    return executeBDisputeConcede(state, pi, debug, ctx);
+    // Table 2: row 1 (Writer filed) → Tester fixes the test; row 3 (Tester
+    // filed) → Writer fixes the flagged file(s).
+    return state.current.disputeMode
+      ? executeWriterConcede(state, pi, debug)
+      : executeBDisputeConcede(state, pi, debug);
   }
-  return executeBDisputeDefend(state, pi, debug, ctx, decision);
+  return executeBDisputeDefend(state, pi, debug, decision);
 }
 
 function executeNegotiateApprove(
-  state: { current: LoopState },
+  state: StateRef,
   pi: ExtensionAPI,
-  debug: (msg: string) => void,
+  debug: Debug,
   ctx: ToolCtx,
-): { content: { text: string }[] } {
+): ToolResult {
   debug("Approved → Phase B");
-  state.current.phase = "B" as Phase;
-  state.current.round = 1;
-  state.current.turnsThisPhase = 1;
-  state.current.justTransitioned = true;
-  state.current.negotiateReprompted = false;
-  state.current.lastPhase = "negotiate" as Phase;
-  applyTransitionEffect(state, pi, ctx, debug, {
-    type: "advance",
-    phase: "B" as Phase,
-    status: "Phase B — round 1",
-    notify: "Approved — moving to Phase B.",
-  });
+  transitionToPhaseB(state, pi, ctx, debug);
   return buildReviewResult(state.current.phase as Phase, "approve");
 }
 
 function executeNegotiateFeedback(
-  state: { current: LoopState },
+  state: StateRef,
   pi: ExtensionAPI,
-  debug: (msg: string) => void,
-  ctx: ToolCtx,
+  debug: Debug,
   decision: string,
-): { content: { text: string }[] } {
+): ToolResult {
   debug("negotiate_review: feedback");
-  const lang = getLanguageConfig(state.current.language);
-  const prompt = GP.promptNegotiateFeedback(decision);
-  sendContextMessage(pi, prompt);
+  state.current.negotiateFeedback = decision;
+  persistState(state, pi);
   return buildReviewResult(state.current.phase as Phase, decision);
 }
 
 function executeBDisputeConcede(
-  state: { current: LoopState },
+  state: StateRef,
   pi: ExtensionAPI,
-  debug: (msg: string) => void,
-  ctx: ToolCtx,
-): { content: { text: string }[] } {
+  debug: Debug,
+): ToolResult {
   debug("Tester conceded — will fix test");
   state.current.disputeMode = true;
   state.current.awaitDisputeFix = true;
-  pi.appendEntry("loop-state", { ...state.current });
-  logDisputeConcession(state, pi, ctx);
+  persistState(state, pi);
+  logDisputeConcession(state, pi);
   return buildReviewResult(state.current.phase as Phase, "approve");
 }
 
 function executeBDisputeDefend(
-  state: { current: LoopState },
+  state: StateRef,
   pi: ExtensionAPI,
-  debug: (msg: string) => void,
-  ctx: ToolCtx,
+  debug: Debug,
   decision: string,
-): { content: { text: string }[] } {
+): ToolResult {
   debug("negotiate_review: defend dispute");
   state.current.round++;
-  const lang = getLanguageConfig(state.current.language);
-  const prompt = GP.promptWriterDisputeDefended(decision);
-  sendContextMessage(pi, prompt);
+  // Load-bearing in Table 2 row 4 (Tester filed): closes the fix window this
+  // cell inherited; a no-op in row 2 (already false).
+  state.current.disputeMode = false;
+  state.current.disputeDefended = decision; // delivered at the next settle (Table 3 row 1)
+  persistState(state, pi);
   return buildReviewResult(state.current.phase as Phase, decision);
 }
 
-// --- Shared helpers ---
-
-function isApproval(decision: string): boolean {
-  return decision === "approve" || decision === "approved";
-}
-
-function logNegotiateEntry(
-  state: { current: LoopState },
+function executeWriterConcede(
+  state: StateRef,
   pi: ExtensionAPI,
-  debug: (msg: string) => void,
-  action: string,
-  text: string,
-): void {
-  debug(`negotiate: ${action} — ${text.slice(0, 60)}`);
-  pi.appendEntry("loop-negotiate", {
-    phase: state.current.phase,
-    round: state.current.round,
-    action,
-    text: text.slice(0, 500),
-  });
-}
-
-function logDisputeEntry(
-  state: { current: LoopState },
-  pi: ExtensionAPI,
-  debug: (msg: string) => void,
-  text: string,
-): void {
-  debug(`dispute: ${text.slice(0, 60)}`);
-  pi.appendEntry("loop-dispute", {
-    phase: state.current.phase,
-    round: state.current.round,
-    disputeCount: state.current.disputeCount,
-    claim: text.slice(0, 500),
-    text: text.slice(0, 500),
-  });
-}
-
-function logDisputeConcession(
-  state: { current: LoopState },
-  pi: ExtensionAPI,
-  _ctx: ToolCtx,
-): void {
-  pi.appendEntry("loop-dispute", {
-    phase: state.current.phase,
-    round: state.current.round,
-    action: "concede",
-  });
-}
-
-function logEscalation(
-  state: { current: LoopState },
-  pi: ExtensionAPI,
-  ctx: ToolCtx,
-): void {
-  state.current.phase = "escalated";
-  pi.appendEntry("loop-state", { ...state.current });
-  ctx.ui.notify("Dispute limit reached. Escalating to human.", "warning");
-  ctx.ui.setStatus("loop", "escalated (dispute limit)");
-}
-
-function applyTransitionEffect(
-  state: { current: LoopState },
-  pi: ExtensionAPI,
-  ctx: ToolCtx,
-  debug: (msg: string) => void,
-  effect: ReturnType<typeof T.computeNegotiateTransition>["effect"],
-): void {
-  debug(`applying transition: ${effect.type}`);
-  pi.appendEntry("loop-state", { ...state.current });
-  ctx.ui.setStatus("loop", (effect as Record<string, string>).status || "Phase B — round 1");
-}
-
-function sendContextMessage(pi: ExtensionAPI, content: string): void {
-  pi.sendUserMessage(content, { triggerTurn: true });
+  debug: Debug,
+): ToolResult {
+  debug("Writer conceded — will fix flagged files");
+  // Exit the fix window so rule 3 no longer blocks the Writer's source writes.
+  state.current.disputeMode = false;
+  state.current.awaitWriterConcedeFix = true; // delivered at the next settle (Table 3 row 2)
+  persistState(state, pi);
+  return buildReviewResult(state.current.phase as Phase, "approve");
 }

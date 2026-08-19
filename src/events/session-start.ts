@@ -40,8 +40,13 @@ function clearTransientFlags(s: LoopState): void {
   s.disputeMode = false;
   s.justTransitioned = false;
   s.negotiateReprompted = false;
+  s.negotiateProposed = false;
+  s.negotiateFeedback = "";
   s.awaitDisputeFix = false;
   s.awaitDisputeReview = false;
+  s.disputeDefended = undefined;
+  s.awaitWriterConcedeFix = false;
+  s.disputeFiler = undefined;
 }
 
 // --- Public API ---

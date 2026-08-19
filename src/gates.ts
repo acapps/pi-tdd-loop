@@ -1,22 +1,27 @@
 // --- Gates ---
 // Phase gate checks: compilation, tests, coverage.
+// Spec: internal/bug-gate-signal-integrity.md — exit code is the gate signal;
+// parsed failures are display-only; a tool that cannot run is an error.
 
-import { execSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import type { LanguageKey, BuildTool, Phase, GateResult } from "./types";
 
-// Coverage sentinel: -1 means coverage tool is unavailable or errored.
-// Distinguishes from 0 (which means the tool ran and reported 0%).
-const COVERAGE_UNAVAILABLE = -1;
+export interface GateOutcome {
+  kind: "result" | "error";
+  result?: GateResult; // present when kind === "result"
+  error?: string; // present when kind === "error" — tool could not run
+}
 
-// --- Public API ---
+// --- Public API (new contract) ---
 
-export function runGates(
+export async function runGates(
   cwd: string,
   coverageThreshold: number,
   language: LanguageKey,
   buildTool: BuildTool,
   phase: Phase,
-): GateResult {
+): Promise<GateOutcome> {
+  void coverageThreshold; // the threshold is a transition concern (T2), not a signal concern
   const result: GateResult = {
     compile: false,
     compileError: "",
@@ -26,40 +31,36 @@ export function runGates(
     failures: [],
   };
 
-  // 1. Compile check
-  result.compile = checkCompile(cwd, language, buildTool, result);
+  // 1. Compile check (execFile-based; a spawn error is a gate error, never a pass)
+  const compile = await execCommand(getCompileCommand(language, buildTool), cwd, 30_000);
+  if (compile.kind === "error") return { kind: "error", error: compile.error };
+  if (compile.exitCode !== 0) {
+    result.compileError = compile.stderr || compile.stdout || "(no output captured)";
+    return { kind: "result", result };
+  }
+  result.compile = true;
 
-  if (!result.compile) return result;
+  // 2. Test check — the exit code is the signal; parsed failures are display-only.
+  const test = await execCommand(getTestCommand(language, buildTool), cwd, 60_000);
+  if (test.kind === "error") return { kind: "error", error: test.error };
 
-  // 2. Test check
-  const testResult = runTests(cwd, language, result);
-  result.tests = testResult.passed;
-  result.allPassed = testResult.allPassed;
-  result.failures = testResult.failures;
+  const output = (test.stdout ?? "") + (test.stderr ?? "");
+  const parsed = parseTestOutput(output, language);
+  result.tests = test.exitCode === 0;
+  result.allPassed = test.exitCode === 0;
+  result.failures = parsed.failures;
 
-  if (phase === "A") return result; // Phase A only checks compile + basic tests
-
-  // 3. Coverage check (Phase B/C)
-  const coverage = checkCoverage(cwd, language);
-  if (coverage > 0) {
-    result.coverage = coverage;
+  // 3. Coverage sub-check (B/C only, and only on an exit-0 run — row-ordering pin:
+  // a red run never reports a coverage number).
+  if (test.exitCode === 0 && (phase === "B" || phase === "C")) {
+    const coverage = parseCoverage(output, language);
+    if (coverage !== null) result.coverage = coverage;
   }
 
-  return result;
+  return { kind: "result", result };
 }
 
-// --- Compile Check ---
-
-function checkCompile(cwd: string, language: LanguageKey, buildTool: BuildTool, result: GateResult): boolean {
-  const cmd = getCompileCommand(language, buildTool);
-  try {
-    execSync(cmd, { cwd, timeout: 30000, stdio: "pipe" });
-    return true;
-  } catch (err: any) {
-    result.compileError = err.stderr || err.stdout || err.message;
-    return false;
-  }
-}
+// --- Compile / test commands ---
 
 function getCompileCommand(language: LanguageKey, buildTool: BuildTool): string {
   switch (language) {
@@ -70,33 +71,92 @@ function getCompileCommand(language: LanguageKey, buildTool: BuildTool): string 
   }
 }
 
-// --- Test Check ---
+// Pure parser: one attempt per language, last match wins, finite values in
+// [0, 100] only; null when nothing matches (unavailable → skip, never 0).
+export function parseCoverage(output: string, language: LanguageKey): number | null {
+  let pattern: RegExp;
+  switch (language) {
+    case "go":
+      pattern = /coverage:\s+(\d+(?:\.\d+)?)%\s+of\s+statements/;
+      break;
+    case "java":
+      // JaCoCo summary line (maven and gradle emit the same table shape).
+      pattern = /Total,\s+\d+(?:\s*,\s*\d+)*,\s*(\d+(?:\.\d+)?)%/;
+      break;
+    case "typescript":
+      // vitest coverage table: All files | <lines> | <% Coverage> | ...
+      pattern = /All files\s*\|\s*\d+\s*\|\s*(\d+(?:\.\d+)?)/;
+      break;
+    default:
+      return null;
+  }
+  let value: number | null = null;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(output)) !== null) {
+    const candidate = Number(match[1]);
+    if (Number.isFinite(candidate) && candidate >= 0 && candidate <= 100) {
+      value = candidate; // last match wins
+    }
+  }
+  return value;
+}
+
+// Single-invocation test command (B/C): yields both signal and coverage.
+// No `|| true` / `|| echo` fallbacks.
+export function getTestCommand(language: LanguageKey, buildTool?: BuildTool): string {
+  switch (language) {
+    case "go": return "go test -json -cover ./...";
+    case "java": return buildTool === "gradle" ? "gradle test" : "mvn test -Djacoco.skip=false";
+    case "typescript": return "npx vitest run --coverage";
+    default: return "echo unknown";
+  }
+}
+
+// --- Process runner ---
+// execFile does not go through a shell, so the command string is the binary
+// and the remainder are its arguments. A spawn failure (ENOENT, bad cwd,
+// timeout) is a gate error — never a fabricated GateResult.
+
+interface ExecOutcome {
+  kind: "ok" | "error";
+  exitCode?: number;
+  stdout?: string;
+  stderr?: string;
+  error?: string;
+}
+
+function execCommand(command: string, cwd: string, timeoutMs: number): Promise<ExecOutcome> {
+  return new Promise((resolve) => {
+    const [file, ...args] = command.split(/\s+/);
+    if (!file) {
+      resolve({ kind: "error", error: "empty command" });
+      return;
+    }
+    execFile(file, args, { cwd, timeout: timeoutMs, maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
+      // execFile sets `error` for any non-zero exit (with error.code = exit
+      // code) and for spawn failures (error.code = 'ENOENT' etc.). A non-
+      // numeric code means the tool could not run at all.
+      if (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (typeof code !== "number") {
+          const message = error.message || String(error);
+          resolve({ kind: "error", error: message });
+          return;
+        }
+        resolve({ kind: "ok", exitCode: code, stdout: stdout ?? "", stderr: stderr ?? "" });
+        return;
+      }
+      resolve({ kind: "ok", exitCode: 0, stdout: stdout ?? "", stderr: stderr ?? "" });
+    });
+  });
+}
+
+// --- Display-only helpers (kept for existing consumers; signatures unchanged) ---
 
 interface TestResult {
   passed: boolean;
   allPassed: boolean;
   failures: { test: string; subtest: string; output: string }[];
-}
-
-function runTests(cwd: string, language: LanguageKey, result: GateResult): TestResult {
-  const cmd = getTestCommand(language);
-  try {
-    const output = execSync(cmd, { cwd, timeout: 60000, encoding: "utf-8", stdio: "pipe" });
-    return parseTestOutput(output, language);
-  } catch (err: any) {
-    // Tests failed (exit code != 0)
-    const output = err.stderr || err.stdout || "";
-    return parseTestOutput(output, language);
-  }
-}
-
-function getTestCommand(language: LanguageKey): string {
-  switch (language) {
-    case "go": return "go test -json ./...";
-    case "java": return "mvn test -q 2>&1 || gradle test 2>&1 || true";
-    case "typescript": return "npx vitest run --reporter=verbose 2>&1 || true";
-    default: return "echo unknown";
-  }
 }
 
 export function parseTestOutput(output: string, language: LanguageKey): TestResult {
@@ -109,8 +169,8 @@ export function parseTestOutput(output: string, language: LanguageKey): TestResu
     for (const line of lines) {
       try {
         const parsed = JSON.parse(line);
-        if (parsed.Action === "run") currentTest = parsed.Test;
-        if (parsed.Action === "fail" && !parsed.Test.startsWith("WARNING")) {
+        if (parsed.Action === "run" && parsed.Test) currentTest = parsed.Test;
+        if (parsed.Action === "fail" && parsed.Test && !parsed.Test.startsWith("WARNING")) {
           failures.push({ test: currentTest || parsed.Test, subtest: parsed.Test, output: parsed.Output || "" });
         }
       } catch { /* not JSON */ }
@@ -128,31 +188,6 @@ export function parseTestOutput(output: string, language: LanguageKey): TestResu
   const allPassed = failures.length === 0;
   return { passed: allPassed, allPassed, failures };
 }
-
-// --- Coverage Check ---
-
-function checkCoverage(cwd: string, language: LanguageKey): number {
-  const cmd = getCoverageCommand(language);
-  try {
-    const output = execSync(cmd, { cwd, timeout: 60000, encoding: "utf-8", stdio: "pipe" });
-    const match = output.match(/coverage:\s+(\d+\.?\d*)%/);
-    if (match) return parseFloat(match[1]);
-    return COVERAGE_UNAVAILABLE;
-  } catch {
-    return COVERAGE_UNAVAILABLE;
-  }
-}
-
-function getCoverageCommand(language: LanguageKey): string {
-  switch (language) {
-    case "go": return "go test -cover ./...";
-    case "java": return "mvn test -DfailIfNoTests=false 2>&1 || echo 'coverage: 0%'";
-    case "typescript": return "npx vitest run --coverage 2>&1 || echo 'coverage: 0%'";
-    default: return "echo 'coverage: 0%'";
-  }
-}
-
-// --- Format Failures ---
 
 export function formatFailures(failures: { test: string; subtest: string; output: string }[]): string {
   if (failures.length === 0) return "(unknown failures)";

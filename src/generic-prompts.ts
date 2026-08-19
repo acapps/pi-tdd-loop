@@ -15,6 +15,19 @@ Use negotiate_propose: 'agree' if tests match spec, or describe your approach (t
 Do NOT write files. Tester reviews via negotiate_review.`;
 }
 
+// Spec 10: the run's last word — delivered by applyDoneEffect into the
+// conversation transcript (the toast/status bar stay as-is).
+export function promptLoopComplete(
+  specPath: string,
+  disputes: number,
+  cleanerFailed: boolean,
+): string {
+  if (cleanerFailed) {
+    return `Loop complete — spec ${specPath}. Phase C failed; the original code is kept. Disputes raised: ${disputes}.`;
+  }
+  return `Loop complete — spec ${specPath}. All phases passed the gate. Disputes raised: ${disputes}.`;
+}
+
 export function promptNegotiateProposalForReview(plan: string): string {
   return `Writer proposes:
 
@@ -49,16 +62,49 @@ Call negotiate_review now:
 
 // --- Dispute ---
 
-export function promptWriterDispute(claim: string): string {
-  return `Tests still fail. You filed this dispute:
+// Spec 09 (F-C): the retired filer-addressed dispute prompt was deleted with its retry-branch
+// caller — reviewer-addressed prompts below replace it.
+
+export function promptTesterReviewWriterDispute(claim: string): string {
+  return `TESTER (dispute review). The Writer disputed a test:
 
 ${claim}
 
 Use negotiate_review to proceed:
-  - decision='approve' → escalate: you insist the test is wrong, Tester must fix it
-  - decision='I will fix my code' → concede: you'll rewrite your implementation to pass the test
+  - decision='approve' → you concede: the test is wrong; you will fix it
+  - decision='<your rebuttal>' → you defend the test; the Writer must fix the code
 
 Do not write files. Call negotiate_review now.`;
+}
+
+export function promptWriterDisputeReview(claim: string): string {
+  return `WRITER (dispute review). The Tester reported:
+
+${claim}
+
+Use negotiate_review to proceed:
+  - decision='approve' → you accept the findings; you will fix the flagged file(s)
+  - decision='<your rebuttal>' → you defend your implementation; the report is rejected
+
+Do not write files. Call negotiate_review now.`;
+}
+
+export function promptWriterConcedeFix(claim: string): string {
+  return `WRITER (dispute fix). You accepted the Tester's report:
+
+${claim}
+
+Fix the flagged file(s) to resolve it. Write source files only.
+When done, stop producing tool calls.`;
+}
+
+export function promptTesterReportRejected(decision: string): string {
+  return `TESTER (dispute). Your report was rejected. The Writer's defense:
+
+${decision}
+
+Verify the defense against the spec and the code, then continue Phase B.
+When done, stop producing tool calls.`;
 }
 
 export function promptWriterDisputeDefended(decision: string): string {
@@ -67,4 +113,14 @@ export function promptWriterDisputeDefended(decision: string): string {
 ${decision}
 
 Fix your implementation or raise a new dispute with evidence.`;
+}
+
+// --- Gate error / coverage (bug-gate-signal-integrity) ---
+
+export function promptGateError(error: string): string {
+  return `Gate could not run: ${error}. Fix the environment and retry.`;
+}
+
+export function promptCoverageBelowThreshold(coverage: number, threshold: number): string {
+  return `Coverage ${coverage}% is below the ${threshold}% threshold.`;
 }

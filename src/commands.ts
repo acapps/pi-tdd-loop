@@ -2,12 +2,14 @@
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { Phase, LoopState, LanguageKey, BuildTool, SpecAnalysis } from "./types";
+import type { DebugFn } from "./events";
 import { formatStatus, parseLoopArgs } from "./selectors";
 import { formatFailures } from "./gates";
 import * as GP from "./generic-prompts";
 import * as R from "./reviewer";
 import { runBaseline, formatBaselineFailure } from "./baseline";
 import { getLanguageConfig, detectProject, DetectedProject } from "./languages";
+import { slugBugName, extractLoopLogs, renderBugSpec, writeBugSpec } from "./bug-spec";
 
 // --- Types ---
 
@@ -21,8 +23,6 @@ interface CommandContext {
   };
   cwd: string;
 }
-
-type DebugFn = (msg: string) => void;
 
 // --- Helpers ---
 
@@ -73,8 +73,11 @@ function resetPhaseState(state: LoopState): void {
   state.disputeCount = 0;
   state.disputeMode = false;
   state.negotiateReprompted = false;
+  state.negotiateProposed = false;
+  state.negotiateFeedback = "";
   state.justTransitioned = false;
   state.awaitDisputeFix = false;
+  state.awaitDisputeReview = false;
   state.turnsThisPhase = 1;
 }
 
@@ -112,6 +115,8 @@ function createInitialState(
     lastPhase: "A",
     justTransitioned: false,
     negotiateReprompted: false,
+    negotiateProposed: false,
+    negotiateFeedback: "",
     awaitDisputeFix: false,
     awaitDisputeReview: false,
     skipPhase0: false,
@@ -302,15 +307,89 @@ function handlePhaseRestart(
   pi.sendUserMessage(buildRestartPrompt(state.current, state.current.specPath), { triggerTurn: true });
 }
 
-export function cmdDebug() {
+export function cmdDebug(
+  state: { current: LoopState },
+  debug: DebugFn,
+) {
   return {
     description: "Show loop debug log",
-    handler: async (_args: string, ctx: CommandContext) => {
-      const entries = ctx.sessionManager.getEntries();
-      const logs = extractDebugLogs(entries);
+    handler: async (args: string, ctx: CommandContext) => {
+      // Argument parsing (pinned — internal/log-bug-spec.md): whitespace-split;
+      // leftmost --log-bug / --log-bug=* token selects log-bug mode. Space form
+      // consumes following non--- tokens joined with " "; equals form takes the
+      // remainder verbatim. All other args are ignored in both modes.
+      const tokens = args.trim().split(/\s+/).filter(Boolean);
+      let flagIdx = -1;
+      let name = "";
+      let viaEquals = false;
+      for (let i = 0; i < tokens.length; i++) {
+        if (tokens[i] === "--log-bug") {
+          flagIdx = i;
+          break;
+        }
+        if (tokens[i].startsWith("--log-bug=")) {
+          flagIdx = i;
+          name = tokens[i].slice("--log-bug=".length);
+          viaEquals = true;
+          break;
+        }
+      }
+
+      if (flagIdx === -1) {
+        // Legacy branch — args ignored exactly as before
+        const entries = ctx.sessionManager.getEntries();
+        const logs = extractDebugLogs(entries);
+        ctx.ui.notify(
+          `Loop debug (${logs.length} entries):\n${logs.slice(-20).join("\n")}`,
+          "info",
+        );
+        return;
+      }
+
+      if (!viaEquals) {
+        const nameTokens: string[] = [];
+        for (let i = flagIdx + 1; i < tokens.length; i++) {
+          if (tokens[i].startsWith("--")) break;
+          nameTokens.push(tokens[i]);
+        }
+        name = nameTokens.join(" ");
+      }
+
+      const slug = slugBugName(name);
+      if (slug === "") {
+        ctx.ui.notify("Usage: /loop-debug --log-bug <name>", "warning");
+        return;
+      }
+
+      const markdown = renderBugSpec({
+        name,
+        slug,
+        phase: state.current.phase,
+        round: state.current.round,
+        specPath: state.current.specPath,
+        language: state.current.language,
+        lines: extractLoopLogs(ctx.sessionManager.getEntries()),
+        now: new Date(),
+      });
+      const result = writeBugSpec(ctx.cwd, slug, markdown);
+      if (result.ok) {
+        debug(`log-bug: wrote ${result.path}`);
+        ctx.ui.notify(
+          `Wrote bug-fix-${slug}.md\nNext: fill in Observed problem / Proposed fix, then /loop bug-fix-${slug}.md`,
+          "info",
+        );
+        return;
+      }
+      if (result.reason === "exists") {
+        ctx.ui.notify(
+          `bug-fix-${slug}.md already exists. Pick a different name.`,
+          "error",
+        );
+        return;
+      }
       ctx.ui.notify(
-        `Loop debug (${logs.length} entries):\n${logs.slice(-20).join("\n")}`,
-        "info",
+        `Failed to write bug-fix-${slug}.md: ${result.message}`,
+        "error",
       );
     },
   };
@@ -329,7 +408,8 @@ function extractDebugLogs(entries: unknown[]): string[] {
       validTypes.includes((e as Record<string, string>).customType))
     .map((e) => {
       const entry = e as Record<string, unknown>;
-      const ts = entry.ts ? new Date(entry.ts as string).toLocaleTimeString() : "?";
+      const d = entry.data as { ts?: number } | null | undefined;
+      const ts = typeof d?.ts === "number" ? new Date(d.ts).toISOString() : typeof entry.timestamp === "string" ? entry.timestamp : "-";
       return `[${ts}] ${entry.customType}: ${JSON.stringify(entry).slice(0, 120)}`;
     });
 }
@@ -343,6 +423,8 @@ export function cmdCancel(
     description: "Cancel the loop and return to idle",
     handler: async (_args: string, ctx: CommandContext) => {
       state.current.phase = "idle";
+      state.current.awaitDisputeFix = false;
+      state.current.awaitDisputeReview = false;
       state.current.round = 0;
       state.current.disputeMode = false;
       debug("Command: /loop-cancel → idle");

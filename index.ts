@@ -35,6 +35,8 @@ export default function (pi: ExtensionAPI) {
     lastPhase: "idle",
     justTransitioned: false,
     negotiateReprompted: false,
+    negotiateProposed: false,
+    negotiateFeedback: "",
     awaitDisputeFix: false,
     awaitDisputeReview: false,
   }};
@@ -52,7 +54,7 @@ export default function (pi: ExtensionAPI) {
   pi.registerCommand("loop-status", Cmd.cmdStatus(state));
   pi.registerCommand("loop-continue", Cmd.cmdContinue(state, pi, debug));
   pi.registerCommand("loop-restart", Cmd.cmdRestart(state, pi, debug));
-  pi.registerCommand("loop-debug", Cmd.cmdDebug());
+  pi.registerCommand("loop-debug", Cmd.cmdDebug(state, debug));
   pi.registerCommand("loop-cancel", Cmd.cmdCancel(state, pi, debug));
 
   // =========================================================================

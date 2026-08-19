@@ -3,6 +3,7 @@
 import type { LoopState, Phase, GateResult } from "./types";
 import { RETRY_PROMPTS, ADVANCE_PROMPTS, REPROMPT_KEYS } from "./constants";
 import type { RetryPromptType, AdvancePromptType } from "./constants";
+import * as GP from "./generic-prompts";
 
 // --- Types ---
 
@@ -12,6 +13,8 @@ type TransitionEffect =
   | { type: "advance"; phase: Phase; status: string; notify: string; prompt?: AdvancePromptType }
   | { type: "done"; status: string; notify: string }
   | { type: "escalated"; status: string; notify: string }
+  | { type: "review-request"; notify: string }
+  | { type: "feedback"; notify: string }
   | { type: "reprompt"; notify: string; level: string; prompt: string };
 
 // --- Public API ---
@@ -40,9 +43,56 @@ export function computeTransition(
   return { state, effect: { type: "noop" } };
 }
 
+// T5 (bug-gate-signal-integrity): GateOutcome.kind === "error" — retry with
+// the gate_error prompt, escalation at the phase's existing retry budget.
+// Pure: builds the effect directly, never fabricates a GateResult.
+export function computeGateErrorTransition(
+  state: LoopState,
+  error: string,
+): { state: LoopState; effect: TransitionEffect } {
+  const phase = state.phase as Phase;
+  const max = getPhaseMax(state, phase);
+  if (state.round >= max) {
+    return {
+      state: escalateTo(state, phase),
+      effect: escalatedEffect(phase),
+    };
+  }
+  return {
+    state: incrementRound(state),
+    effect: {
+      type: "retry",
+      phase,
+      round: state.round + 1,
+      status: `Phase ${phase} — round ${state.round + 1}`,
+      notify: GP.promptGateError(error),
+      level: "warning",
+      prompt: RETRY_PROMPTS.GATE_ERROR,
+    },
+  };
+}
+
 export function computeNegotiateTransition(
   state: LoopState,
 ): { state: LoopState; effect: TransitionEffect } {
+  if (state.negotiateProposed === true) {
+    return {
+      state: advanceNegotiateRound(state),
+      effect: { type: "review-request", notify: "Writer proposed — Tester reviewing." },
+    };
+  }
+  if ((state.negotiateFeedback ?? "") !== "") {
+    if ((state.round + 2) / 2 <= state.maxNegotiate) {
+      return {
+        state: advanceNegotiateRound(state),
+        effect: { type: "feedback", notify: "Tester feedback recorded — Writer revising." },
+      };
+    }
+    return {
+      state: escalateTo(state, "negotiate"),
+      effect: { type: "escalated", status: "escalated (Phase negotiate exhausted)", notify: "Negotiation limit reached. Escalating to human." },
+    };
+  }
   if (state.negotiateReprompted) {
     return autoAdvanceToPhaseB(state);
   }
@@ -50,6 +100,19 @@ export function computeNegotiateTransition(
     return repromptWriter(state);
   }
   return repromptTester(state);
+}
+
+// Advances the negotiate round and clears the pending round markers
+// (proposal / feedback / reprompted) — the shared shape of the two
+// in-negotiate transitions above.
+function advanceNegotiateRound(state: LoopState): LoopState {
+  return {
+    ...state,
+    round: state.round + 1,
+    negotiateProposed: false,
+    negotiateFeedback: "",
+    negotiateReprompted: false,
+  };
 }
 
 function autoAdvanceToPhaseB(state: LoopState): { state: LoopState; effect: TransitionEffect } {
@@ -79,7 +142,7 @@ function repromptWriter(state: LoopState): { state: LoopState; effect: Transitio
 
 function repromptTester(state: LoopState): { state: LoopState; effect: TransitionEffect } {
   return {
-    state,
+    state: { ...state, negotiateReprompted: true },
     effect: {
       type: "reprompt",
       notify: "Tester must use negotiate_review tool.",
@@ -157,19 +220,32 @@ function handlePhaseBTransition(
   state: LoopState,
   gate: GateResult,
 ): { state: LoopState; effect: TransitionEffect } {
-  if (!gate.compile) {
-    if (state.round >= state.maxB) {
-      return { state: escalateTo(state, "B"), effect: escalatedEffect("B") };
+  // Advance only on a fully green gate — mirrors the original branch order,
+  // where a compile fail takes the fail path even if allPassed were
+  // (contradictorily) true.
+  if (gate.compile && gate.allPassed) {
+    // T2: coverage gates in Phase B only. coverage === 0 means the coverage
+    // tool reported unavailable — skip the sub-check, never fail on it.
+    if (gate.coverage > 0 && gate.coverage < state.coverageThreshold) {
+      return {
+        state: incrementRound(state),
+        effect: {
+          type: "retry",
+          phase: "B" as Phase,
+          round: state.round + 1,
+          status: `Phase B — round ${state.round + 1}`,
+          notify: GP.promptCoverageBelowThreshold(gate.coverage, state.coverageThreshold),
+          level: "warning",
+          prompt: RETRY_PROMPTS.COVERAGE_BELOW_THRESHOLD,
+        },
+      };
     }
-    return { state: incrementRound(state), effect: retryEffect(state, RETRY_PROMPTS.WRITER_PHASE_B_RETRY) };
+    return { state: advanceToPhaseC(state), effect: advanceEffect("C", ADVANCE_PROMPTS.CLEANER_PHASE_C) };
   }
-  if (!gate.allPassed) {
-    if (state.round >= state.maxB) {
-      return { state: escalateTo(state, "B"), effect: escalatedEffect("B") };
-    }
-    return { state: incrementRound(state), effect: retryEffect(state, RETRY_PROMPTS.WRITER_PHASE_B_RETRY) };
+  if (state.round >= state.maxB) {
+    return { state: escalateTo(state, "B"), effect: escalatedEffect("B") };
   }
-  return { state: advanceToPhaseC(state), effect: advanceEffect("C", ADVANCE_PROMPTS.CLEANER_PHASE_C) };
+  return { state: incrementRound(state), effect: retryEffect(state, RETRY_PROMPTS.WRITER_PHASE_B_RETRY) };
 }
 
 // --- Phase C ---
@@ -202,6 +278,8 @@ function advanceToNegotiate(state: LoopState): LoopState {
     phase: "negotiate" as Phase,
     round: 1,
     turnsThisPhase: 1,
+    awaitDisputeFix: false,
+    awaitDisputeReview: false,
   };
 }
 
@@ -213,6 +291,8 @@ function advanceToPhaseB(state: LoopState): LoopState {
     turnsThisPhase: 1,
     justTransitioned: true,
     lastPhase: state.phase,
+    awaitDisputeFix: false,
+    awaitDisputeReview: false,
   };
 }
 
@@ -223,6 +303,8 @@ function advanceToPhaseC(state: LoopState): LoopState {
     round: 1,
     turnsThisPhase: 1,
     disputeMode: false,
+    awaitDisputeFix: false,
+    awaitDisputeReview: false,
   };
 }
 
@@ -232,11 +314,13 @@ function escalateTo(state: LoopState, fromPhase: string): LoopState {
     phase: "escalated" as Phase,
     lastPhase: state.phase as Phase,
     turnsThisPhase: 1,
+    awaitDisputeFix: false,
+    awaitDisputeReview: false,
   };
 }
 
 function markDone(state: LoopState): LoopState {
-  return { ...state, phase: "done" as Phase, turnsThisPhase: 1 };
+  return { ...state, phase: "done" as Phase, turnsThisPhase: 1, awaitDisputeFix: false, awaitDisputeReview: false };
 }
 
 function clearDisputeMode(state: LoopState): LoopState {

@@ -15,6 +15,8 @@ export const RETRY_PROMPTS = {
   CLEANER_RETRY: "cleaner_retry",
   WRITER_DISPUTE_FIX_INCOMPLETE: "writer_dispute_fix_incomplete",
   TESTER_DISPUTE_FIX_COMPILE_FAIL: "tester_dispute_fix_compile_fail",
+  COVERAGE_BELOW_THRESHOLD: "coverage_below_threshold",
+  GATE_ERROR: "gate_error",
 } as const;
 
 export type RetryPromptType = typeof RETRY_PROMPTS[keyof typeof RETRY_PROMPTS];

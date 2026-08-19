@@ -27,6 +27,15 @@ export interface LoopState {
   awaitDisputeFix: boolean;
   awaitDisputeReview: boolean;
   lastGateResult?: GateResult;
+  // Negotiate round (spec 07): set by tools, consumed + cleared by the settle
+  // handler; undefined and "" both mean "no feedback pending".
+  negotiateProposed?: boolean;
+  negotiateFeedback?: string;
+  // Dispute review wiring (spec 09): the pending review decision and its
+  // recorded filer. Consumed + cleared by the settle delivery handlers.
+  disputeDefended?: string;
+  awaitWriterConcedeFix?: boolean;
+  disputeFiler?: "writer" | "tester";
   // Phase 0
   specFindings?: Finding[];
   awaitingReview?: boolean;
