@@ -2,11 +2,11 @@
 //
 // `handleSessionStart` (src/events/session-start.ts) is already implemented and
 // covered by test/events/session-start.test.ts. This spec is wiring-only: the
-// `eventSessionStart` factory in the src/events.ts monolith must DELEGATE to it,
-// the duplicate helpers must be removed from the monolith, and the extension
-// entry point registration is unchanged. No new source module is stubbed in
-// Phase A — stubbing src/events.ts would destroy the monolith the other 780+
-// tests depend on.
+// `eventSessionStart` factory in the registration barrel (src/events/index.ts)
+// must DELEGATE to it, the duplicate helpers must be removed from the barrel,
+// and the extension entry point registration is unchanged. No new source module
+// is stubbed in Phase A — stubbing the barrel would destroy the registration
+// surface the other 780+ tests depend on.
 //
 // Contract pinned here:
 //   1. Delegation — eventSessionStart calls handleSessionStart with exactly
@@ -15,7 +15,7 @@
 //      Defensive edge cases (undefined/null entries, missing sessionManager)
 //      pin the module's already-implemented no-throw behavior, which becomes
 //      the extension's behavior once delegation lands (the old monolith threw).
-//   3. Cleanup    — duplicate helpers removed from src/events.ts; public event
+//   3. Cleanup    — duplicate helpers removed from the barrel; public event
 //      factory exports unchanged.
 //   4. Seam       — the extension factory (index.ts) still registers
 //      session_start through eventSessionStart and restores end-to-end.
@@ -308,19 +308,19 @@ describe("state restoration on reload (no behavioral change)", () => {
 
 describe("monolith cleanup (duplicate helpers removed)", () => {
   function readEventsSource(): string {
-    return readFileSync(new URL("../../src/events.ts", import.meta.url), "utf8");
+    return readFileSync(new URL("../../src/events/index.ts", import.meta.url), "utf8");
   }
 
-  it("imports handleSessionStart from ./events/session-start", () => {
+  it("imports handleSessionStart from ./session-start", () => {
     expect(readEventsSource()).toMatch(
-      /from\s+['"]\.\/events\/session-start(\.js)?['"]/,
+      /from\s+['"]\.\/session-start(\.js)?['"]/,
     );
   });
 
   it("no longer defines restoreState / findLastLoopState / clearTransientFlags", () => {
     const src = readEventsSource();
     for (const name of ["restoreState", "findLastLoopState", "clearTransientFlags"]) {
-      expect(src, `${name} should be removed from src/events.ts`).not.toMatch(
+      expect(src, `${name} should be removed from src/events/index.ts`).not.toMatch(
         new RegExp(`(function\\s+|const\\s+)${name}\\b`),
       );
     }

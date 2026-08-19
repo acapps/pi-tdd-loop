@@ -1,14 +1,27 @@
-// Contract tests for review handler (Phase 0) — await human approve
+// Contract tests for the review handler (Phase 0).
+// Spec: internal/04-implement-agent-settled-handlers.md
+//
+// Pinned contract:
+//  - !awaitingReview (false OR undefined) → handled: false, zero side effects.
+//  - awaitingReview → notify + status + persist loop-state entry, handled: true.
+//  - Never advances, never sends a user message — waits for the human
+//    (/loop-approve) or the tools (negotiate_propose).
+//  - Takes an unused lang param (dead parameter, preserved for monolith parity).
 
 import { describe, it, expect, vi } from "vitest";
 import { handleReviewSettled } from "../../../src/events/agent-settled/review";
-import type { LoopState } from "../../../src/types";
 import type { ReviewHandlerInput } from "../../../src/events/agent-settled/review";
+import type { LoopState } from "../../../src/types";
+import { getLanguageConfig } from "../../../src/languages";
 import { createMockExtensionAPI } from "../../__mocks__/@earendil-works/pi-coding-agent";
 
-function makeState(overrides = {}): LoopState {
+const GO = getLanguageConfig("go");
+
+// --- Fixtures ---
+
+function makeState(overrides: Partial<LoopState> = {}): LoopState {
   return {
-    phase: "idle",
+    phase: "review",
     round: 0,
     specPath: "spec.md",
     language: "go",
@@ -33,140 +46,78 @@ function makeState(overrides = {}): LoopState {
   };
 }
 
-function makeMockCtx(): any {
-  return {
-    ui: {
-      notify: vi.fn(),
-      setStatus: vi.fn(),
-    },
-    sessionManager: {
-      getEntries: () => [],
-    },
-    cwd: "/tmp/test-project",
-  };
-}
-
-function makeMockLang(): any {
-  return {
-    key: "go",
-    sourceFilePattern: "*.go",
-    testFilePattern: "*_test.go",
-    isTestFile: (path: string) => path.endsWith("_test.go"),
-    isPhaseAAllowed: (path: string) => path.endsWith(".go") || path.endsWith("_test.go"),
-    prompts: {
-      promptTesterCompileRetry: (err: string) => `Compile error: ${err}`,
-      promptWriterPhaseBContinue: (summary: string, count: number) => `Continue: ${count} failures`,
-      promptCleanerRetry: (summary: string, count: number) => `Cleaner retry: ${count} failures`,
-      promptNegotiateApproved: () => "Approved",
-      promptNegotiateAutoAdvance: () => "Auto-advance",
-      promptTesterPhaseA: (spec: string, tool: string) => `Phase A: ${spec}`,
-      promptTesterPhaseARestart: (spec: string, tool: string) => `Restart A: ${spec}`,
-      promptWriterPhaseB: () => "Phase B",
-      promptCleanerPhaseC: () => "Phase C",
-      promptCleanerRestart: () => "Cleaner restart",
-      promptTesterDisputeFix: () => "Fix test",
-    },
-    refusalMessage: {
-      phaseA: "Blocked in Phase A",
-      negotiate: "Blocked in negotiate",
-      phaseC: "Blocked in Phase C",
-    },
-  };
-}
-
-function makeInput(overrides: Partial<ReviewHandlerInput> = {}): ReviewHandlerInput {
-  return {
-    state: { current: makeState({ phase: "review" }) },
-    pi: createMockExtensionAPI() as any,
-    ctx: makeMockCtx(),
-    lang: makeMockLang(),
-    debug: vi.fn(),
+function makeInput(overrides: Partial<ReviewHandlerInput> = {}): {
+  input: ReviewHandlerInput;
+  pi: any;
+  ctx: any;
+  debug: ReturnType<typeof vi.fn>;
+} {
+  const pi = createMockExtensionAPI();
+  const ctx = { ui: { notify: vi.fn(), setStatus: vi.fn() }, sessionManager: { getEntries: () => [] }, cwd: "/tmp/test-project" };
+  const debug = vi.fn();
+  const input: ReviewHandlerInput = {
+    state: { current: makeState() },
+    pi: pi as any,
+    ctx,
+    lang: GO,
+    debug,
     ...overrides,
   };
+  return { input, pi, ctx, debug };
 }
 
-describe("handleReviewSettled", () => {
-  it("returns handled: false by default (stub)", () => {
-    const input = makeInput();
+/** Deep copy — proves the no-mutation contract. */
+function cloneState(s: LoopState): LoopState {
+  return JSON.parse(JSON.stringify(s));
+}
+
+// --- Unhandled path ---
+
+describe("handleReviewSettled — unhandled", () => {
+  it("awaitingReview false → handled false, zero side effects", () => {
+    const state = makeState({ awaitingReview: false });
+    const before = cloneState(state);
+    const { input, pi, ctx, debug } = makeInput({ state: { current: state } });
     const result = handleReviewSettled(input);
+
     expect(result.handled).toBe(false);
+    expect(ctx.ui.notify).not.toHaveBeenCalled();
+    expect(ctx.ui.setStatus).not.toHaveBeenCalled();
+    expect(pi.appendedEntries).toHaveLength(0);
+    expect(pi.sentMessages).toHaveLength(0);
+    expect(debug).not.toHaveBeenCalled();
+    expect(state).toEqual(before);
   });
 
-  it("calls handleReviewSettled without error", () => {
-    const input = makeInput();
-    expect(() => handleReviewSettled(input)).not.toThrow();
-  });
-
-  it("handles awaitingReview=true state (stub returns handled: false)", () => {
-    const input = makeInput({
-      state: { current: makeState({ phase: "review", awaitingReview: true }) },
-    });
+  it("awaitingReview undefined (edge) → handled false", () => {
+    const { input, pi, ctx } = makeInput({ state: { current: makeState() } }); // awaitingReview absent
     const result = handleReviewSettled(input);
-    // Future impl: should return handled=true and notify user
+
     expect(result.handled).toBe(false);
+    expect(ctx.ui.notify).not.toHaveBeenCalled();
+    expect(pi.appendedEntries).toHaveLength(0);
   });
+});
 
-  it("handles awaitingReview=false state", () => {
-    const input = makeInput({
-      state: { current: makeState({ phase: "review", awaitingReview: false }) },
-    });
-    expect(() => handleReviewSettled(input)).not.toThrow();
-  });
+// --- Handled path ---
 
-  it("handles missing awaitingReview (undefined)", () => {
-    const input = makeInput({
-      state: { current: makeState({ phase: "review", awaitingReview: undefined }) },
-    });
-    expect(() => handleReviewSettled(input)).not.toThrow();
-  });
+describe("handleReviewSettled — handled", () => {
+  it("awaitingReview true → handled: notify + status + loop-state entry, no user message", () => {
+    const state = makeState({ phase: "review", round: 0, awaitingReview: true, disputeCount: 1 });
+    const before = cloneState(state);
+    const { input, pi, ctx, debug } = makeInput({ state: { current: state } });
+    const result = handleReviewSettled(input);
 
-  it("handles empty spec findings", () => {
-    const input = makeInput({
-      state: { current: makeState({ phase: "review", specFindings: [] }) },
-    });
-    expect(() => handleReviewSettled(input)).not.toThrow();
-  });
-
-  it("handles single spec finding", () => {
-    const finding = {
-      id: 1,
-      category: "Ambiguous phrase" as const,
-      title: "Ambiguity in Func1",
-      ambiguity: "Unclear behavior for edge case",
-      interpretations: [
-        { label: "Interpretation A", description: "Behavior X", testCases: ["test1"] },
-      ],
-      recommendation: "Clarify in spec",
-    };
-    const input = makeInput({
-      state: { current: makeState({ phase: "review", specFindings: [finding] }) },
-    });
-    expect(() => handleReviewSettled(input)).not.toThrow();
-  });
-
-  it("handles null pi gracefully", () => {
-    const input = makeInput({ pi: null as any });
-    expect(() => handleReviewSettled(input)).not.toThrow();
-  });
-
-  it("handles null ctx gracefully", () => {
-    const input = makeInput({ ctx: null as any });
-    expect(() => handleReviewSettled(input)).not.toThrow();
-  });
-
-  it("output type contract: ReviewHandlerOutput has handled field", () => {
-    const result = { handled: false };
-    expect(result).toHaveProperty("handled");
-    expect(typeof result.handled).toBe("boolean");
-  });
-
-  it("stub does not mutate state", () => {
-    const state = makeState({ phase: "review", awaitingReview: true });
-    const input = makeInput({ state: { current: state } });
-    const originalAwaiting = state.awaitingReview;
-
-    handleReviewSettled(input);
-
-    expect(state.awaitingReview).toBe(originalAwaiting);
+    expect(result.handled).toBe(true);
+    expect(debug).toHaveBeenCalledWith("Phase 0 review: agent settled, awaiting human /loop-approve");
+    expect(ctx.ui.notify).toHaveBeenCalledWith("Phase 0: Review findings. Use /loop-approve to proceed.", "info");
+    expect(ctx.ui.setStatus).toHaveBeenCalledWith("loop", "Phase 0 — review pending");
+    expect(pi.appendedEntries).toHaveLength(1);
+    expect(pi.appendedEntries[0].customType).toBe("loop-state");
+    expect(pi.appendedEntries[0].data).not.toBe(state); // spread copy, not the live object
+    expect(pi.appendedEntries[0].data.phase).toBe("review");
+    expect(pi.appendedEntries[0].data.disputeCount).toBe(1);
+    expect(pi.sentMessages).toHaveLength(0); // waits for the human — no agent turn
+    expect(state).toEqual(before); // no mutation
   });
 });

@@ -97,6 +97,38 @@ describe("Negotiate prompts (language-agnostic)", () => {
   });
 });
 
+describe("promptLoopComplete (spec 10)", () => {
+  it("clean-finish branch: exact string with interpolated specPath and disputes", () => {
+    expect(GP.promptLoopComplete("internal/07.md", 2, false)).toBe(
+      "Loop complete — spec internal/07.md. All phases passed the gate. Disputes raised: 2.",
+    );
+  });
+
+  it("clean-finish branch: zero disputes reads as a count, not a flag", () => {
+    expect(GP.promptLoopComplete("spec.md", 0, false)).toBe(
+      "Loop complete — spec spec.md. All phases passed the gate. Disputes raised: 0.",
+    );
+  });
+
+  it("Phase-C-failed branch: exact string with interpolated specPath and disputes", () => {
+    expect(GP.promptLoopComplete("internal/07.md", 2, true)).toBe(
+      "Loop complete — spec internal/07.md. Phase C failed; the original code is kept. Disputes raised: 2.",
+    );
+  });
+
+  it("Phase-C-failed branch: zero disputes", () => {
+    expect(GP.promptLoopComplete("spec.md", 0, true)).toBe(
+      "Loop complete — spec spec.md. Phase C failed; the original code is kept. Disputes raised: 0.",
+    );
+  });
+
+  it("single-character spec path interpolates verbatim", () => {
+    expect(GP.promptLoopComplete("a.md", 1, false)).toBe(
+      "Loop complete — spec a.md. All phases passed the gate. Disputes raised: 1.",
+    );
+  });
+});
+
 describe("Negotiate auto-advance prompts", () => {
   it("Go auto-advance mentions Go conventions", () => {
     const prompt = getLanguageConfig("go").prompts.promptNegotiateAutoAdvance();
@@ -140,18 +172,53 @@ describe("Phase B prompts (Go)", () => {
 });
 
 describe("Phase B dispute prompts", () => {
-  it("promptWriterDispute includes the claim", () => {
-    const prompt = GP.promptWriterDispute("Test X/edge_case expects nil but spec says return zero-value");
-    expect(prompt).toContain("filed this dispute");
-    expect(prompt).toContain("expects nil");
-    expect(prompt).toContain("negotiate_review");
-    expect(prompt).toContain("escalate");
-  });
+  // The retired filer-addressed dispute prompt pin was REMOVED (spec 09, F-C):
+  // the function is deleted with its only caller (the retired retry branch) —
+  // reviewer-addressed prompts replace it. Sweep: rg -n "\\bpromptWriterDispute\\b" src/ test/ → 0.
 
-  it("promptWriterDisputeDefended includes defense", () => {
+  it("promptWriterDisputeDefended includes defense (unchanged text)", () => {
     const prompt = GP.promptWriterDisputeDefended("The spec clearly states this behavior");
     expect(prompt).toContain("Tester defended");
     expect(prompt).toContain("spec clearly states");
+  });
+
+  it("promptTesterReviewWriterDispute is reviewer-addressed with the claim (Table 1, writer filer)", () => {
+    const prompt = GP.promptTesterReviewWriterDispute("Test X/edge_case expects nil but spec says return zero-value");
+    expect(prompt).toContain("TESTER (dispute review)");
+    expect(prompt).toContain("expects nil");
+    expect(prompt).toContain("negotiate_review");
+    expect(prompt).toContain("you concede");
+    expect(prompt).toContain("you defend the test");
+    expect(prompt).toContain("Do not write files");
+  });
+
+  it("promptWriterDisputeReview is reviewer-addressed with the report (Table 1, tester filer)", () => {
+    const prompt = GP.promptWriterDisputeReview("Your refactor broke the retry path");
+    expect(prompt).toContain("WRITER (dispute review)");
+    expect(prompt).toContain("broke the retry path");
+    expect(prompt).toContain("negotiate_review");
+    expect(prompt).toContain("you accept the findings");
+    expect(prompt).toContain("you defend your implementation");
+    expect(prompt).toContain("Do not write files");
+  });
+
+  it("promptWriterConcedeFix includes the claim and source-only instruction (Table 3 row 2)", () => {
+    const prompt = GP.promptWriterConcedeFix("Your refactor broke the retry path");
+    expect(prompt).toContain("WRITER (dispute fix)");
+    expect(prompt).toContain("broke the retry path");
+    expect(prompt).toContain("Fix the flagged file(s)");
+    expect(prompt).toContain("Write source files only");
+  });
+
+  it("promptTesterReportRejected includes the defense, no re-dispute option (N1)", () => {
+    const prompt = GP.promptTesterReportRejected("The refactor is correct; the report misread the spec.");
+    expect(prompt).toContain("TESTER (dispute)");
+    expect(prompt).toContain("Your report was rejected");
+    expect(prompt).toContain("misread the spec");
+    expect(prompt).toContain("Verify the defense");
+    // N1: the re-dispute option is deliberately absent (would self-route).
+    expect(prompt).not.toContain("raise a new dispute");
+    expect(prompt).not.toContain("negotiate_propose");
   });
 });
 

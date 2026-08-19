@@ -22,11 +22,15 @@ describe("events/index.ts — re-exports and types", () => {
     expect(ctx.cwd).toBe("/tmp/test");
   });
 
-  it("module is importable", async () => {
+  it("module is importable and exports the four registration factories (F2)", async () => {
     const mod = await import("../../src/events");
     expect(mod).toBeDefined();
-    // All exports are type-only (re-exported from sub-modules), no runtime values expected
-    expect(Object.keys(mod).length).toBeGreaterThanOrEqual(0);
+    // Registration surface (spec 06): the barrel's runtime exports are the
+    // four `event*` factories (types are erased at runtime).
+    expect(typeof mod.eventSessionStart).toBe("function");
+    expect(typeof mod.eventBeforeAgentStart).toBe("function");
+    expect(typeof mod.eventToolCall).toBe("function");
+    expect(typeof mod.eventAgentSettled).toBe("function");
   });
 
   it("type-only exports compile (GateHandlerInput, EffectInput, EventCtx)", () => {

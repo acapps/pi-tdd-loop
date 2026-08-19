@@ -5,6 +5,10 @@ import { handleSessionStart } from "../../src/events/session-start";
 import type { LoopState } from "../../src/types";
 import type { SessionStartHandlerInput } from "../../src/events/session-start";
 
+// Spec 07 shim — the negotiate round markers land on LoopState in the writer
+// phase; the cast keeps this contract type-clean before that lands.
+type NegotiateMarkers = { negotiateProposed?: boolean; negotiateFeedback?: string };
+
 function makeState(overrides = {}): LoopState {
   return {
     phase: "idle",
@@ -120,5 +124,54 @@ describe("handleSessionStart", () => {
 
     // Stub should not mutate state
     expect(state.phase).toBe(originalPhase);
+  });
+
+  it("heals a pre-feature restored entry lacking the negotiate markers (defined, not undefined)", () => {
+    const saved = makeState({ phase: "negotiate", round: 2 });
+    // Simulate a session entry saved before the feature: the optional fields are absent.
+    delete (saved as any).negotiateProposed;
+    delete (saved as any).negotiateFeedback;
+    // Spec 09: the dispute delivery fields are absent too.
+    delete (saved as any).disputeDefended;
+    delete (saved as any).awaitWriterConcedeFix;
+    delete (saved as any).disputeFiler;
+    const ctx = makeMockCtx([
+      { type: "custom", customType: "loop-state", data: saved },
+    ]);
+    const input = makeInput({ ctx });
+
+    handleSessionStart(input);
+
+    // clearTransientFlags must define both markers so the transition's
+    // `=== true` / `!== ""` checks see a definite value after restore.
+    const healed = input.state.current as NegotiateMarkers;
+    expect(healed.negotiateProposed).toBe(false);
+    expect(healed.negotiateFeedback).toBe("");
+    expect(input.state.current.phase).toBe("negotiate");
+
+    // Spec 09: the three new dispute fields are cleared by clearTransientFlags.
+    expect(input.state.current.disputeDefended).toBeUndefined();
+    expect(input.state.current.awaitWriterConcedeFix).toBe(false);
+    expect(input.state.current.disputeFiler).toBeUndefined();
+  });
+
+  it("clears the spec 09 dispute fields even when saved with pending values", () => {
+    const saved = makeState({
+      phase: "B",
+      round: 2,
+      disputeDefended: "defense text",
+      awaitWriterConcedeFix: true,
+      disputeFiler: "tester",
+    });
+    const ctx = makeMockCtx([
+      { type: "custom", customType: "loop-state", data: saved },
+    ]);
+    const input = makeInput({ ctx });
+
+    handleSessionStart(input);
+
+    expect(input.state.current.disputeDefended).toBeUndefined();
+    expect(input.state.current.awaitWriterConcedeFix).toBe(false);
+    expect(input.state.current.disputeFiler).toBeUndefined();
   });
 });
