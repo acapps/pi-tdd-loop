@@ -26,6 +26,7 @@ import type { EffectInput } from "../../../src/events/agent-settled/effect-appli
 import type { LoopState, GateResult, FailingTest } from "../../../src/types";
 import * as GP from "../../../src/generic-prompts";
 import { RETRY_PROMPTS, ADVANCE_PROMPTS } from "../../../src/constants";
+import * as archive from "../../../src/spec-archive";
 import { formatFailures } from "../../../src/gates";import { createMockExtensionAPI } from "../../__mocks__/@earendil-works/pi-coding-agent";
 import type { MockExtensionAPI } from "../../__mocks__/@earendil-works/pi-coding-agent";
 
@@ -498,6 +499,81 @@ describe("applyAdvanceEffect", () => {
     const result = applyAdvanceEffect(input);
     expect(result.applied).toBe(true);
     expect(piOf(input).sentMessages).toHaveLength(0);
+  });
+
+  // B→C is the delivery point: the implementation is complete and the gate is
+  // green, so the spec is archived here (before Phase C) — a crash in Phase C
+  // still leaves the work marked done-.
+  it("advance to C archives the spec file and notifies", () => {
+    const archiveSpy = vi.spyOn(archive, "archiveSpecFile").mockReturnValue("done-spec.md");
+    try {
+      const input = makeInput({
+        effect: {
+          type: "advance",
+          phase: "C",
+          status: "Phase C — round 1",
+          notify: "Advancing.",
+          prompt: ADVANCE_PROMPTS.CLEANER_PHASE_C,
+        },
+      });
+      applyAdvanceEffect(input);
+      expect(archiveSpy).toHaveBeenCalledWith("spec.md", "/tmp/test-project");
+      expect(input.ctx.ui.notify).toHaveBeenCalledWith("Spec archived: done-spec.md", "info");
+      expect(input.debug).toHaveBeenCalledWith("Spec archived: done-spec.md");
+    } finally {
+      archiveSpy.mockRestore();
+    }
+  });
+
+  it("advance to C: archive failure is silent (no notify, no throw)", () => {
+    const archiveSpy = vi.spyOn(archive, "archiveSpecFile").mockReturnValue(null);
+    try {
+      const input = makeInput({
+        effect: {
+          type: "advance",
+          phase: "C",
+          status: "Phase C — round 1",
+          notify: "Advancing.",
+          prompt: ADVANCE_PROMPTS.CLEANER_PHASE_C,
+        },
+      });
+      expect(() => applyAdvanceEffect(input)).not.toThrow();
+      expect(input.ctx.ui.notify).not.toHaveBeenCalledWith("Spec archived: undefined", "info");
+    } finally {
+      archiveSpy.mockRestore();
+    }
+  });
+
+  it("advance to B does not archive the spec", () => {
+    const archiveSpy = vi.spyOn(archive, "archiveSpecFile").mockReturnValue("done-spec.md");
+    try {
+      const input = makeInput({
+        effect: { type: "advance", phase: "B", status: "s", notify: "Advancing." },
+      });
+      applyAdvanceEffect(input);
+      expect(archiveSpy).not.toHaveBeenCalled();
+    } finally {
+      archiveSpy.mockRestore();
+    }
+  });
+
+  it("advance to negotiate does not archive the spec", () => {
+    const archiveSpy = vi.spyOn(archive, "archiveSpecFile").mockReturnValue("done-spec.md");
+    try {
+      const input = makeInput({
+        effect: {
+          type: "advance",
+          phase: "negotiate",
+          status: "s",
+          notify: "Advancing.",
+          prompt: ADVANCE_PROMPTS.WRITER_NEGOTIATE,
+        },
+      });
+      applyAdvanceEffect(input);
+      expect(archiveSpy).not.toHaveBeenCalled();
+    } finally {
+      archiveSpy.mockRestore();
+    }
   });
 
   it("resets turnsThisPhase to 1", () => {

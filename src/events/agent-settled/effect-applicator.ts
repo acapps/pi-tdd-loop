@@ -11,6 +11,7 @@ import type * as T from "../../transitions";
 import * as GP from "../../generic-prompts";
 import { RETRY_PROMPTS, ADVANCE_PROMPTS } from "../../constants";
 import { formatFailures } from "../../gates";
+import { archiveSpecFile } from "../../spec-archive";
 
 // --- Types ---
 
@@ -105,6 +106,16 @@ export function applyAdvanceEffect(input: EffectInput): EffectResult {
 
   ctx.ui.notify(effect.notify, "info");
   ctx.ui.setStatus("loop", effect.status);
+  if (effect.phase === "C") {
+    // The implementation is complete and the gate is green: archive the spec
+    // now, before Phase C, so a crash in Phase C still leaves the work marked
+    // done- (Phase C is a nice-to-have pass, not the delivery point).
+    const archived = archiveSpecFile(state.specPath, ctx.cwd);
+    if (archived) {
+      ctx.ui.notify(`Spec archived: ${archived}`, "info");
+      debug(`Spec archived: ${archived}`);
+    }
+  }
   if (effect.prompt) {
     sendPrompt(pi, buildAdvancePrompt(effect.prompt, state, lang));
   }

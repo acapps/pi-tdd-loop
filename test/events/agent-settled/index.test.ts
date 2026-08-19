@@ -139,7 +139,7 @@ describe("step 1 — terminal short-circuit", () => {
 describe("step 2 — lang resolution", () => {
   it("non-terminal + corrupted language → throws 'Language not available', no gate", async () => {
     const { input } = makeInput({ state: { current: makeState({ phase: "A", language: "bogus" as any }) } });
-    expect(async () => await handleAgentSettled(input)).toThrow(/Language not available: bogus/);
+    await expect(handleAgentSettled(input)).rejects.toThrow(/Language not available: bogus/);
     expect(runGatesMock).not.toHaveBeenCalled();
   });
 });

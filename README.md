@@ -77,6 +77,8 @@ Writer fills in the stubs to pass all tests. Gate: all tests pass + coverage ≥
 
 Cleaner improves readability: extract helpers, return early, clear names. Gate: tests still pass (coverage not re-checked — refactoring may restructure without changing test surface).
 
+At the B→C boundary — when the implementation is complete and the gate is green — the spec file is renamed with a `done-` prefix (`spec.md` → `done-spec.md`), so finished specs are visually distinguishable from open ones even if Phase C later fails or the session dies.
+
 ## Escalation
 
 If rounds are exhausted (compilation failures, negotiation impasse, implementation failures, dispute limits), the loop escalates to you. Use `/loop-continue` to resume or `/loop-restart <phase>` to jump.

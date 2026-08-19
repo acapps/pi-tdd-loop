@@ -13,13 +13,14 @@
 //
 // runGates is mocked (the only external I/O); computeTransition is real.
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { handleGateTransition } from "../../../src/events/agent-settled/gate-transition";
 import { handleToolCall } from "../../../src/events/tool-call";
 import type { GateHandlerInput } from "../../../src/events/agent-settled/gate-transition";
 import type { LoopState, GateResult } from "../../../src/types";
 import { getLanguageConfig } from "../../../src/languages";
 import * as GP from "../../../src/generic-prompts";
+import * as archive from "../../../src/spec-archive";
 import { runGates, formatFailures } from "../../../src/gates";
 import { createMockExtensionAPI } from "../../__mocks__/@earendil-works/pi-coding-agent";
 
@@ -127,9 +128,19 @@ function cloneState(s: LoopState): LoopState {
   return JSON.parse(JSON.stringify(s));
 }
 
+let archiveSpy: ReturnType<typeof vi.spyOn>;
+
 beforeEach(() => {
   runGatesMock.mockReset();
   runGatesMock.mockReturnValue(Promise.resolve(gate())); // default: all pass
+  // The B→C archive is the only fs side effect in this file; stub it so the
+  // suite never touches the real filesystem. Tests asserting the wiring
+  // unstub it locally.
+  archiveSpy = vi.spyOn(archive, "archiveSpecFile").mockReturnValue(null);
+});
+
+afterEach(() => {
+  archiveSpy.mockRestore();
 });
 
 // --- Contract basics ---
@@ -266,6 +277,18 @@ describe("Phase B", () => {
     expect(result.state.lastPhase).toBe("B");
     expect(ctx.ui.notify).toHaveBeenCalledWith("Phase B exhausted. Escalating to human.", "warning");
     expect(pi.sentMessages).toHaveLength(0);
+  });
+
+  it("allPassed → advance to C: spec archived at the B→C boundary", async () => {
+    archiveSpy.mockReturnValue("done-spec.md");
+    const { input, pi, ctx } = makeInput({ state: makeState({ phase: "B", round: 2 }) });
+    const result = await handleGateTransition(input);
+
+    expect(result.applied).toBe(true);
+    expect(result.state.phase).toBe("C");
+    expect(archive.archiveSpecFile).toHaveBeenCalledWith("spec.md", "/tmp/test-project");
+    expect(ctx.ui.notify).toHaveBeenCalledWith("Spec archived: done-spec.md", "info");
+    expect(pi.sentMessages).toHaveLength(1);
   });
 
   it("allPassed → advance to C: cleaner prompt, disputeMode cleared, round reset", async () => {

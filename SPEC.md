@@ -184,6 +184,8 @@ After `maxDispute` dispute rounds without resolution → escalate.
 
 All tests pass: loop complete.
 
+**Spec archive:** the spec file is renamed with a `done-` prefix at the B→C boundary — the moment the implementation is complete and the gate is green (e.g. `spec.md` → `done-spec.md`). Archiving happens before Phase C so a crash in Phase C still leaves the work marked done. The rename is idempotent (an already `done-`-prefixed file is left untouched), never overwrites an existing file, and is skipped silently if the spec file is missing.
+
 #### C fail → retry
 
 Tests fail after refactoring. Cleaner fixes and retries (up to `maxC` rounds).
