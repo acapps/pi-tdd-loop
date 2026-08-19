@@ -77,7 +77,7 @@ The project's existing test suite is run (`go test ./...`, `mvn test`, `npx vite
 
 **2. Spec Review (Reviewer agent).**
 
-Reviewer reads the spec, identifies ambiguities and missing edge cases, proposes concrete test-case clarifications, and surfaces them to the human for approval. The human answers focused questions once, then the loop runs unattended.
+Reviewer reads the spec, identifies ambiguities and missing edge cases, proposes concrete test-case clarifications, and surfaces them to the human for approval. The human answers focused questions once, then the loop runs unattended. A spec template and filling prompt derived from observed Phase 0 findings live in `docs/spec-authoring.md`; specs written against it typically clear review in one round.
 
 **Activates automatically** when the spec meets any threshold:
 - 3+ functions described
@@ -234,7 +234,15 @@ Restart the loop from a specific phase. E.g., `/loop-restart B` jumps to Phase B
 
 ### `/loop-debug`
 
-Shows the last 20 debug entries (phase transitions, gate results, refusals, disputes).
+Shows the last 20 debug entries (phase transitions, gate results, refusals, disputes). With `--log-bug <name>` (multi-word names allowed; `--log-bug=<x>` equivalent), it extracts the session's five emitted `loop-*` entry types in-process (no disk read) and writes `bug-fix-<slug>.md` into the working directory — a self-contained, `/loop`-runnable spec:
+
+- Title `# Bug: <name>` (name verbatim) + `> Resolve with: /loop bug-fix-<slug>.md`
+- `## Context` — auto-filled from `state.current`: `phase=<phase>, round=<round>, spec=<specPath>, language=<language>` (or `no active loop` when idle)
+- `## Observed problem` / `## Proposed fix` — placeholder prompts (fill in before running the loop)
+- `## Log excerpt` — one formatted line per loop entry, in session order (`(no loop events found in this session)` when none)
+- `## Acceptance` — baseline bullet + a fill-in check
+
+Name is slugified (lowercase; non-`[a-z0-9]` runs → `-`; trimmed). Empty name → usage warning, no file. An existing `bug-fix-<slug>.md` → error notify, original file untouched. A missing/unwritable working directory → error notify (`Failed to write bug-fix-<slug>.md: <message>`); the write never throws.
 
 ### `/loop-cancel`
 

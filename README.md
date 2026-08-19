@@ -42,8 +42,10 @@ pi -e ./path/to/pi-tdd-loop
 | `/loop-status` | Show current phase, round, gate results |
 | `/loop-continue` | Resume from current phase after escalation |
 | `/loop-restart <phase>` | Jump to a specific phase |
-| `/loop-debug` | Show last 20 debug entries |
+| `/loop-debug` | Show last 20 debug entries; `--log-bug <name>` writes `bug-fix-<name>.md` |
 | `/loop-cancel` | Stop the loop, return to idle |
+
+`/loop-debug --log-bug <name>` extracts the session's `loop-*` debug entries in-process and writes `bug-fix-<slug>.md` into the working directory — a self-contained, `/loop`-runnable bug spec with an auto-filled Context (phase/round/spec/language), placeholder Observed problem / Proposed fix sections, and the extracted log excerpt inlined. Fill the placeholders in, then run `/loop bug-fix-<slug>.md`.
 
 ## How It Works
 
@@ -57,7 +59,7 @@ Phase 0 (Baseline + Review) → Phase A (Tester) → Negotiate → Phase B (Writ
 
 ### Phase 0 — Baseline + spec review
 
-First, the loop runs your existing test suite: all tests must pass, or you must have no tests yet. If the suite is red — or the test runner is unavailable — `/loop` stops with the failing tests and will not start a loop on top of a broken baseline. Then the Reviewer reads your spec and surfaces ambiguities, missing edge cases, and underspecified behavior. You approve, reject, or modify each finding before any code is written. This shifts you from firefighter (reacting to disputes mid-loop) to reviewer (approving clarifications up front).
+First, the loop runs your existing test suite: all tests must pass, or you must have no tests yet. If the suite is red — or the test runner is unavailable — `/loop` stops with the failing tests and will not start a loop on top of a broken baseline. Then the Reviewer reads your spec and surfaces ambiguities, missing edge cases, and underspecified behavior. You approve, reject, or modify each finding before any code is written. This shifts you from firefighter (reacting to disputes mid-loop) to reviewer (approving clarifications up front). Specs written against the template in [docs/spec-authoring.md](docs/spec-authoring.md) tend to clear Phase 0 in a single pass.
 
 ### Phase A — Tester writes the contract
 
