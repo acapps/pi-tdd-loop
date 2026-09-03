@@ -37,7 +37,7 @@ pi -e ./path/to/pi-tdd-loop
 
 | Command | Description |
 |---|---|
-| `/loop [options] <spec>` | Start the loop (baseline check, then Phase 0 review) |
+| `/loop [options] <spec>` | Start the loop (baseline check, then Phase 0 review); `--branch [name]` runs it on a git feature branch |
 | `/loop-approve` | Approve Phase 0 review and proceed to Phase A |
 | `/loop-status` | Show current phase, round, gate results |
 | `/loop-continue` | Resume from current phase after escalation |
@@ -46,6 +46,16 @@ pi -e ./path/to/pi-tdd-loop
 | `/loop-cancel` | Stop the loop, return to idle |
 
 `/loop-debug --log-bug <name>` extracts the session's `loop-*` debug entries in-process and writes `bug-fix-<slug>.md` into the working directory — a self-contained, `/loop`-runnable bug spec with an auto-filled Context (phase/round/spec/language), placeholder Observed problem / Proposed fix sections, and the extracted log excerpt inlined. Fill the placeholders in, then run `/loop bug-fix-<slug>.md`.
+
+### Git branch workflow (opt-in)
+
+`/loop --branch [name] <spec>` runs the whole loop on a git feature branch and merges it back when the loop completes:
+
+- **Opt-in**: without `--branch` the loop never touches git. With it, a branch is created off the mainline (`origin/HEAD` → `main` → `master`) before Phase 0. The default name is `loop/<spec-slug>` derived from the spec filename; pass `--branch <name>` (or `--branch=<name>`) to override.
+- **Clean tree guard**: the loop refuses to start on a dirty working tree.
+- **Merge back on completion**: when the loop reaches done, uncommitted work is committed on the feature branch, the branch is merged into the mainline (`--no-ff`), and you land back on the mainline.
+- **Single conflict attempt**: if the merge conflicts, the Writer gets exactly one turn to resolve it. If the merge is still broken after that turn, the loop escalates to you with the conflicted files — no retry loops.
+- **State persistence**: the branch is recorded in the loop state, so `/loop-continue` and `/loop-restart` resume on the existing branch instead of re-branching. `/loop-status` shows the branch and its merge state.
 
 ## How It Works
 

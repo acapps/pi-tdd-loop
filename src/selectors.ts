@@ -12,6 +12,11 @@ export function formatStatus(state: LoopState): string {
 
   parts.push(`Phase: ${phase}, round ${round}`);
 
+  if (state.branch) {
+    const b = state.branch;
+    parts.push(`Branch: ${b.name} (off ${b.base}) — ${b.merged ? "merged" : "unmerged"}`);
+  }
+
   if (state.lastGateResult) {
     const g = state.lastGateResult;
     parts.push("");
@@ -45,6 +50,7 @@ export interface LoopArgs {
   specPath: string;
   coverage?: number;
   language?: string;
+  branch?: string;
 }
 
 export function parseLoopArgs(args: string): LoopArgs {
@@ -52,6 +58,7 @@ export function parseLoopArgs(args: string): LoopArgs {
   let specPath = "";
   let coverage: number | undefined;
   let language: string | undefined;
+  let branch: string | undefined;
 
   for (let i = 0; i < parts.length; i++) {
     const part = parts[i];
@@ -63,6 +70,10 @@ export function parseLoopArgs(args: string): LoopArgs {
       language = parts[++i];
     } else if (part.startsWith("--language=")) {
       language = part.split("=")[1];
+    } else if (part === "--branch" && i + 1 < parts.length) {
+      branch = parts[++i];
+    } else if (part.startsWith("--branch=")) {
+      branch = part.split("=").slice(1).join("=");
     } else if (!part.startsWith("--")) {
       if (!specPath) {
         specPath = part;
@@ -81,5 +92,5 @@ export function parseLoopArgs(args: string): LoopArgs {
     specPath = specPath.replace("~", os.homedir());
   }
 
-  return { specPath, coverage, language };
+  return { specPath, coverage, language, branch };
 }

@@ -18,6 +18,7 @@ Only-my-setup change = scope creep. Not extension's job. Ask out loud, before co
 - "While I'm in here" extra stuff, unrelated to the actual change
 - Config that should live in dotfile/env var, not baked into repo
 - Skipped general case because narrow case = faster ship. Flag it, don't hide it.
+- A test that spawns a real toolchain (`go build`, `mvn`, `npx vitest`, `tsc`, any `execFile`/`execSync`/`spawn`) in the default suite. Unit tests mock the process boundary; real toolchain runs live in test/e2e/ only.
 
 ## IN-SCOPE CHECK
 
@@ -41,3 +42,14 @@ Then I decide. Point = choice on purpose, not by default.
 - Every flag/command = API someone else must learn. Fewer, general beats many, narrow.
 - Works-on-my-spec-files does not equal works. Test with non-me examples.
 - When unsure: smaller, more general, more removable. Easy to grow later, hard to walk back.
+
+## TEST SPEED RULE (Tester prompt + all test authors)
+
+The default `vitest run` must stay in the seconds-to-~20s range (~1,000 tests in 20s is the reference).
+
+- Unit tests NEVER spawn real processes. If the code under test calls `execFile`/`execSync`/`spawn`, the test mocks that boundary (`vi.mock("node:child_process")` — note: `vi.spyOn` on ESM node builtins does not work) and asserts on the interpretation of exit codes / output, not on the toolchain actually running.
+- No `npx` in unit tests: npx resolves/downloads packages into bare temp dirs = tens of seconds per call.
+- No temp-dir project scaffolding (`mkdtemp` + `go.mod`/`package.json` + real run) outside test/e2e/.
+- Real end-to-end toolchain verification lives in test/e2e/ (quality.test.ts) and runs explicitly, not in the default loop.
+- Debug/investigation test files (names like `hang*`, `*-tmp`, `gsi-*`) are deleted when the investigation closes — they duplicate the permanent regression file and double the spawn cost.
+- One regression file per bug spec. If a new file repeats tests from an existing file, merge, don't duplicate.

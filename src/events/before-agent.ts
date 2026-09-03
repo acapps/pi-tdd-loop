@@ -102,9 +102,11 @@ function buildTesterPrompt(
 ): BeforeAgentHandlerOutput {
   return {
     message: buildContextMessage(
-      `TESTER. Write contract: ${lang.testFilePattern} and ${lang.sourceFilePattern} stubs.\nStop when done.`,
+      `TESTER. Write contract: ${lang.testFilePattern} and ${lang.sourceFilePattern} stubs.\n` +
+        `Tests must be fast and hermetic: no real process spawning (no go/mvn/npx/tsc via exec* or spawn), no npx, no temp-dir project scaffolding — mock the process boundary (vi.mock("node:child_process")) and assert on exit-code/output interpretation. Real toolchain runs belong in test/e2e/ only.\n` +
+        `Stop when done.`,
     ),
-    systemPrompt: `${systemPrompt}\n\nPhase A (Tester). Write ${lang.testFilePattern} and ${lang.sourceFilePattern} stubs.`,
+    systemPrompt: `${systemPrompt}\n\nPhase A (Tester). Write ${lang.testFilePattern} and ${lang.sourceFilePattern} stubs. Tests must not spawn real processes or use npx — mock node:child_process and keep the default suite in seconds.`,
   };
 }
 

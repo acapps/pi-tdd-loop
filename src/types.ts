@@ -40,6 +40,11 @@ export interface LoopState {
   specFindings?: Finding[];
   awaitingReview?: boolean;
   skipPhase0?: boolean;
+  // Git branch workflow (--branch, opt-in): set by /loop when --branch is
+  // given; consumed by the done effect (merge back) and by /loop-continue /
+  // /loop-restart (must NOT re-branch). `merged` flips true once the merge
+  // into the mainline has landed.
+  branch?: { name: string; base: string; merged: boolean };
 }
 
 export interface LoopMetrics {

@@ -75,4 +75,15 @@ export default function (pi: ExtensionAPI) {
   pi.on("before_agent_start", Ev.eventBeforeAgentStart(state, pi, debug));
   pi.on("tool_call", Ev.eventToolCall(state, pi, debug));
   pi.on("agent_settled", Ev.eventAgentSettled(state, pi, debug));
+
+  // Test-only seam (see __getStateForTest below).
+  lastState = state;
+}
+
+// Test-only seam: exposes the live state object of the LAST registered
+// extension instance so a test can simulate a settle's round advance without
+// running the full agent_settled pipeline. Never called from production code.
+let lastState: { current: LoopState } | null = null;
+export function __getStateForTest(): { current: LoopState } | null {
+  return lastState;
 }

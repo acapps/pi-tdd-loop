@@ -36,6 +36,15 @@ ${plan}
 Review. "approve" to accept, or suggest changes via negotiate_review.`;
 }
 
+// Spec: internal/bug-negotiate-drift.md — the approve of a real contract
+// proposal is a claim about the file; the Tester re-reviews it read-only
+// before the loop advances to Phase B.
+export function promptNegotiateContractReReview(testFilePattern: string): string {
+  return `You are the TESTER (contract re-review). The Writer's proposal was accepted. Verify the contract file matches the agreement.
+Read ${testFilePattern}. Use negotiate_review: 'approve' only if the file matches; otherwise feedback naming each drifted item.
+No file writes.`;
+}
+
 export function promptNegotiateFeedback(decision: string): string {
   return `Tester feedback:
 

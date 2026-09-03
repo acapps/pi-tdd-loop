@@ -139,7 +139,7 @@ describe("/loop command", () => {
     await handler("", api._mockCtx);
 
     expect(api._mockUi.notify).toHaveBeenCalledWith(
-      "Usage: /loop [--language go|java|typescript] [--coverage N] [--skip-review] <spec-path>",
+      "Usage: /loop [--language go|java|typescript] [--coverage N] [--skip-review] [--branch [name]] <spec-path>",
       "warning"
     );
   });
@@ -751,8 +751,12 @@ describe("negotiate_review tool", () => {
   });
 
   it("transitions to Phase B on 'approve' in negotiate phase", async () => {
+    // Round 2 (even) is the Tester turn: an approve of a real proposal fires
+    // the contract re-review (bug-negotiate-drift row 2) before the advance.
     const restartHandler = findCommand(api, "loop-restart");
     await restartHandler("negotiate", api._mockCtx);
+    const liveState = (await import("../index")).__getStateForTest?.();
+    if (liveState) liveState.current.round = 2;
 
     const tool = findTool(api, "negotiate_review");
     const result = await tool.execute(
@@ -763,16 +767,37 @@ describe("negotiate_review tool", () => {
       api._mockExecCtx
     );
 
-    expect(result.content[0].text).toBe("Approved.");
+    expect(result.content[0].text).toBe("Proposal accepted. Re-reviewing the contract file before Phase B.");
 
-    // State entry should show Phase B with justTransitioned
+    // Re-review round: round advanced, phase still negotiate, Writer turn
+    // armed via justTransitioned.
     const stateEntries = api.appendedEntries.filter(
       (e: any) => e.customType === "loop-state"
     );
     const lastState = stateEntries[stateEntries.length - 1]?.data;
-    expect(lastState.phase).toBe("B");
-    expect(lastState.round).toBe(1);
+    expect(lastState.phase).toBe("negotiate");
+    expect(lastState.round).toBe(3);
     expect(lastState.justTransitioned).toBe(true);
+
+    // The re-review prompt was sent to the Tester.
+    expect(api.sentMessages[api.sentMessages.length - 1].content).toContain("contract re-review");
+
+    // Second approve (re-review round, odd) advances to Phase B.
+    const result2 = await tool.execute(
+      "call-2",
+      { decision: "approve" },
+      undefined,
+      undefined,
+      api._mockExecCtx
+    );
+    expect(result2.content[0].text).toBe("Approved.");
+
+    const lastState2 = api.appendedEntries
+      .filter((e: any) => e.customType === "loop-state")
+      .pop()?.data;
+    expect(lastState2.phase).toBe("B");
+    expect(lastState2.round).toBe(1);
+    expect(lastState2.justTransitioned).toBe(true);
 
     // Status should be Phase B
     expect(api._mockUi.setStatus).toHaveBeenCalledWith("loop", "Phase B — round 1");
@@ -1589,11 +1614,14 @@ describe("spec 08 — dispute flags cleared at phase boundaries", () => {
   });
 
   it("site 7 — negotiate_review approve in negotiate phase: both flags cleared at the B boundary", async () => {
-    const state = makeToolState({ awaitDisputeFix: true, awaitDisputeReview: true });
+    // even round + non-agree proposal → row 2 (re-review round); the second
+    // approve (odd round) is what crosses the B boundary and clears the flags.
+    const state = makeToolState({ awaitDisputeFix: true, awaitDisputeReview: true, round: 2, lastProposal: "plan" });
     const pi = createMockExtensionAPI();
     const review = Tool.negotiateReview(state, pi as any, vi.fn());
 
-    const result = await review.execute("call-1", { decision: "approve" }, undefined, undefined, makeToolCtx());
+    await review.execute("call-1", { decision: "approve" }, undefined, undefined, makeToolCtx()); // row 2
+    const result = await review.execute("call-2", { decision: "approve" }, undefined, undefined, makeToolCtx());
     expect(result.content[0].text).toBe("Approved.");
 
     const last = lastStateEntries(pi).pop()?.data;
@@ -1602,11 +1630,11 @@ describe("spec 08 — dispute flags cleared at phase boundaries", () => {
     expect(last.awaitDisputeReview).toBe(false);
 
     // edge: single live flag
-    const one = makeToolState({ awaitDisputeFix: true });
+    const one = makeToolState({ awaitDisputeFix: true, round: 2, lastProposal: "plan" });
     const piOne = createMockExtensionAPI();
-    await Tool.negotiateReview(one, piOne as any, vi.fn()).execute(
-      "call-2", { decision: "approve" }, undefined, undefined, makeToolCtx()
-    );
+    const reviewOne = Tool.negotiateReview(one, piOne as any, vi.fn());
+    await reviewOne.execute("call-1", { decision: "approve" }, undefined, undefined, makeToolCtx()); // row 2
+    await reviewOne.execute("call-2", { decision: "approve" }, undefined, undefined, makeToolCtx());
     const lastOne = lastStateEntries(piOne).pop()?.data;
     expect(lastOne.phase).toBe("B");
     expect(lastOne.awaitDisputeFix).toBe(false);

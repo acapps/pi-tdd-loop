@@ -10,6 +10,7 @@ import { handleDisputeFix, handleDisputeReview, handleDisputeDefend, handleWrite
 import { handleReviewSettled } from "./review";
 import { handleNegotiateSettled } from "./negotiate";
 import { handleGateTransition } from "./gate-transition";
+import { verifyBranchMerge } from "./effect-applicator";
 
 // --- Types ---
 
@@ -81,7 +82,15 @@ export async function handleAgentSettled(
   const { state, pi, debug, ctx } = input;
 
   // Step 1: terminal short-circuit — BEFORE any lang resolution
-  if (isTerminalPhase(state.current.phase)) return undefined;
+  if (isTerminalPhase(state.current.phase)) {
+    // The one terminal phase that still has work: a done loop whose
+    // merge-back is in progress (the Writer's conflict-resolution turn
+    // just settled). Verify it, then stop.
+    if (state.current.phase === "done" && state.current.branch && !state.current.branch.merged) {
+      return await handleMergeVerification(state, ctx, debug);
+    }
+    return undefined;
+  }
 
   // Step 2: lang resolution — may throw on corrupted state
   const lang = getLanguageConfig(state.current.language);
@@ -93,6 +102,30 @@ export async function handleAgentSettled(
 
   // Steps 7–9: phase handlers — dispatcher returns their result
   return await handlePhaseSettled(state, pi, lang, debug, ctx);
+}
+
+// Step 0 (git branch workflow, opt-in): the loop is done but the merge back
+// is still in progress (the Writer just spent its single conflict-resolution
+// attempt). Verify the merge: complete → persist and finish; still broken →
+// escalate to the human (no second attempt).
+async function handleMergeVerification(
+  state: { current: LoopState },
+  ctx: EventCtx,
+  debug: (msg: string) => void,
+): Promise<boolean> {
+  if (state.current.phase !== "done" || !state.current.branch || state.current.branch.merged) {
+    return false;
+  }
+  debug("agent_settled: verifying merge-back after the Writer's conflict-resolution turn");
+  const ok = await verifyBranchMerge(state, ctx, debug);
+  if (ok) {
+    // The merge landed — the loop is fully complete. Nothing more to do:
+    // the done effect already reported completion; this settle only closed
+    // the merge. (The state is persisted by the session-start restore path
+    // on the next /loop command; the in-memory state carries merged=true.)
+    debug("agent_settled: merge-back verified complete");
+  }
+  return true; // handled: no further processing this settle
 }
 
 // Spec 09: the dispute chain, in order, first match wins; the gate is skipped

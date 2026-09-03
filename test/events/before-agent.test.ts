@@ -24,8 +24,12 @@ const REVIEWER_CONTENT =
   "No file writes.";
 const REVIEWER_SP = `${BASE}\n\nPhase 0 (Reviewer). Review the spec. Use negotiate_propose. No file writes.`;
 
-const TESTER_CONTENT = `TESTER. Write contract: ${GO_TEST} and ${GO_SOURCE} stubs.\nStop when done.`;
-const TESTER_SP = `${BASE}\n\nPhase A (Tester). Write ${GO_TEST} and ${GO_SOURCE} stubs.`;
+const TESTER_CONTENT =
+  `TESTER. Write contract: ${GO_TEST} and ${GO_SOURCE} stubs.\n` +
+  `Tests must be fast and hermetic: no real process spawning (no go/mvn/npx/tsc via exec* or spawn), no npx, no temp-dir project scaffolding — mock the process boundary (vi.mock("node:child_process")) and assert on exit-code/output interpretation. Real toolchain runs belong in test/e2e/ only.\n` +
+  `Stop when done.`;
+const TESTER_SP =
+  `${BASE}\n\nPhase A (Tester). Write ${GO_TEST} and ${GO_SOURCE} stubs. Tests must not spawn real processes or use npx — mock node:child_process and keep the default suite in seconds.`;
 
 const NEGOTIATE_WRITER_CONTENT =
   "WRITER (negotiate). Use negotiate_propose. No file writes.\n" +

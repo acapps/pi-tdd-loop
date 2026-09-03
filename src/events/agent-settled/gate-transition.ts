@@ -86,5 +86,12 @@ export async function handleGateTransition(
     },
   });
 
+  // Git branch workflow (opt-in): on the done effect, the merge-back runs
+  // asynchronously inside applyDoneEffect (fire-and-forget). A merge conflict
+  // prompts the Writer for the single resolution attempt; the next settle
+  // verifies the outcome (dispatcher step 0, handleMergeVerification).
+  // Completion reporting (notify/status/prompt) happens synchronously in
+  // applyDoneEffect, before the merge resolves — the merge is a post-step.
+
   return { state: newState, effect: transition.effect, gateResult: gate, applied };
 }

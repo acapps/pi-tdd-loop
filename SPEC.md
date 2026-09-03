@@ -193,7 +193,7 @@ If exhausted: mark done, keep original implementation.
 
 ## Commands
 
-### `/loop [--language L] [--coverage N] <spec-path>`
+### `/loop [--language L] [--coverage N] [--branch [name]] <spec-path>`
 
 Starts the loop at Phase A. Language is auto-detected from project files (`go.mod`, `pom.xml`, `package.json`), or explicitly set.
 
@@ -204,10 +204,13 @@ Usage: /loop path/to/spec.md
        /loop --coverage 90 path/to/spec.md
        /loop --language java path/to/spec.md
        /loop --language typescript --coverage 85 path/to/spec.md
+       /loop --branch path/to/spec.md            # branch: loop/<spec-slug>
+       /loop --branch my-branch path/to/spec.md  # explicit branch name
 ```
 
 `--language L` — go (default), java, typescript
 `--coverage N` — overrides the default 80% threshold.
+`--branch [name]` — opt-in git branch workflow: create a feature branch off the mainline (`origin/HEAD` → `main` → `master`) before Phase 0 and merge it back when the loop completes. Requires a clean working tree. Default branch name is `loop/<spec-slug>` derived from the spec filename. On merge conflict the Writer gets exactly one resolution attempt; if the merge is still broken the loop escalates to the human. The branch is persisted in `LoopState.branch` so `/loop-continue` and `/loop-restart` do not re-branch.
 
 ### `/loop-status`
 

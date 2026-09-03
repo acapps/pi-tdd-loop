@@ -8,6 +8,7 @@ import { formatFailures } from "./gates";
 import * as GP from "./generic-prompts";
 import * as R from "./reviewer";
 import { runBaseline, formatBaselineFailure } from "./baseline";
+import { setupBranch } from "./git-workflow";
 import { getLanguageConfig, detectProject, DetectedProject } from "./languages";
 import { slugBugName, extractLoopLogs, renderBugSpec, writeBugSpec } from "./bug-spec";
 
@@ -131,12 +132,12 @@ export function cmdLoop(
   debug: DebugFn,
 ) {
   return {
-    description: "Start adversarial loop: [--language go|java|typescript] [--coverage N] [--skip-review] <spec-path>",
+    description: "Start adversarial loop: [--language go|java|typescript] [--coverage N] [--skip-review] [--branch [name]] <spec-path>",
     handler: async (args: string, ctx: CommandContext) => {
-      const { specPath, coverage, language: argLanguage } = parseLoopArgs(args);
+      const { specPath, coverage, language: argLanguage, branch: branchArg } = parseLoopArgs(args);
       if (!specPath) {
         ctx.ui.notify(
-          "Usage: /loop [--language go|java|typescript] [--coverage N] [--skip-review] <spec-path>",
+          "Usage: /loop [--language go|java|typescript] [--coverage N] [--skip-review] [--branch [name]] <spec-path>",
           "warning",
         );
         return;
@@ -177,6 +178,25 @@ export function cmdLoop(
 
       state.current = createInitialState(specPath, language, buildTool, coverage);
       const lang = getLanguageConfig(language);
+
+      // Git branch workflow (opt-in via --branch): create the feature branch
+      // off the mainline before Phase 0. On failure the loop does not start.
+      // `--branch` with no value → default name derived from the spec path.
+      if (branchArg !== undefined) {
+        const setup = await setupBranch(ctx.cwd, specPath, branchArg || undefined);
+        if (setup.kind === "error") {
+          ctx.ui.notify(`Branch setup failed: ${setup.error}`, "error");
+          ctx.ui.setStatus("loop", "branch setup failed — loop not started");
+          debug(`--branch setup: FAIL (${setup.error})`);
+          return;
+        }
+        state.current.branch = setup.branch;
+        ctx.ui.notify(
+          `Branch: created '${setup.branch.name}' off '${setup.branch.base}'. The loop will merge it back on completion.`,
+          "info",
+        );
+        debug(`--branch setup: OK (${setup.branch.name} off ${setup.branch.base})`);
+      }
 
       // Phase 0: Spec Review (always runs)
       const analysis = R.analyzeSpec(specText);

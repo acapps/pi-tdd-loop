@@ -3,6 +3,8 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { LoopState, Phase } from "./types";
 import * as T from "./transitions";
+import * as GP from "./generic-prompts";
+import { getLanguageConfig } from "./languages";
 
 // --- Types ---
 
@@ -306,9 +308,32 @@ function handleNegotiateReview(
   logNegotiateEntry(state, pi, debug, "review", decision);
 
   if (isApproval(decision)) {
+    // bug-negotiate-drift row 2: an approve of a real contract proposal on a
+    // Tester turn (even round) is a claim about the file — the Tester
+    // re-reviews the contract file read-only before the advance. 'agree'
+    // (row 3) asserts the file already matches and skips straight to B.
+    if (state.current.round % 2 === 0 && state.current.lastProposal !== "agree") {
+      return executeNegotiateReReview(state, pi, debug);
+    }
     return executeNegotiateApprove(state, pi, debug, ctx);
   }
   return executeNegotiateFeedback(state, pi, debug, decision);
+}
+
+function executeNegotiateReReview(
+  state: StateRef,
+  pi: ExtensionAPI,
+  debug: Debug,
+): ToolResult {
+  debug("Approved → contract re-review (Tester verifies file)");
+  const lang = getLanguageConfig(state.current.language);
+  state.current.round++;
+  state.current.negotiateProposed = false;
+  state.current.negotiateFeedback = "";
+  state.current.justTransitioned = true;
+  persistState(state, pi);
+  pi.sendUserMessage(GP.promptNegotiateContractReReview(lang.testFilePattern), { triggerTurn: true });
+  return { content: [{ text: "Proposal accepted. Re-reviewing the contract file before Phase B." }] };
 }
 
 function handleBDisputeReview(

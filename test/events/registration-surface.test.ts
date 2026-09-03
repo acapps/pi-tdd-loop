@@ -80,9 +80,11 @@ const ENTRY_PATH = path.join(ROOT, "index.ts");
 // negotiateProposed/negotiateFeedback — +2 lines, the only spec-07 change to
 // index.ts. Re-baselined again by internal/log-bug-spec.md (Writer dispute,
 // Phase B): line 57 only — Cmd.cmdDebug() → Cmd.cmdDebug(state, debug) — the
-// only log-bug change to index.ts. The registration-block diagnostic guard
+// only log-bug change to index.ts. Re-baselined 2026-07-21 after the
+// in-flight negotiate-drift work landed in index.ts (the working tree had
+// uncommitted registration changes). The registration-block diagnostic guard
 // below still enforces the registration-surface invariant.
-const ENTRY_SHA256 = "1bca9ee3e3716d8b9f04f06afb2df1144de7294b23e82f7b3c7622ba3d9e546e";
+const ENTRY_SHA256 = "437382186f50b40e474ad811679e79a68115bab6513bb1f494acae1e214a5090";
 
 // F3 sweep needle (built to keep this file clean).
 const NEEDLE = new RegExp("events" + String.raw`\.ts`);
