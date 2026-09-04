@@ -4,6 +4,7 @@
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import * as Cmd from "./src/commands";
+import { cmdSpec } from "./src/spec-command";
 import * as Tool from "./src/tools";
 import * as Ev from "./src/events";
 import type { LoopState } from "./src/types";
@@ -49,6 +50,7 @@ export default function (pi: ExtensionAPI) {
   // Commands
   // =========================================================================
 
+  pi.registerCommand("spec", cmdSpec(state, pi, debug));
   pi.registerCommand("loop", Cmd.cmdLoop(state, pi, debug));
   pi.registerCommand("loop-approve", Cmd.cmdApprove(state, pi, debug));
   pi.registerCommand("loop-status", Cmd.cmdStatus(state));

@@ -85,11 +85,11 @@ function findEventHandler(api: TestAPI, event: string) {
 // ================================================================
 
 describe("extension factory", () => {
-  it("registers all 7 commands", () => {
+  it("registers all 8 commands", () => {
     const api = buildTestAPI();
     extensionFactory(api);
 
-    expect(api.registeredCommands.length).toBe(7);
+    expect(api.registeredCommands.length).toBe(8);
     const names = api.registeredCommands.map((c) => c.name);
     expect(names).toContain("loop");
     expect(names).toContain("loop-approve");
@@ -98,6 +98,7 @@ describe("extension factory", () => {
     expect(names).toContain("loop-restart");
     expect(names).toContain("loop-debug");
     expect(names).toContain("loop-cancel");
+    expect(names).toContain("spec");
   });
 
   it("registers both negotiate tools", () => {
@@ -623,6 +624,119 @@ describe("/loop-cancel command", () => {
 
     expect(api._mockUi.notify).toHaveBeenCalledWith("Loop cancelled.", "info");
     expect(api._mockUi.setStatus).toHaveBeenCalledWith("loop", "idle");
+  });
+});
+
+// ================================================================
+// /spec command — one-shot Author, no loop state
+// Contract: internal/spec-command.md (Phase 0 approved)
+// ================================================================
+
+describe("/spec command", () => {
+  let api: TestAPI;
+
+  beforeEach(() => {
+    api = buildTestAPI();
+    extensionFactory(api);
+    setupSpecFiles();
+  });
+
+  it("no goal → usage warning, no turn", async () => {
+    const handler = findCommand(api, "spec");
+    await handler("", api._mockCtx);
+
+    expect(api._mockUi.notify).toHaveBeenCalledWith(
+      "Usage: /spec [--slug <name>] [--out <dir>] <goal...>",
+      "warning",
+    );
+    expect(api.sentMessages.length).toBe(0);
+  });
+
+  it("--slug that slugifies to empty → usage warning, no turn", async () => {
+    const handler = findCommand(api, "spec");
+    await handler('--slug "!!!" add a feature', api._mockCtx);
+
+    expect(api._mockUi.notify).toHaveBeenCalledWith(
+      "Usage: /spec [--slug <name>] [--out <dir>] <goal...>",
+      "warning",
+    );
+    expect(api.sentMessages.length).toBe(0);
+  });
+
+  it("missing goal file → error notify, no turn", async () => {
+    const handler = findCommand(api, "spec");
+    await handler("@nope.md", api._mockCtx);
+
+    expect(api._mockUi.notify).toHaveBeenCalledWith(
+      "Goal file not found: @nope.md",
+      "error",
+    );
+    expect(api.sentMessages.length).toBe(0);
+  });
+
+  it("happy path fires one Author turn, no loop state mutation", async () => {
+    const handler = findCommand(api, "spec");
+    await handler("add a retry policy", api._mockCtx);
+
+    expect(api.sentMessages.length).toBe(1);
+    expect(typeof api.sentMessages[0].content).toBe("string");
+    expect(api.sentMessages[0].content).toContain("You are the AUTHOR.");
+    expect(api.sentMessages[0].content).toContain("Output file: internal/add.md   ");
+    expect(api._mockUi.notify).toHaveBeenCalledWith(
+      "Author: writing internal/add.md. Review it, then run /loop internal/add.md",
+      "info",
+    );
+    expect(api._mockUi.setStatus).toHaveBeenCalledWith(
+      "loop",
+      "spec author (one-shot — no loop state)",
+    );
+    // Statelessness contract: no loop-state entry appended. (The debug entry
+    // from cmdSpec's debug() call is expected; the grep criterion in
+    // internal/spec-command.md is enforced at the source level.)
+    expect(api.appendedEntries.filter((e) => e.customType === "loop-state").length).toBe(0);
+  });
+
+  it("--out flag is respected in the notify text and the prompt", async () => {
+    const handler = findCommand(api, "spec");
+    await handler("--out backlog/ add a retry policy", api._mockCtx);
+
+    expect(api.sentMessages[0].content).toContain("Output file: backlog/add.md   ");
+    expect(api._mockUi.notify).toHaveBeenCalledWith(
+      "Author: writing backlog/add.md. Review it, then run /loop backlog/add.md",
+      "info",
+    );
+  });
+
+  it("rubric missing in an empty dir → warning fires before the turn, fallback block in prompt", async () => {
+    const fs = require("node:fs");
+    const os = require("node:os");
+    const path = require("node:path");
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "loop-spec-rubric-"));
+    const originalCwd = api._mockCtx.cwd;
+    api._mockCtx.cwd = tmp;
+
+    // Isolate from the real repo: readRubric resolves docs/spec-authoring.md
+    // against the process cwd as a fallback, and this suite runs from the repo
+    // root where the file exists.
+    const originalProcessCwd = process.cwd();
+    process.chdir(tmp);
+
+    const handler = findCommand(api, "spec");
+    await handler("add a retry policy", api._mockCtx);
+
+    const calls = api._mockUi.notify.mock.calls as [string, string][];
+    const warnIdx = calls.findIndex((c) => c[0].includes("docs/spec-authoring.md not found"));
+    const infoIdx = calls.findIndex((c) => c[0].startsWith("Author: writing"));
+    expect(warnIdx).toBeGreaterThanOrEqual(0);
+    // Row 4 ordering: the rubric warning fires BEFORE the turn's info notify.
+    expect(warnIdx).toBeLessThan(infoIdx);
+    expect(api.sentMessages.length).toBe(1);
+    expect(api.sentMessages[0].content).toContain(
+      "No template file is available in this repo.",
+    );
+    process.chdir(originalProcessCwd);
+    api._mockCtx.cwd = originalCwd;
+    fs.rmSync(tmp, { recursive: true, force: true });
   });
 });
 
