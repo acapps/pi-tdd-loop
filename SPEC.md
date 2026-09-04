@@ -79,6 +79,8 @@ The project's existing test suite is run (`go test ./...`, `mvn test`, `npx vite
 
 Reviewer reads the spec, identifies ambiguities and missing edge cases, proposes concrete test-case clarifications, and surfaces them to the human for approval. The human answers focused questions once, then the loop runs unattended. A spec template and filling prompt derived from observed Phase 0 findings live in `docs/spec-authoring.md`; specs written against it typically clear review in one round.
 
+The loop is a spec *consumer*. The separate `/spec` command is a one-shot *producer*: it runs an Author agent that turns a loose goal into a tight, template-conformant spec file in the backlog (`internal/` by default), with no loop phases, gates, or `LoopState` involvement. The produced file is later fed to `/loop <spec>` like any human-authored spec.
+
 **Activates automatically** when the spec meets any threshold:
 - 3+ functions described
 - Any mention of errors, I/O, or concurrency

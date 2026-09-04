@@ -1,6 +1,6 @@
 # Writing Specs for the Loop
 
-Phase 0 reviews your spec for ambiguities and missing edge cases before any code is written. Every review round costs time; a spec written against the template below tends to survive Phase 0 in one pass.
+Phase 0 reviews your spec for ambiguities and missing edge cases before any code is written. Every review round costs time; a spec written against the template below tends to survive Phase 0 in one pass. This document is also the Author agent's contract: the `/spec` command feeds it to the Author, which writes new specs against the same template and failure classes.
 
 **Provenance:** this document distills the Phase 0 findings from seven real specs run through the loop on this repo's own codebase (`internal/02`–`internal/06`, nine review rounds, plus spec 07). The first six were all extract/move units; spec 07 was the first behavior-wiring unit (fix a state machine, no code moves) and exposed the gaps the last sections close: runtime evidence, persisted state, intended shifts. Each template section exists because a first draft failed on it — the "why" column says which.
 

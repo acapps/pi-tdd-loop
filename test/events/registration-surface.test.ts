@@ -82,9 +82,12 @@ const ENTRY_PATH = path.join(ROOT, "index.ts");
 // Phase B): line 57 only — Cmd.cmdDebug() → Cmd.cmdDebug(state, debug) — the
 // only log-bug change to index.ts. Re-baselined 2026-07-21 after the
 // in-flight negotiate-drift work landed in index.ts (the working tree had
-// uncommitted registration changes). The registration-block diagnostic guard
+// uncommitted registration changes). Re-baselined by internal/spec-command.md
+// (/spec one-shot Author command, Phase B): the import line and the
+// `pi.registerCommand("spec", ...)` line are the only spec-command changes to
+// index.ts. The registration-block diagnostic guard
 // below still enforces the registration-surface invariant.
-const ENTRY_SHA256 = "437382186f50b40e474ad811679e79a68115bab6513bb1f494acae1e214a5090";
+const ENTRY_SHA256 = "f61445238b155063143bcdd317605de3766fd2a2f5147ce8eaf62da2be9d146d";
 
 // F3 sweep needle (built to keep this file clean).
 const NEEDLE = new RegExp("events" + String.raw`\.ts`);

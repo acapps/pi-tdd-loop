@@ -44,6 +44,9 @@ pi -e ./path/to/pi-tdd-loop
 | `/loop-restart <phase>` | Jump to a specific phase |
 | `/loop-debug` | Show last 20 debug entries; `--log-bug <name>` writes `bug-fix-<name>.md` |
 | `/loop-cancel` | Stop the loop, return to idle |
+| `/spec [options] <goal>` | One-shot Author: writes a /loop-ready spec into the backlog (no loop state) |
+
+`/spec [--slug <name>] [--out <dir>] <goal...>` is the spec-writing half of the workflow: it runs one Author turn that reads your loose goal, verifies claims against the repo, and writes a tight spec file (default `internal/<slug>.md`) shaped to the [spec template](docs/spec-authoring.md). It is a separate, stateless command — no loop phases, no gates, no `LoopState` — so spec-writing and implementation can each take their own session. When the spec is ready, kick off the implementation half with `/loop internal/<slug>.md`.
 
 `/loop-debug --log-bug <name>` extracts the session's `loop-*` debug entries in-process and writes `bug-fix-<slug>.md` into the working directory — a self-contained, `/loop`-runnable bug spec with an auto-filled Context (phase/round/spec/language), placeholder Observed problem / Proposed fix sections, and the extracted log excerpt inlined. Fill the placeholders in, then run `/loop bug-fix-<slug>.md`.
 
