@@ -31,6 +31,7 @@ When a spec is fully implemented and tests pass: **rename the file to `done-<nam
 | `logging-spec.md` | Not started |
 | `log-bug-spec.md` | Not started — `/loop-debug --log-bug <name>` flag; independent of 01–06 |
 | `missing-test-coverage.md` | Partial — reviewer tests exist, commands.ts helpers untested |
+| `spec-command.md` | Ready — `/spec` one-shot Author command; independent of 08–10 |
 
 ### Done
 
