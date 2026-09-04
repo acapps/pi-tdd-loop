@@ -32,6 +32,8 @@ When a spec is fully implemented and tests pass: **rename the file to `done-<nam
 | `log-bug-spec.md` | Not started — `/loop-debug --log-bug <name>` flag; independent of 01–06 |
 | `missing-test-coverage.md` | Partial — reviewer tests exist, commands.ts helpers untested |
 | `spec-command.md` | Ready — `/spec` one-shot Author command; independent of 08–10 |
+| `ts-gate-coverage-provider.md` | Ready — TS gate picks plain `vitest run` when no coverage provider is installed; closes the TS row of `bug-coverage-noop-ts.md` |
+| `writer-dispute-concede.md` | Ready — Phase B `negotiate_propose("agree")` concedes instead of filing a dispute; independent of the two root `bug-dispute-*` specs |
 
 ### Done
 
