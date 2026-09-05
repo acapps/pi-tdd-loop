@@ -1,5 +1,7 @@
 # Bug: Coverage gate is a silent no-op for TypeScript (and faked for Java)
 
+> **Status (TS row):** closed by `internal/ts-gate-coverage-provider.md`. **Deliberate reversal of the fix proposed below:** the predecessor recommendation was "provider absent → fail the gate with a named reason"; the implementing spec instead follows `internal/bug-gate-signal-integrity.md` row 6 — unmeasurable coverage is an environment fact, so a provider-less TypeScript project degrades to a plain `vitest run` (gate on compile + test exit code, coverage sub-check skipped, `cov=0%` is "unavailable", never a failure). The Java/jacoco row and the "fail with a named reason" semantics remain open in this file.
+
 ## Context
 
 Observed in sessions `01a011fa` (spec 09) and `01a0155a` (spec 10): every single gate log line reads `cov=0%` — 8+ gates across Phases A/B/C — while the loop was invoked with the default `--coverage 80`. The coverage threshold is therefore never enforced in TypeScript projects, despite SPEC.md advertising "build/test/coverage" gates.

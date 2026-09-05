@@ -33,9 +33,31 @@
 // tests are individually valid; the hang is environmental. Re-enable after
 // the bug spec is resolved.
 
-import { describe, it, expect } from "vitest";
-import { runGates, parseCoverage, getTestCommand } from "../src/gates";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+// Provider-probe boundary (internal/ts-gate-coverage-provider.md): the pure
+// getTestCommand/hasVitestCoverageProvider cases below mock node:module only.
+// Safe in this file — it never mocks node:child_process, so the S1/S2
+// live-toolchain runGates tests below are unaffected (one vi.mock per file
+// would break them; the mocked runGates wiring lives in
+// test/gates-provider-wiring.test.ts instead).
+vi.mock("node:module", () => ({
+  createRequire: vi.fn(),
+}));
+
+import { createRequire } from "node:module";
+import { runGates, parseCoverage, getTestCommand, hasVitestCoverageProvider } from "../src/gates";
 import type { GateOutcome } from "../src/gates";
+
+const mockCreateRequire = vi.mocked(createRequire);
+
+function mockResolveOk(): void {
+  mockCreateRequire.mockReturnValue({ resolve: vi.fn(() => "/fake/node_modules/@vitest/coverage-v8/index.js") } as never);
+}
+
+function mockResolveThrowing(value: unknown): void {
+  mockCreateRequire.mockReturnValue({ resolve: vi.fn(() => { throw value; }) } as never);
+}
 import * as T from "../src/transitions";
 import { RETRY_PROMPTS } from "../src/constants";
 import * as GP from "../src/generic-prompts";
@@ -179,6 +201,72 @@ describe("getTestCommand (B/C single invocation)", () => {
       expect(cmd).not.toContain("|| true");
       expect(cmd).not.toContain("|| echo");
     }
+  });
+});
+
+// ================================================================
+// getTestCommand / hasVitestCoverageProvider — provider probe
+// (internal/ts-gate-coverage-provider.md, decision-table rows 1–3)
+// Pure cases: the probe is a module-resolution read, mocked at the
+// node:module boundary. No real vitest, no real node_modules mutation.
+// ================================================================
+
+describe("getTestCommand — provider probe (rows 1–3)", () => {
+  beforeEach(() => {
+    mockCreateRequire.mockReset();
+  });
+
+  it("row 1: provider resolvable from cwd → `npx vitest run --coverage`", () => {
+    mockResolveOk();
+    expect(getTestCommand("typescript", undefined, { cwd: "/fake/ts-project" })).toBe("npx vitest run --coverage");
+  });
+
+  it("row 2: resolve throws MODULE_NOT_FOUND → `npx vitest run` (probe never throws out)", () => {
+    const err = new Error("Cannot find module '@vitest/coverage-v8'") as NodeJS.ErrnoException;
+    err.code = "MODULE_NOT_FOUND";
+    mockResolveThrowing(err);
+    expect(() => getTestCommand("typescript", undefined, { cwd: "/fake/ts-project" })).not.toThrow();
+    expect(getTestCommand("typescript", undefined, { cwd: "/fake/ts-project" })).toBe("npx vitest run");
+  });
+
+  it("row 2 edge: resolve throwing a non-Error still degrades to the plain run", () => {
+    mockResolveThrowing("a string, not an Error");
+    expect(getTestCommand("typescript", undefined, { cwd: "/fake/ts-project" })).toBe("npx vitest run");
+  });
+
+  it("row 3: no cwd (direct unit call) → today's string verbatim, probe never consulted", () => {
+    expect(getTestCommand("typescript")).toBe("npx vitest run --coverage");
+    expect(mockCreateRequire).not.toHaveBeenCalled();
+  });
+
+  it("go/java never consult the probe even with cwd", () => {
+    mockResolveOk();
+    expect(getTestCommand("go", undefined, { cwd: "/fake/go-project" })).toBe("go test -json -cover ./...");
+    expect(getTestCommand("java", "maven", { cwd: "/fake/java-project" })).toBe("mvn test -Djacoco.skip=false");
+    expect(mockCreateRequire).not.toHaveBeenCalled();
+  });
+});
+
+describe("hasVitestCoverageProvider — probe surface", () => {
+  beforeEach(() => {
+    mockCreateRequire.mockReset();
+  });
+
+  it("resolvable → true", () => {
+    mockResolveOk();
+    expect(hasVitestCoverageProvider("/fake/ts-project")).toBe(true);
+  });
+
+  it("unresolvable (MODULE_NOT_FOUND) → false", () => {
+    const err = new Error("Cannot find module '@vitest/coverage-v8'") as NodeJS.ErrnoException;
+    err.code = "MODULE_NOT_FOUND";
+    mockResolveThrowing(err);
+    expect(hasVitestCoverageProvider("/fake/ts-project")).toBe(false);
+  });
+
+  it("resolve throwing a non-Error → false (any failure resolves to false)", () => {
+    mockResolveThrowing(42);
+    expect(hasVitestCoverageProvider("/fake/ts-project")).toBe(false);
   });
 });
 
