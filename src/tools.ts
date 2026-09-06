@@ -5,6 +5,7 @@ import type { LoopState, Phase } from "./types";
 import * as T from "./transitions";
 import * as GP from "./generic-prompts";
 import { getLanguageConfig } from "./languages";
+import { commit } from "./commit";
 
 // --- Types ---
 
@@ -54,9 +55,9 @@ function isApproval(decision: string): boolean {
 
 // --- State persistence helpers ---
 
-/** Snapshot the current state into the session log. */
-function persistState(state: StateRef, pi: ExtensionAPI): void {
-  pi.appendEntry("loop-state", { ...state.current });
+/** Snapshot the current state into the session log (single commit point). */
+function persistState(state: StateRef, pi: ExtensionAPI, debug: Debug): void {
+  commit(state.current, pi, debug);
 }
 
 /** Shared negotiate → Phase B transition: reset transient flags, then apply the effect. */
@@ -117,11 +118,11 @@ function logDisputeConcession(state: StateRef, pi: ExtensionAPI): void {
   });
 }
 
-function logEscalation(state: StateRef, pi: ExtensionAPI, ctx: ToolCtx): void {
+function logEscalation(state: StateRef, pi: ExtensionAPI, ctx: ToolCtx, debug: Debug): void {
   state.current.phase = "escalated";
   state.current.awaitDisputeFix = false;
   state.current.awaitDisputeReview = false;
-  persistState(state, pi);
+  persistState(state, pi, debug);
   ctx.ui.notify("Dispute limit reached. Escalating to human.", "warning");
   ctx.ui.setStatus("loop", "escalated (dispute limit)");
 }
@@ -134,7 +135,7 @@ function applyTransitionEffect(
   effect: ReturnType<typeof T.computeNegotiateTransition>["effect"],
 ): void {
   debug(`applying transition: ${effect.type}`);
-  persistState(state, pi);
+  persistState(state, pi, debug);
   ctx.ui.setStatus("loop", "status" in effect ? effect.status : "Phase B — round 1");
 }
 
@@ -213,12 +214,12 @@ function handleBDisputePropose(
   debug(`Dispute #${state.current.disputeCount}: ${plan.slice(0, 60)}`);
 
   if (state.current.disputeCount >= state.current.maxDispute) {
-    logEscalation(state, pi, ctx);
+    logEscalation(state, pi, ctx, debug);
     return buildProposeResult();
   }
 
   logDisputeEntry(state, pi, debug, plan);
-  return triggerDisputeReview(state, pi);
+  return triggerDisputeReview(state, pi, debug);
 }
 
 function executeNegotiateAgree(
@@ -239,13 +240,13 @@ function executeNegotiateProposal(
 ): ToolResult {
   debug("negotiate_propose: proposal recorded");
   state.current.negotiateProposed = true;
-  persistState(state, pi);
+  persistState(state, pi, debug);
   return buildProposeResult();
 }
 
-function triggerDisputeReview(state: StateRef, pi: ExtensionAPI): ToolResult {
+function triggerDisputeReview(state: StateRef, pi: ExtensionAPI, debug: Debug): ToolResult {
   state.current.awaitDisputeReview = true;
-  persistState(state, pi);
+  persistState(state, pi, debug);
   return {
     content: [{ text: "Dispute filed. STOP producing tool calls. The review is requested when your turn ends." }],
   };
@@ -331,7 +332,7 @@ function executeNegotiateReReview(
   state.current.negotiateProposed = false;
   state.current.negotiateFeedback = "";
   state.current.justTransitioned = true;
-  persistState(state, pi);
+  persistState(state, pi, debug);
   pi.sendUserMessage(GP.promptNegotiateContractReReview(lang.testFilePattern), { triggerTurn: true });
   return { content: [{ text: "Proposal accepted. Re-reviewing the contract file before Phase B." }] };
 }
@@ -379,7 +380,7 @@ function executeNegotiateFeedback(
 ): ToolResult {
   debug("negotiate_review: feedback");
   state.current.negotiateFeedback = decision;
-  persistState(state, pi);
+  persistState(state, pi, debug);
   return buildReviewResult(state.current.phase as Phase, decision);
 }
 
@@ -391,7 +392,7 @@ function executeBDisputeConcede(
   debug("Tester conceded — will fix test");
   state.current.disputeMode = true;
   state.current.awaitDisputeFix = true;
-  persistState(state, pi);
+  persistState(state, pi, debug);
   logDisputeConcession(state, pi);
   return buildReviewResult(state.current.phase as Phase, "approve");
 }
@@ -408,7 +409,7 @@ function executeBDisputeDefend(
   // cell inherited; a no-op in row 2 (already false).
   state.current.disputeMode = false;
   state.current.disputeDefended = decision; // delivered at the next settle (Table 3 row 1)
-  persistState(state, pi);
+  persistState(state, pi, debug);
   return buildReviewResult(state.current.phase as Phase, decision);
 }
 
@@ -421,6 +422,6 @@ function executeWriterConcede(
   // Exit the fix window so rule 3 no longer blocks the Writer's source writes.
   state.current.disputeMode = false;
   state.current.awaitWriterConcedeFix = true; // delivered at the next settle (Table 3 row 2)
-  persistState(state, pi);
+  persistState(state, pi, debug);
   return buildReviewResult(state.current.phase as Phase, "approve");
 }

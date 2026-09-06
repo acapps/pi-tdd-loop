@@ -7,6 +7,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { EventCtx } from "../index";
 import type { LanguageConfig } from "../../languages";
 import * as GP from "../../generic-prompts";
+import { commit } from "../../commit";
 
 // --- Types ---
 
@@ -56,7 +57,7 @@ export function handleDisputeReview(
   debug?.(`Dispute review → ${reviewer} review turn`);
   pi.sendUserMessage(prompt, { triggerTurn: true });
   state.current.awaitDisputeReview = false; // cleared at scheduling — never survives a settle
-  persistState(state, pi);
+  persistState(state, pi, debug);
   ctx.ui.setStatus("loop", `Phase ${state.current.phase} — round ${state.current.round} (dispute review)`);
   return { handled: true, type: "review" }; // the gate resumes on the next settle
 }
@@ -78,7 +79,7 @@ export function handleDisputeDefend(
   pi.sendUserMessage(prompt, { triggerTurn: true });
   state.current.disputeDefended = undefined;
   state.current.disputeFiler = undefined; // cleared per Table 3 row 1
-  persistState(state, pi);
+  persistState(state, pi, debug);
   return { handled: true, type: "defend" };
 }
 
@@ -92,12 +93,12 @@ export function handleWriterConcedeFix(
   pi.sendUserMessage(GP.promptWriterConcedeFix(state.current.lastProposal), { triggerTurn: true });
   state.current.awaitWriterConcedeFix = false;
   state.current.disputeFiler = undefined; // N2: cleared on this row too
-  persistState(state, pi);
+  persistState(state, pi, debug);
   return { handled: true, type: "writer-fix" };
 }
 
 // --- Shared helpers ---
 
-function persistState(state: { current: LoopState }, pi: ExtensionAPI): void {
-  pi.appendEntry("loop-state", { ...state.current });
+function persistState(state: { current: LoopState }, pi: ExtensionAPI, debug?: (msg: string) => void): void {
+  commit(state.current, pi, debug ?? (() => {}));
 }

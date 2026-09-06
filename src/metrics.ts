@@ -1,9 +1,9 @@
 // --- Metrics ---
-// Collects metrics during a loop run for scoring and comparison.
+// Scoreboard data types for golden/e2e comparison. (The live loop no longer
+// accumulates metrics; the golden and e2e harnesses type their fixtures
+// against the interfaces below.)
 
-import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
-import type { LoopState, GateResult, FailingTest, Phase, LanguageKey } from "./types";
+import type { FailingTest, LanguageKey, Phase } from "./types";
 
 // --- Types ---
 
@@ -50,14 +50,7 @@ export interface ScoreboardEntry {
   metrics: LoopMetrics;
 }
 
-// --- Errors ---
-
-export const ErrNoMetrics = "No metrics collected";
-export const ErrNoRuns = "No runs found";
-export const ErrInvalidLabel = "Label must be non-empty";
-export const ErrInvalidDirectory = "Directory does not exist or is not accessible";
-
-// --- Public API ---
+// --- Accumulators (golden/e2e harness) ---
 
 const ALL_PHASES = ["idle", "A", "negotiate", "B", "C", "done", "escalated"];
 
@@ -67,11 +60,17 @@ function emptyPhaseRecord(): Record<string, number> {
   return record;
 }
 
-export function createMetrics(state: LoopState): LoopMetrics {
+interface MetricsSeed {
+  specPath: string;
+  language: LanguageKey;
+  phase: Phase | string;
+}
+
+export function createMetrics(seed: MetricsSeed): LoopMetrics {
   const now = new Date().toISOString();
   return {
-    specPath: state.specPath,
-    language: state.language,
+    specPath: seed.specPath,
+    language: seed.language,
     ts: now,
     startTime: now,
     gateRuns: 0,
@@ -81,7 +80,7 @@ export function createMetrics(state: LoopState): LoopMetrics {
     finalCoverage: 0,
     roundsByPhase: emptyPhaseRecord(),
     turnsByPhase: emptyPhaseRecord(),
-    finalPhase: state.phase,
+    finalPhase: String(seed.phase),
     disputesRaised: 0,
     disputesConceded: 0,
     disputesDefended: 0,
@@ -92,7 +91,14 @@ export function createMetrics(state: LoopState): LoopMetrics {
   };
 }
 
-export function accumulateGate(metrics: LoopMetrics, gate: GateResult): void {
+export interface GateLike {
+  compile: boolean;
+  tests: boolean;
+  coverage: number;
+  failures: FailingTest[];
+}
+
+export function accumulateGate(metrics: LoopMetrics, gate: GateLike): void {
   metrics.gateRuns++;
 
   if (!gate.compile) metrics.compileFails++;
@@ -155,152 +161,4 @@ export function finalize(metrics: LoopMetrics, phase: string): LoopMetrics {
     result.durationMs = end - start;
   }
   return result;
-}
-
-// --- Format Metrics ---
-
-export function formatMetrics(metrics: LoopMetrics): string {
-  const lines = [
-    "═══ Loop Metrics ═══",
-    `Spec: ${metrics.specPath}`,
-    `Language: ${metrics.language}`,
-    `Duration: ${metrics.durationMs ? `${metrics.durationMs}ms` : 'N/A'}`,
-    "",
-    `gate runs: ${metrics.gateRuns}`,
-    `  compile fails: ${metrics.compileFails}`,
-    `  test fails: ${metrics.testFails}`,
-    `  total failures: ${metrics.totalFailures}`,
-    `  coverage: ${metrics.finalCoverage}%`,
-    "",
-    `Phases:`,
-  ];
-
-  for (const [phase, rounds] of Object.entries(metrics.roundsByPhase)) {
-    lines.push(`  ${phase}: ${rounds} round(s), ${metrics.turnsByPhase[phase] || 0} turn(s)`);
-  }
-
-  lines.push("");
-  lines.push(`Final phase: ${metrics.finalPhase}`);
-  lines.push(`Disputes: ${metrics.disputesRaised} raised, ${metrics.disputesConceded} conceded, ${metrics.disputesDefended} defended`);
-  lines.push(`Files: ${metrics.filesWritten} written, ${metrics.filesBlocked} blocked`);
-
-  return lines.join("\n");
-}
-
-// --- Scoreboard ---
-
-const DEFAULT_SCOREBOARD_DIR = "scoreboard";
-
-// Label validation: only alphanumeric, hyphens, underscores, dots
-const VALID_LABEL_RE = /^[a-zA-Z0-9._-]+$/;
-
-export function saveMetrics(
-  dir: string,
-  metrics: LoopMetrics,
-  label: string,
-): void {
-  if (!label || !VALID_LABEL_RE.test(label)) throw new Error(ErrInvalidLabel);
-
-  const entry = {
-    label,
-    ts: metrics.endTime || metrics.ts,
-    filePath: join(dir, `${label}.json`),
-    metrics,
-  };
-
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
-  }
-
-  const file = join(dir, `${label}.json`);
-  writeFileSync(file, JSON.stringify(entry, null, 2), "utf-8");
-}
-
-export function loadScoreboard(dir: string = DEFAULT_SCOREBOARD_DIR): ScoreboardEntry[] {
-  if (!existsSync(dir)) throw new Error(ErrNoRuns);
-  const entries: ScoreboardEntry[] = [];
-  for (const file of readdirSync(dir)) {
-    if (file.endsWith(".json")) {
-      try {
-        const content = readFileSync(join(dir, file), "utf-8");
-        entries.push(JSON.parse(content));
-      } catch { /* skip invalid files */ }
-    }
-  }
-  
-  return entries;
-}
-
-export function listRuns(dir: string = DEFAULT_SCOREBOARD_DIR, limit?: number): string[] {
-  try {
-    const entries = loadScoreboard(dir);
-    const labels = entries.map(e => e.label);
-    return limit ? labels.slice(0, limit) : labels;
-  } catch (err: any) {
-    // If directory doesn't exist or has no runs, return empty array
-    if (err.message === ErrNoRuns) return [];
-    throw err;
-  }
-}
-
-// --- Comparison ---
-
-interface MetricDiff {
-  metric: string;
-  a: number;
-  b: number;
-  diff: number;
-  improved: boolean;
-  changePercent: number;
-}
-
-export interface ComparisonResult {
-  diffs: MetricDiff[];
-}
-
-export function compareRuns(
-  a: ScoreboardEntry,
-  b: ScoreboardEntry,
-): ComparisonResult {
-  const ma = a.metrics;
-  const mb = b.metrics;
-
-  const fields: { key: keyof LoopMetrics; label: string; lowerIsBetter: boolean }[] = [
-    { key: "gateRuns", label: "Gate runs", lowerIsBetter: true },
-    { key: "compileFails", label: "Compile fails", lowerIsBetter: true },
-    { key: "testFails", label: "Test fails", lowerIsBetter: true },
-    { key: "totalFailures", label: "Total failures", lowerIsBetter: true },
-    { key: "finalCoverage", label: "Coverage", lowerIsBetter: false },
-    { key: "disputesRaised", label: "Disputes", lowerIsBetter: true },
-    { key: "filesWritten", label: "Files written", lowerIsBetter: false },
-  ];
-
-  const diffs: MetricDiff[] = [];
-  for (const { key, label, lowerIsBetter } of fields) {
-    const valA = ma[key] as number;
-    const valB = mb[key] as number;
-    const diff = valB - valA;
-    const improved = lowerIsBetter ? diff < 0 : diff > 0;
-    const changePercent = valA !== 0 ? (diff / valA) * 100 : (diff !== 0 ? 100 : 0);
-    if (diff !== 0) {
-      diffs.push({ metric: label, a: valA, b: valB, diff, improved, changePercent });
-    }
-  }
-  return { diffs };
-}
-
-export function formatComparison(a: ScoreboardEntry, b: ScoreboardEntry): string {
-  const comp = compareRuns(a, b);
-  const lines = [
-    "═══ Run Comparison ═══",
-    `${a.label} vs ${b.label}`,
-    "",
-  ];
-
-  for (const d of comp.diffs) {
-    const arrow = d.improved ? "✓" : "✗";
-    lines.push(`  ${d.metric.padEnd(16)} ${d.a.toString().padStart(4)} → ${d.b.toString().padStart(4)} (${d.diff > 0 ? "+" : ""}${d.diff}) ${arrow}`);
-  }
-
-  return lines.join("\n");
 }

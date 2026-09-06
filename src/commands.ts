@@ -11,6 +11,7 @@ import { runBaseline, formatBaselineFailure } from "./baseline";
 import { setupBranch } from "./git-workflow";
 import { getLanguageConfig, detectProject, DetectedProject } from "./languages";
 import { slugBugName, extractLoopLogs, renderBugSpec, writeBugSpec } from "./bug-spec";
+import { commit } from "./commit";
 
 // --- Types ---
 
@@ -120,7 +121,6 @@ function createInitialState(
     negotiateFeedback: "",
     awaitDisputeFix: false,
     awaitDisputeReview: false,
-    skipPhase0: false,
   };
 }
 
@@ -132,12 +132,12 @@ export function cmdLoop(
   debug: DebugFn,
 ) {
   return {
-    description: "Start adversarial loop: [--language go|java|typescript] [--coverage N] [--skip-review] [--branch [name]] <spec-path>",
+    description: "Start adversarial loop: [--language go|java|typescript] [--coverage N] [--branch [name]] <spec-path>",
     handler: async (args: string, ctx: CommandContext) => {
       const { specPath, coverage, language: argLanguage, branch: branchArg } = parseLoopArgs(args);
       if (!specPath) {
         ctx.ui.notify(
-          "Usage: /loop [--language go|java|typescript] [--coverage N] [--skip-review] [--branch [name]] <spec-path>",
+          "Usage: /loop [--language go|java|typescript] [--coverage N] [--branch [name]] <spec-path>",
           "warning",
         );
         return;
@@ -211,7 +211,7 @@ export function cmdLoop(
         "info",
       );
       ctx.ui.setStatus("loop", "Phase 0 — review pending");
-      pi.appendEntry("loop-state", { ...state.current });
+      commit(state.current, pi, debug);
       pi.sendUserMessage(reviewPrompt, { triggerTurn: true });
       return;
     },
@@ -276,7 +276,7 @@ export function cmdContinue(
       resetPhaseState(state.current);
       ctx.ui.notify(`Continued from Phase ${state.current.phase}, round 1.`, "info");
       ctx.ui.setStatus("loop", `Phase ${state.current.phase} — round 1`);
-      pi.appendEntry("loop-state", { ...state.current });
+      commit(state.current, pi, debug);
       pi.sendUserMessage(buildContinuePrompt(state.current), { triggerTurn: true });
     },
   };
@@ -323,7 +323,7 @@ function handlePhaseRestart(
   debug(`Command: /loop-restart ${phase} → round 1`);
   ctx.ui.notify(`Restarted from Phase ${phase}, round 1.`, "info");
   ctx.ui.setStatus("loop", `Phase ${phase} — round 1`);
-  pi.appendEntry("loop-state", { ...state.current });
+  commit(state.current, pi, debug);
   pi.sendUserMessage(buildRestartPrompt(state.current, state.current.specPath), { triggerTurn: true });
 }
 
@@ -450,7 +450,7 @@ export function cmdCancel(
       debug("Command: /loop-cancel → idle");
       ctx.ui.notify("Loop cancelled.", "info");
       ctx.ui.setStatus("loop", "idle");
-      pi.appendEntry("loop-state", { ...state.current });
+      commit(state.current, pi, debug);
     },
   };
 }
@@ -477,7 +477,7 @@ export function cmdApprove(
       const lang = getLanguageConfig(state.current.language);
       ctx.ui.notify("Spec review approved. Phase A: Tester writes contract.", "info");
       ctx.ui.setStatus("loop", "Phase A — round 1");
-      pi.appendEntry("loop-state", { ...state.current });
+      commit(state.current, pi, debug);
 
       pi.sendUserMessage(
         lang.prompts.promptTesterPhaseA(state.current.specPath, state.current.buildTool),

@@ -140,7 +140,7 @@ describe("/loop command", () => {
     await handler("", api._mockCtx);
 
     expect(api._mockUi.notify).toHaveBeenCalledWith(
-      "Usage: /loop [--language go|java|typescript] [--coverage N] [--skip-review] [--branch [name]] <spec-path>",
+      "Usage: /loop [--language go|java|typescript] [--coverage N] [--branch [name]] <spec-path>",
       "warning"
     );
   });
@@ -1135,14 +1135,17 @@ describe("session_start event", () => {
           round: 3,
           specPath: "spec.md",
           language: "go",
+          buildTool: "maven",
           maxA: 3,
           maxNegotiate: 3,
           maxB: 5,
           maxC: 3,
           maxDispute: 3,
+          maxTurnsPerPhase: 5,
           coverageThreshold: 90,
           disputeMode: true, // should be cleared
           disputeCount: 1,
+          turnsThisPhase: 1,
           lastProposal: "some plan",
           lastPhase: "A",
           justTransitioned: false,
@@ -1373,14 +1376,17 @@ describe("tool_call event (path enforcement)", () => {
           round: 5,
           specPath: "spec.md",
           language: "go",
+          buildTool: "maven",
           maxA: 3,
           maxNegotiate: 3,
           maxB: 5,
           maxC: 3,
           maxDispute: 3,
+          maxTurnsPerPhase: 5,
           coverageThreshold: 80,
           disputeMode: false,
           disputeCount: 3,
+          turnsThisPhase: 1,
           lastProposal: "",
           lastPhase: "B",
           justTransitioned: false,
@@ -1531,9 +1537,17 @@ describe("agent_settled event (phase transitions)", () => {
           maxB: 5,
           maxC: 3,
           maxDispute: 3,
+          maxTurnsPerPhase: 5,
           coverageThreshold: 80,
-          awaitingReview: false,
+          disputeMode: false,
+          disputeCount: 0,
+          turnsThisPhase: 1,
+          lastProposal: "",
+          lastPhase: "A",
           justTransitioned: true,
+          negotiateReprompted: false,
+          awaitDisputeFix: false,
+          awaitDisputeReview: false,
         },
       },
     ];

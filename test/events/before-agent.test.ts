@@ -217,7 +217,7 @@ describe("Phase B (dispute fix) — F1, R3", () => {
 
   it("executes the exact order: debug → clear flag → persist snapshot (R3)", () => {
     const order: string[] = [];
-    const state = makeState({ phase: "B", round: 1, awaitDisputeFix: true });
+    const state = makeState({ phase: "B", round: 1, turnsThisPhase: 1, awaitDisputeFix: true });
     let flag = true;
     Object.defineProperty(state, "awaitDisputeFix", {
       get: () => flag,
