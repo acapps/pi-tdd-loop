@@ -29,6 +29,11 @@ function stateSummary(s: LoopState): string {
   return `Phase ${s.phase} round ${s.round}`;
 }
 
+function quarantine(ctx: EventCtx, debug: (msg: string) => void): void {
+  debug(CORRUPT_DEBUG);
+  ctx.ui.setStatus("loop", CORRUPT_STATUS);
+}
+
 function isLoopStateEntry(entry: unknown): boolean {
   if (typeof entry !== "object" || entry === null) return false;
   const e = entry as Record<string, unknown>;
@@ -81,16 +86,14 @@ export function handleSessionStart(input: SessionStartHandlerInput): void {
     return;
   }
   if (!entry.data) {
-    debug(CORRUPT_DEBUG);
-    ctx.ui.setStatus("loop", CORRUPT_STATUS);
+    quarantine(ctx, debug);
     return;
   }
 
   // Call site 2 (refactor-state-model-divergence.md): validate the restored
   // entry; on failure quarantine — do NOT load the broken state.
   if (!validateLoopState(entry.data)) {
-    debug(CORRUPT_DEBUG);
-    ctx.ui.setStatus("loop", CORRUPT_STATUS);
+    quarantine(ctx, debug);
     return;
   }
 
