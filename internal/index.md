@@ -13,6 +13,7 @@ Conventions for specs in this directory: [docs/spec-authoring.md](../docs/spec-a
 | [bug-dispute-reload-evaporation.md](bug-dispute-reload-evaporation.md) | bug | blocked | hard: refactor-single-commit-point; soft: bug-gate-signal-integrity, refactor-state-model-divergence |
 | [bug-phase-0-approval-dead-end.md](bug-phase-0-approval-dead-end.md) | bug | open | soft: refactor-single-commit-point |
 | [bug-negotiate-drift.md](bug-negotiate-drift.md) | bug | open | — (observed in the bug-gate-signal-integrity run, 2026-08-18) |
+| [bug-negotiate-confirm-approval-loop.md](bug-negotiate-confirm-approval-loop.md) | bug | open | — (observed in the refactor-state-model-divergence run, 2026-09-05; fixes a defect in bug-negotiate-drift's row 2) |
 | [bug-gate-green-stays-green.md](bug-gate-green-stays-green.md) | bug | open | soft: bug-negotiate-drift (shares the S1 skipIf fix) |
 | [bug-gate-verdict-field.md](bug-gate-verdict-field.md) | bug | blocked | hard: bug-gate-signal-integrity (assumes its allPassed semantics); sequence after bug-gate-green-stays-green (same fixture) |
 

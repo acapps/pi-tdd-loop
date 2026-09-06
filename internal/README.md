@@ -34,6 +34,7 @@ When a spec is fully implemented and tests pass: **rename the file to `done-<nam
 | `spec-command.md` | Ready — `/spec` one-shot Author command; independent of 08–10 |
 | `ts-gate-coverage-provider.md` | Ready — TS gate picks plain `vitest run` when no coverage provider is installed; closes the TS row of `bug-coverage-noop-ts.md` |
 | `writer-dispute-concede.md` | Ready — Phase B `negotiate_propose("agree")` concedes instead of filing a dispute; independent of the two root `bug-dispute-*` specs |
+| `bug-negotiate-confirm-approval-loop.md` | Ready — fixes the row-2 exact-string discriminator that looped on "Agree — ..." proposals (2026-09-05 session); four findings, two open questions in its Findings log |
 
 ### Done
 
