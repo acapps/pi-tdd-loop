@@ -3,7 +3,6 @@
 
 import { describe, it, expect } from "vitest";
 import {
-  shouldActivatePhase0,
   analyzeSpec,
   formatFinding,
   buildClarificationAddendum,
@@ -17,7 +16,6 @@ import {
   type Interpretation,
   type Clarification,
   type ClarificationAddendum,
-  DEFAULT_PHASE_ZERO_THRESHOLDS,
 } from "../src/types";
 
 // --- Helpers ---
@@ -56,70 +54,6 @@ function makeClarification(overrides = {}): Clarification {
 }
 
 // ================================================================
-// shouldActivatePhase0
-// ================================================================
-
-describe("shouldActivatePhase0", () => {
-  it("always activates Phase 0", () => {
-    const spec = `
-# Add Function
-Add(a int, b int) int — returns the sum of a and b.
-`;
-    const result = shouldActivatePhase0(spec);
-    expect(result.activate).toBe(true);
-  });
-
-  it("always activates — trivial spec", () => {
-    const spec = `Single function.`;
-    const result = shouldActivatePhase0(spec);
-    expect(result.activate).toBe(true);
-  });
-
-  it("always activates — multi-function spec", () => {
-    const spec = `
-# String Utilities
-- Capitalize(s string) string
-- Reverse(s string) string
-- Trim(s string) string
-`;
-    const result = shouldActivatePhase0(spec);
-    expect(result.activate).toBe(true);
-  });
-
-  it("always activates — empty spec", () => {
-    const result = shouldActivatePhase0("");
-    expect(result.activate).toBe(true);
-  });
-
-  it("ignores custom thresholds", () => {
-    const result = shouldActivatePhase0("", {
-      ...DEFAULT_PHASE_ZERO_THRESHOLDS,
-      minFunctions: 999,
-    });
-    expect(result.activate).toBe(true);
-  });
-
-  it("always activates for any spec", () => {
-    for (const spec of ["", "   \n\n  ", "x", "Single function", "\n\n\n"]) {
-      const result = shouldActivatePhase0(spec);
-      expect(result.activate).toBe(true);
-    }
-  });
-
-  it("ignores thresholds entirely", () => {
-    const spec = `Multi-function spec with errors and I/O.`;
-    const result = shouldActivatePhase0(spec, {
-      ...DEFAULT_PHASE_ZERO_THRESHOLDS,
-      minFunctions: 999,
-      checkErrorMentions: false,
-      checkIoMentions: false,
-      checkConcurrencyMentions: false,
-    });
-    expect(result.activate).toBe(true);
-  });
-});
-
-// ================================================================
 // analyzeSpec
 // ================================================================
 
@@ -147,14 +81,7 @@ Trim(s string) string — trims whitespace.
     const result = analyzeSpec(spec);
     expect(result).toBeDefined();
     expect(Array.isArray(result.findings)).toBe(true);
-    expect(typeof result.shouldActivatePhase0).toBe("boolean");
     expect(Array.isArray(result.reasons)).toBe(true);
-  });
-
-  it("always activates Phase 0", () => {
-    const spec = `Single function.`;
-    const result = analyzeSpec(spec);
-    expect(result.shouldActivatePhase0).toBe(true);
   });
 
   it("handles empty spec", () => {
@@ -508,11 +435,6 @@ describe("buildSummaryTable", () => {
 // ================================================================
 
 describe("edge cases", () => {
-  it("shouldActivatePhase0 with empty string", () => {
-    const result = shouldActivatePhase0("");
-    expect(result.activate).toBe(true); // always activates
-  });
-
   it("analyzeSpec with empty string", () => {
     const result = analyzeSpec("");
     expect(result.findings).toEqual([]);
@@ -545,11 +467,6 @@ describe("edge cases", () => {
   it("buildSummaryTable with empty findings", () => {
     const output = buildSummaryTable([]);
     expect(output).toContain("### Summary");
-  });
-
-  it("shouldActivatePhase0 with single character spec", () => {
-    const result = shouldActivatePhase0("a");
-    expect(result.activate).toBe(true); // always activates
   });
 
   it("analyzeSpec with single word spec", () => {

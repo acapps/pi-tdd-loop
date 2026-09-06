@@ -319,8 +319,8 @@ function escalateTo(state: LoopState, fromPhase: string): LoopState {
   };
 }
 
-function markDone(state: LoopState): LoopState {
-  return { ...state, phase: "done" as Phase, turnsThisPhase: 1, awaitDisputeFix: false, awaitDisputeReview: false };
+export function markDone(state: LoopState): LoopState {
+  return { ...state, phase: "done" as Phase, lastPhase: state.phase as Phase, turnsThisPhase: 1, awaitDisputeFix: false, awaitDisputeReview: false };
 }
 
 function clearDisputeMode(state: LoopState): LoopState {

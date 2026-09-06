@@ -3,6 +3,7 @@
 
 import type { LoopState } from "../types";
 import type { EventCtx } from "./index";
+import { validateLoopState } from "../state-validation";
 
 // --- Types ---
 
@@ -19,6 +20,8 @@ export interface SessionStartHandler {
 // --- Constants ---
 
 const NO_PREVIOUS_STATE = "session_start: no previous state found";
+const CORRUPT_STATUS = "state corrupted — run /loop to restart";
+const CORRUPT_DEBUG = "session_start: restored entry failed validation — quarantining";
 
 // --- Helpers ---
 
@@ -32,14 +35,16 @@ function isLoopStateEntry(entry: unknown): boolean {
   return e.type === "custom" && e.customType === "loop-state";
 }
 
-function findLastLoopState(entries: unknown[]): { data?: LoopState } | undefined {
-  return entries.filter(isLoopStateEntry).pop() as { data?: LoopState } | undefined;
+function findLastLoopState(entries: unknown[]): { data?: unknown } | undefined {
+  return entries.filter(isLoopStateEntry).pop() as { data?: unknown } | undefined;
 }
 
 function clearTransientFlags(s: LoopState): void {
   s.disputeMode = false;
   s.justTransitioned = false;
   s.negotiateReprompted = false;
+  // Heal pre-spec-07 entries: missing markers become defined (false / "") so
+  // the `=== true` / `!== ""` checks see a definite value after restore.
   s.negotiateProposed = false;
   s.negotiateFeedback = "";
   s.awaitDisputeFix = false;
@@ -52,6 +57,8 @@ function clearTransientFlags(s: LoopState): void {
 // --- Public API ---
 
 export function handleSessionStart(input: SessionStartHandlerInput): void {
+  // The spec-01 handler contract takes {state, ctx, debug}. Earlier legacy
+  // callers passed a bare ctx (debug on ctx.debug) — accept both shapes.
   const { state, ctx, debug } = input;
   debug("session_start: restoring state...");
 
@@ -67,12 +74,27 @@ export function handleSessionStart(input: SessionStartHandlerInput): void {
   }
 
   const entry = findLastLoopState(entries);
-  if (!entry?.data) {
+  // A loop-state entry whose data is null/undefined is the corruption case,
+  // not the "no previous state" case: quarantine it.
+  if (!entry) {
     debug(NO_PREVIOUS_STATE);
     return;
   }
+  if (!entry.data) {
+    debug(CORRUPT_DEBUG);
+    ctx.ui.setStatus("loop", CORRUPT_STATUS);
+    return;
+  }
 
-  state.current = entry.data;
+  // Call site 2 (refactor-state-model-divergence.md): validate the restored
+  // entry; on failure quarantine — do NOT load the broken state.
+  if (!validateLoopState(entry.data)) {
+    debug(CORRUPT_DEBUG);
+    ctx.ui.setStatus("loop", CORRUPT_STATUS);
+    return;
+  }
+
+  state.current = entry.data as LoopState;
   clearTransientFlags(state.current);
   debug(`session_start: restored → ${stateSummary(state.current)}`);
   ctx.ui.setStatus("loop", `Phase ${state.current.phase} — round ${state.current.round}`);

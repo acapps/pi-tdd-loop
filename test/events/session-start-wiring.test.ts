@@ -133,7 +133,7 @@ describe("eventSessionStart → handleSessionStart (delegation)", () => {
   });
 
   it("mutations made by handleSessionStart are visible through the state wrapper", async () => {
-    const entry = loopStateEntry({ phase: "B", round: 3 });
+    const entry = loopStateEntry({ phase: "B", round: 3, turnsThisPhase: 1 });
     const { state, ctx, handler } = makeInput([entry]);
     await handler({}, ctx);
     // The handler must expose the delegate's assignment: state.current === entry.data
@@ -168,6 +168,7 @@ describe("state restoration on reload (no behavioral change)", () => {
     const entry = loopStateEntry({
       phase: "B",
       round: 3,
+      turnsThisPhase: 1,
       specPath: "internal/01-wire-session-start.md",
     });
     const { state, ctx, handler } = makeInput([entry]);
@@ -182,6 +183,7 @@ describe("state restoration on reload (no behavioral change)", () => {
     const entry = loopStateEntry({
       phase: "C",
       round: 2,
+      turnsThisPhase: 1,
       disputeMode: true,
       justTransitioned: true,
       negotiateReprompted: true,
@@ -205,9 +207,9 @@ describe("state restoration on reload (no behavioral change)", () => {
   });
 
   it("uses the LAST loop-state entry when multiple entries exist", async () => {
-    const first = loopStateEntry({ phase: "A", round: 1 });
-    const middle = loopStateEntry({ phase: "C", round: 2 });
-    const last = loopStateEntry({ phase: "B", round: 5 });
+    const first = loopStateEntry({ phase: "A", round: 1, turnsThisPhase: 1 });
+    const middle = loopStateEntry({ phase: "C", round: 2, turnsThisPhase: 1 });
+    const last = loopStateEntry({ phase: "B", round: 5, turnsThisPhase: 1 });
     const entries = [
       first,
       { type: "custom", customType: "loop-debug", data: { msg: "x" } },
@@ -222,7 +224,7 @@ describe("state restoration on reload (no behavioral change)", () => {
   });
 
   it("single-element entries: one loop-state entry restores", async () => {
-    const entry = loopStateEntry({ phase: "negotiate", round: 1 });
+    const entry = loopStateEntry({ phase: "negotiate", round: 1, turnsThisPhase: 1 });
     const { state, ctx, handler } = makeInput([entry]);
     await handler({}, ctx);
     expect(state.current.phase).toBe("negotiate");
@@ -257,7 +259,8 @@ describe("state restoration on reload (no behavioral change)", () => {
     const before = state.current;
     await expect(handler({}, ctx)).resolves.toBeUndefined();
     expect(state.current).toBe(before);
-    expect(ctx.ui.setStatus).not.toHaveBeenCalled();
+    // Quarantine: status is set to "state corrupted"
+    expect(ctx.ui.setStatus).toHaveBeenCalledWith("loop", "state corrupted — run /loop to restart");
   });
 
   it("getEntries() returning undefined: no throw, state untouched", async () => {
@@ -286,7 +289,7 @@ describe("state restoration on reload (no behavioral change)", () => {
   });
 
   it("null cwd: restoration still works", async () => {
-    const entry = loopStateEntry({ phase: "B", round: 3 });
+    const entry = loopStateEntry({ phase: "B", round: 3, turnsThisPhase: 1 });
     const ctx = makeCtx([entry]);
     ctx.cwd = null;
     const { state, handler } = makeInput([entry]);
@@ -359,6 +362,7 @@ describe("extension entry point (index.ts) — session_start seam", () => {
           round: 3,
           specPath: "spec.md",
           language: "go",
+          buildTool: "maven",
           maxA: 3,
           maxNegotiate: 3,
           maxB: 5,
@@ -368,7 +372,7 @@ describe("extension entry point (index.ts) — session_start seam", () => {
           coverageThreshold: 90,
           disputeMode: true, // should be cleared
           disputeCount: 1,
-          turnsThisPhase: 0,
+          turnsThisPhase: 1,
           lastProposal: "some plan",
           lastPhase: "A",
           justTransitioned: true, // should be cleared

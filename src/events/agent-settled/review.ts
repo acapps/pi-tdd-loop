@@ -6,6 +6,7 @@ import type { LoopState } from "../../types";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { EventCtx } from "../index";
 import type { LanguageConfig } from "../../languages";
+import { commit } from "../../commit";
 
 // --- Types ---
 
@@ -33,6 +34,6 @@ export function handleReviewSettled(
   // Don't advance — wait for human to use /loop-approve or negotiate_propose
   ctx.ui.notify("Phase 0: Review findings. Use /loop-approve to proceed.", "info");
   ctx.ui.setStatus("loop", "Phase 0 — review pending");
-  pi.appendEntry("loop-state", { ...state.current });
+  commit(state.current, pi, debug);
   return { handled: true };
 }

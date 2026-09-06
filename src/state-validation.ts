@@ -1,56 +1,159 @@
-// State validation — checks invariants on LoopState sub-structures
-// internal/done-loop-state-refactor.md — State validation rules
+// Flat-state validator — internal/refactor-state-model-divergence.md
+//
+// One state model: the flat LoopState (src/types.ts). validateLoopState is the
+// single live validator; it runs at the two points that matter:
+//   1. commit (src/commit.ts) — validate before persist; on failure debug +
+//      still persist (quirk Q1).
+//   2. restore (src/events/session-start.ts) — validate the restored entry;
+//      on failure quarantine.
+// Returns false, never throws.
 
-import type { LoopState } from "./state-types";
+import type { LoopState, Phase, LanguageKey, BuildTool } from "./types";
+
+export const PHASES: readonly Phase[] = ["review", "A", "negotiate", "B", "C", "done", "escalated", "idle"];
+
+const LANGUAGES: readonly LanguageKey[] = ["go", "java", "typescript"];
+const BUILD_TOOLS: readonly BuildTool[] = ["maven", "gradle", "go"];
+
+// lastPhase values from which escalated / done are reachable (live machine:
+// escalateTo from A/negotiate/B/C; markDone from B/C; the origin check is
+// pinned wider than strictly reachable — a stale done is quarantined, not
+// healed).
+const ORIGIN_GATED_ORIGINS: readonly Phase[] = ["A", "negotiate", "B", "C"];
+// turnsThisPhase >= 1 only in these phases (idle and escalated exempt).
+const TURNED_PHASES: readonly Phase[] = ["review", "A", "negotiate", "B", "C"];
+
+// --- Shape contract (flat LoopState) ---
+
+interface FieldSpec {
+  type: "number" | "boolean" | "string";
+  optional?: boolean;
+}
+
+const FIELD_SPECS: Record<string, FieldSpec> = {
+  round: { type: "number" },
+  turnsThisPhase: { type: "number" },
+  maxA: { type: "number" },
+  maxNegotiate: { type: "number" },
+  maxB: { type: "number" },
+  maxC: { type: "number" },
+  maxDispute: { type: "number" },
+  maxTurnsPerPhase: { type: "number" },
+  coverageThreshold: { type: "number" },
+  disputeCount: { type: "number" },
+  disputeMode: { type: "boolean" },
+  justTransitioned: { type: "boolean" },
+  negotiateReprompted: { type: "boolean" },
+  awaitDisputeFix: { type: "boolean" },
+  awaitDisputeReview: { type: "boolean" },
+  negotiateProposed: { type: "boolean", optional: true },
+  negotiateFeedback: { type: "string", optional: true },
+  specPath: { type: "string" },
+  lastProposal: { type: "string" },
+};
+
+function isPlainObject(data: unknown): data is Record<string, unknown> {
+  return typeof data === "object" && data !== null && !Array.isArray(data);
+}
+
+function inList(list: readonly string[], value: unknown): value is string {
+  return typeof value === "string" && list.includes(value);
+}
+
+function checkEnum(
+  errors: string[],
+  label: string,
+  value: unknown,
+  list: readonly string[],
+): void {
+  if (!inList(list, value)) {
+    errors.push(`invalid ${label}: ${String(value)}`);
+  }
+}
+
+function checkField(
+  errors: string[],
+  data: Record<string, unknown>,
+  field: string,
+  spec: FieldSpec,
+): void {
+  const value = data[field];
+  if (value === undefined) {
+    if (!spec.optional) errors.push(`missing field: ${field}`);
+    return;
+  }
+  if (typeof value !== spec.type) {
+    errors.push(`field ${field} must be ${spec.type}`);
+  }
+}
 
 /**
- * Validates a LoopState against the 5 validation rules:
- *
- *   1. done phase ⇒ round must be 0
- *   2. done phase ⇒ turnsThisPhase must be 0
- *   3. escalated phase ⇒ lastPhase must be B or C
- *   4. non-done phase ⇒ round must be >= 1
- *   5. non-done phase ⇒ turnsThisPhase must be >= 1
- *
- * NOTE: dispute.mode + dispute.count == 0 is NOT flagged as an error.
- * The dispute flow sets mode=true first, then increments count.
- * The invariant is violated transiently between those operations.
- *
- * @param state - The LoopState to validate
- * @returns Array of error strings. Empty array means valid state.
+ * Collect all validation failures for a candidate LoopState.
+ * Exposed for the commit debug line (`commit: state failed validation — ${errors}`).
+ * Empty array means valid.
  */
-export function validateState(state: LoopState): string[] {
+export function validationErrors(data: unknown): string[] {
   const errors: string[] = [];
-
-  // Rule 1: done phase ⇒ round must be 0
-  if (state.machine.phase === "done" && state.machine.round > 0) {
-    errors.push("done phase should have round 0");
+  if (!isPlainObject(data)) {
+    return ["not an object"];
   }
 
-  // Rule 2: done phase ⇒ turnsThisPhase must be 0
-  if (state.machine.phase === "done" && state.machine.turnsThisPhase > 0) {
-    errors.push("done phase should have turnsThisPhase 0");
+  // --- Shape check ---
+  checkEnum(errors, "phase", data.phase, PHASES as readonly string[]);
+  checkEnum(errors, "language", data.language, LANGUAGES as readonly string[]);
+  checkEnum(errors, "buildTool", data.buildTool, BUILD_TOOLS as readonly string[]);
+  checkEnum(errors, "lastPhase", data.lastPhase, PHASES as readonly string[]);
+  for (const [field, spec] of Object.entries(FIELD_SPECS)) {
+    checkField(errors, data, field, spec);
   }
 
-  // Rule 3: escalated phase ⇒ lastPhase must be B or C
-  if (state.machine.phase === "escalated" &&
-      (!state.machine.lastPhase || !["B", "C"].includes(state.machine.lastPhase))) {
-    errors.push("escalated phase must come from B or C");
+  // --- Invariant check (the live machine's actual invariants) ---
+  const phase = data.phase as Phase;
+  const round = typeof data.round === "number" ? data.round : NaN;
+  const turns = typeof data.turnsThisPhase === "number" ? data.turnsThisPhase : NaN;
+  const disputeCount = typeof data.disputeCount === "number" ? data.disputeCount : NaN;
+  const maxDispute = typeof data.maxDispute === "number" ? data.maxDispute : NaN;
+
+  // done is the terminal phase: row 1 of the decision table pins NO
+  // constraint on round in done, and the turned-phase turns floor does not
+  // apply to it (a post-done zeroing of its counters is a live-reachable
+  // shape). Every other phase keeps the floors below. lastPhase has no
+  // constraint beyond its type (Q2) except for the origin-gated phases.
+  const isDone = phase === "done";
+  const isOriginGated = phase === "escalated" || isDone;
+  if (isOriginGated && !inList(ORIGIN_GATED_ORIGINS as readonly string[], data.lastPhase)) {
+    errors.push(`${phase} must come from A, negotiate, B or C (got ${String(data.lastPhase)})`);
+  }
+  if (phase !== "idle" && !isDone && typeof data.round === "number" && data.round < 1) {
+    errors.push(`round must be >= 1 in non-idle phases (got ${round})`);
+  }
+  if (typeof data.turnsThisPhase === "number" && data.turnsThisPhase < 0) {
+    errors.push(`turnsThisPhase must be >= 0 (got ${String(data.turnsThisPhase)})`);
+  } else if (
+    !isDone &&
+    (TURNED_PHASES as readonly string[]).includes(phase) &&
+    typeof data.turnsThisPhase === "number" &&
+    data.turnsThisPhase < 1
+  ) {
+    errors.push(`turnsThisPhase must be >= 1 in phase ${phase} (got ${turns})`);
+  }
+  if (!(Number.isNaN(disputeCount) || Number.isNaN(maxDispute)) && disputeCount > maxDispute) {
+    errors.push(`disputeCount must be <= maxDispute (got ${disputeCount} > ${maxDispute})`);
   }
 
-  // NOTE: dispute.mode + dispute.count == 0 is NOT flagged as an error.
-  // The dispute flow sets mode=true first, then increments count.
-  // The invariant is violated transiently between those operations.
-
-  // Rule 4: non-done phase ⇒ round must be >= 1
-  if (state.machine.phase !== "done" && state.machine.round < 1) {
-    errors.push("non-done phase must have round >= 1");
-  }
-
-  // Rule 5: non-done phase ⇒ turnsThisPhase must be >= 1
-  if (state.machine.phase !== "done" && state.machine.turnsThisPhase < 1) {
-    errors.push("non-done phase must have turnsThisPhase >= 1");
+  // Optional nested field: lastGateResult must be an object when present.
+  const gate = data.lastGateResult;
+  if (gate !== undefined && gate !== null && typeof gate !== "object") {
+    errors.push("field lastGateResult must be an object");
   }
 
   return errors;
+}
+
+/**
+ * Type guard: true iff `data` is a valid flat LoopState (shape + invariants).
+ * Returns false, never throws.
+ */
+export function validateLoopState(data: unknown): data is LoopState {
+  return validationErrors(data).length === 0;
 }

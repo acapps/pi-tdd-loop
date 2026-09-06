@@ -90,7 +90,6 @@ describe("handleSessionStart", () => {
     const state = makeState({
       specFindings: undefined,
       awaitingReview: undefined,
-      skipPhase0: undefined,
       lastGateResult: undefined,
     });
     const input = makeInput({ state: { current: state } });
@@ -127,7 +126,7 @@ describe("handleSessionStart", () => {
   });
 
   it("heals a pre-feature restored entry lacking the negotiate markers (defined, not undefined)", () => {
-    const saved = makeState({ phase: "negotiate", round: 2 });
+    const saved = makeState({ phase: "negotiate", round: 2, turnsThisPhase: 1 });
     // Simulate a session entry saved before the feature: the optional fields are absent.
     delete (saved as any).negotiateProposed;
     delete (saved as any).negotiateFeedback;
@@ -159,6 +158,7 @@ describe("handleSessionStart", () => {
     const saved = makeState({
       phase: "B",
       round: 2,
+      turnsThisPhase: 1,
       disputeDefended: "defense text",
       awaitWriterConcedeFix: true,
       disputeFiler: "tester",

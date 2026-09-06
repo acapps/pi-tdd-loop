@@ -10,11 +10,9 @@ import type {
   FindingCategory,
   Interpretation,
   SpecAnalysis,
-  PhaseZeroThresholds,
   Clarification,
   ClarificationAddendum,
 } from "./types";
-import { DEFAULT_PHASE_ZERO_THRESHOLDS } from "./types";
 
 // --- Public API ---
 
@@ -79,23 +77,13 @@ function getRunnerValidationCommand(language: LanguageKey): string {
 // --- Public API ---
 
 /**
- * Phase 0 always activates. Every spec benefits from review.
- */
-export function shouldActivatePhase0(
-  _specText: string,
-  _thresholds?: PhaseZeroThresholds,
-): { activate: boolean; reasons: string[] } {
-  return { activate: true, reasons: ["Phase 0 is the baseline"] };
-}
-
-/**
  * Analyze a spec document and return structured findings.
  * Each finding surfaces an ambiguity, missing edge case, or underspecified behavior.
+ * Phase 0 always activates — every spec benefits from review.
  */
 export function analyzeSpec(specText: string): SpecAnalysis {
   const findings = findIssues(specText);
-  const { activate, reasons } = shouldActivatePhase0(specText);
-  return { findings, shouldActivatePhase0: activate, reasons };
+  return { findings, reasons: ["Phase 0 is the baseline"] };
 }
 
 /**

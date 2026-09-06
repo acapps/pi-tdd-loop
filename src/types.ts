@@ -39,24 +39,11 @@ export interface LoopState {
   // Phase 0
   specFindings?: Finding[];
   awaitingReview?: boolean;
-  skipPhase0?: boolean;
   // Git branch workflow (--branch, opt-in): set by /loop when --branch is
   // given; consumed by the done effect (merge back) and by /loop-continue /
   // /loop-restart (must NOT re-branch). `merged` flips true once the merge
   // into the mainline has landed.
   branch?: { name: string; base: string; merged: boolean };
-}
-
-export interface LoopMetrics {
-  totalGates: number;
-  gateRuns: number;
-  roundsByPhase: Record<string, number>;
-  disputesRaised: number;
-  filesBlocked: number;
-  finalPhase: string;
-  testFails: number;
-  compileFails: number;
-  coverage: number;
 }
 
 export interface FailingTest {
@@ -105,23 +92,8 @@ export interface Clarification {
   notes?: string;
 }
 
-export interface PhaseZeroThresholds {
-  minFunctions: number;
-  checkErrorMentions: boolean;
-  checkIoMentions: boolean;
-  checkConcurrencyMentions: boolean;
-}
-
-export const DEFAULT_PHASE_ZERO_THRESHOLDS: PhaseZeroThresholds = {
-  minFunctions: 3,
-  checkErrorMentions: true,
-  checkIoMentions: true,
-  checkConcurrencyMentions: true,
-};
-
 export interface SpecAnalysis {
   findings: Finding[];
-  shouldActivatePhase0: boolean;
   reasons: string[];
 }
 

@@ -11,6 +11,7 @@ import type { LoopState } from "../types";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { DebugFn } from "./index";
 import { getLanguageConfig } from "../languages";
+import { commit } from "../commit";
 
 // --- Types ---
 
@@ -178,7 +179,7 @@ function buildDisputeFixPrompt(
   // A session reload mid-dispute-fix must see the cleared flag.
   debug("Tester fixing test");
   state.awaitDisputeFix = false;
-  pi.appendEntry("loop-state", { ...state });
+  commit(state, pi, debug);
   return {
     message: buildContextMessage(
       "You are the TESTER (dispute fix). You conceded that the Writer's dispute was valid.\n" +
