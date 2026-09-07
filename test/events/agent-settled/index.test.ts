@@ -293,7 +293,7 @@ describe("step 5 — disputeFix", () => {
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GO.prompts.promptTesterDisputeFix());
     expect(debug).not.toHaveBeenCalledWith("Dispute review pending");
-    expect(pi.appendedEntries).toHaveLength(0);
+    expect(pi.appendedEntries).toHaveLength(0); // no commit: dispute fix mutates nothing, gate skipped (single commit point = end of handlePhaseSettled)
   });
 });
 
@@ -311,7 +311,7 @@ describe("step 6 — disputeReview (dead guard: falls through to the gate)", () 
     expect(state.phase).toBe("B"); // NOT advanced this settle
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GP.promptWriterDisputeReview("writer claim")); // disputeMode true → tester filed → writer reviews
-    expect(pi.appendedEntries).toHaveLength(1);
+    expect(pi.appendedEntries).toHaveLength(1); // dispute settle commit (single commit point for this settle)
     expect(pi.appendedEntries[0].customType).toBe("loop-state");
   });
 
@@ -334,7 +334,7 @@ describe("step 6 — disputeReview (dead guard: falls through to the gate)", () 
     const { input, pi } = makeInput({ state: { current: state } });
 
     expect(await handleAgentSettled(input)).toBe(true); // retry applied
-    expect(pi.appendedEntries).toHaveLength(0);
+    expect(pi.appendedEntries).toHaveLength(1); // single commit point: end of handlePhaseSettled, after the retry effect reset
     expect(runGatesMock).toHaveBeenCalledTimes(1);
   });
 
@@ -347,7 +347,7 @@ describe("step 6 — disputeReview (dead guard: falls through to the gate)", () 
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GP.promptTesterReviewWriterDispute("writer claim"));
     expect(state.awaitDisputeReview).toBe(false); // cleared at the settle step
-    expect(pi.appendedEntries).toHaveLength(1);
+    expect(pi.appendedEntries).toHaveLength(1); // dispute settle commit (single commit point for this settle)
     expect(pi.appendedEntries[0].customType).toBe("loop-state");
     expect(ctx.ui.setStatus).toHaveBeenCalledWith("loop", "Phase B — round 1 (dispute review)");
     expect(debug).toHaveBeenCalledWith("Dispute review → tester review turn");
@@ -378,7 +378,7 @@ describe("step 6b — disputeDefend delivery", () => {
     expect(pi.sentMessages[0].content).toBe(GP.promptWriterDisputeDefended("The test is correct."));
     expect(state.disputeDefended).toBeUndefined();
     expect(state.disputeFiler).toBeUndefined();
-    expect(pi.appendedEntries).toHaveLength(1);
+    expect(pi.appendedEntries).toHaveLength(1); // dispute settle commit (single commit point for this settle)
     expect(pi.appendedEntries[0].customType).toBe("loop-state");
   });
 
@@ -414,7 +414,7 @@ describe("step 6c — writerConcedeFix delivery", () => {
     expect(pi.sentMessages[0].content).toBe(GP.promptWriterConcedeFix("Your refactor broke the retry path"));
     expect(state.awaitWriterConcedeFix).toBe(false);
     expect(state.disputeFiler).toBeUndefined();
-    expect(pi.appendedEntries).toHaveLength(1);
+    expect(pi.appendedEntries).toHaveLength(1); // dispute settle commit (single commit point for this settle)
     expect(pi.appendedEntries[0].customType).toBe("loop-state");
   });
 
@@ -438,7 +438,7 @@ describe("step 7 — review", () => {
     expect(await handleAgentSettled(input)).toBe(true);
     expect(ctx.ui.notify).toHaveBeenCalledWith("Phase 0: Review findings. Use /loop-approve to proceed.", "info");
     expect(ctx.ui.setStatus).toHaveBeenCalledWith("loop", "Phase 0 — review pending");
-    expect(pi.appendedEntries).toHaveLength(1);
+    expect(pi.appendedEntries).toHaveLength(1); // review settle commit (single commit point for this settle)
     expect(pi.appendedEntries[0].customType).toBe("loop-state");
     expect(pi.sentMessages).toHaveLength(0);
     expect(runGatesMock).not.toHaveBeenCalled();
@@ -450,7 +450,7 @@ describe("step 7 — review", () => {
 
     expect(await handleAgentSettled(input)).toBe(false);
     expect(ctx.ui.notify).not.toHaveBeenCalled();
-    expect(pi.appendedEntries).toHaveLength(0);
+    expect(pi.appendedEntries).toHaveLength(0); // no commit: review not pending, gate skipped (single commit point = end of handlePhaseSettled)
     expect(runGatesMock).not.toHaveBeenCalled();
   });
 

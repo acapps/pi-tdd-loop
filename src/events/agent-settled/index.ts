@@ -11,6 +11,7 @@ import { handleReviewSettled } from "./review";
 import { handleNegotiateSettled } from "./negotiate";
 import { handleGateTransition } from "./gate-transition";
 import { verifyBranchMerge } from "./effect-applicator";
+import { commit } from "../../commit";
 
 // --- Types ---
 
@@ -40,12 +41,19 @@ function isTerminalPhase(phase: string): boolean {
 
 function checkLoopEscalation(
   state: { current: LoopState },
+  pi: ExtensionAPI,
   ctx: EventCtx,
   debug: (msg: string) => void,
 ): boolean {
   state.current.turnsThisPhase = (state.current.turnsThisPhase || 0) + 1;
   const maxTurns = state.current.maxTurnsPerPhase || 5;
-  if (state.current.turnsThisPhase <= maxTurns) return false;
+  if (state.current.turnsThisPhase <= maxTurns) {
+    // No commit here: the single commit point is the end of handlePhaseSettled,
+    // AFTER the retry effect has reset turnsThisPhase. A pre-gate commit would
+    // persist the incremented counter and defeat the reset on the next reload.
+    // S2 (counter survives reload) is satisfied by the end-of-settle commit.
+    return false;
+  }
 
   debug(`Loop detected (${state.current.turnsThisPhase} turns in phase ${state.current.phase}), escalating`);
   state.current.lastPhase = state.current.phase;
@@ -54,6 +62,7 @@ function checkLoopEscalation(
   state.current.awaitDisputeReview = false;
   ctx.ui.notify(`Loop detected in Phase ${state.current.lastPhase}. Escalating to human.`, "warning");
   ctx.ui.setStatus("loop", "escalated (loop detected)");
+  commit(state.current, pi, debug); // S2: the escalated state commits the moment it is produced
   return true;
 }
 
@@ -97,7 +106,7 @@ export async function handleAgentSettled(
   const lang = getLanguageConfig(state.current.language);
 
   // Steps 3–6: guards — each returns undefined from the dispatcher when handled
-  if (checkLoopEscalation(state, ctx, debug)) return undefined;
+  if (checkLoopEscalation(state, pi, ctx, debug)) return undefined;
   if (handleJustTransitioned(state, pi, lang, debug)) return undefined;
   if (handleDisputeHandlers(state, pi, lang, debug, ctx)) return undefined;
 
@@ -164,11 +173,13 @@ async function handlePhaseSettled(
   if (state.current.phase === "negotiate") {
     const result = handleNegotiateSettled({ state: state.current, pi, ctx, lang, debug });
     state.current = result.newState; // G2: explicit reassignment
+    commit(state.current, pi, debug); // commit point #1: the advanced round + cleared markers survive a reload
     return result.handled;
   }
   // A / B / C
   const gate = await handleGateTransition({ state: state.current, pi, ctx, lang, debug });
   state.current = gate.state; // G2: explicit reassignment
   if (gate.gateResult) state.current.lastGateResult = gate.gateResult; // G3: only real results
+  commit(state.current, pi, debug); // commit point #2: retry/advance/done/escalated all commit at the moment they are produced
   return gate.applied;
 }

@@ -1705,37 +1705,53 @@ describe("agent_settled event (phase transitions)", () => {
     );
   });
 
-  it("resets turnsThisPhase on retry so repeated gate failures do not trigger loop escalation", async () => {
-    // Set up Phase B
+  it("resets turnsThisPhase on retry so repeated gate failures do not trigger LOOP escalation", async () => {
+    // Set up Phase B in a cwd with no Go project, so every gate run is red
+    // (compile fails) and the retry path is exercised on every settle.
     const restartHandler = findCommand(api, "loop-restart");
-    await restartHandler("B", api._mockCtx);
+    await restartHandler("B", { ...api._mockCtx, cwd: "/tmp" });
 
     const handler = findEventHandler(api, "agent_settled", isMainHandler);
 
-    // Trigger multiple agent_settled events — each time the gate fails (no real Go project),
-    // the handler should produce a retry effect. With the fix, turnsThisPhase resets on retry
-    // so we never hit the loop escalation threshold.
+    // Trigger multiple agent_settled events — each time the gate fails (no Go project
+    // in /tmp), the handler should produce a retry effect. With the fix, turnsThisPhase
+    // resets on retry so the LOOP-detector (maxTurnsPerPhase) never fires. The
+    // round-exhaustion escalation (maxB) still fires after maxB retries — that is
+    // the intended "Phase B exhausted" path, not a loop detection.
     for (let i = 0; i < 8; i++) {
-      await handler({ type: "agent_settled" }, api._mockCtx);
+      await handler({ type: "agent_settled" }, { ...api._mockCtx, cwd: "/tmp" });
     }
 
-    // Should NOT have escalated (no "loop detected" notification)
-    const loopNotifications = api.notifications.filter(
-      (n) => n.message.includes("loop") && n.message.toLowerCase().includes("escalat")
-    );
+    // Should NOT have loop-escalated (no "Loop detected" notification).
+    // The round-exhaustion escalation IS expected after maxB=5 retries —
+    // that is the intended "Phase B exhausted" path, not loop detection.
+    const notifyCalls = api._mockUi.notify.mock.calls.map((c: any[]) => c[0]);
+    const loopNotifications = notifyCalls.filter((m: string) => m.includes("Loop detected"));
     expect(loopNotifications).toHaveLength(0);
+    const exhaustedNotifications = notifyCalls.filter((m: string) => m.includes("exhausted"));
+    expect(exhaustedNotifications).toHaveLength(1);
 
-    // State entries should show turnsThisPhase staying low (reset on each retry)
+    // State entries should show turnsThisPhase resetting on each retry.
+    // Single commit point (refactor-single-commit-point): each settle commits
+    // exactly once, at the end of handlePhaseSettled — AFTER the retry effect
+    // has reset turnsThisPhase to 1. So every entry written by a red-gate
+    // settle pins the post-reset value, and no entry may show the pre-reset
+    // counter (a pre-gate commit would defeat the reset on reload).
     const stateEntries = api.appendedEntries.filter(
       (e: any) => e.customType === "loop-state"
     );
+    expect(stateEntries.length).toBeGreaterThan(0);
     for (const entry of stateEntries) {
       expect(entry.data.turnsThisPhase).toBeLessThanOrEqual(1);
     }
 
-    // Phase should remain B (not escalated)
+    // Phase should be escalated (round-exhaustion after maxB=5 retries), NOT
+    // loop-escalated. The turn counter resets on every retry, so the
+    // loop-detector never fires — the escalation is the intended
+    // "Phase B exhausted" path.
     const lastState = stateEntries[stateEntries.length - 1]?.data;
-    expect(lastState?.phase).toBe("B");
+    expect(lastState?.phase).toBe("escalated");
+    expect(lastState?.lastPhase).toBe("B");
   });
 });
 
