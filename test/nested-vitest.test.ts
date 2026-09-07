@@ -3,14 +3,20 @@
 // callback semantics) with a mocked execFile; we do NOT actually run npx,
 // which would resolve/download vitest into a bare temp dir and take
 // tens of seconds per run.
-// NOTE (2026-07-21): all tests it.skip()'d pending
+// NOTE (2026-07-21): all tests it()'d pending
 // internal/bug-slow-gate-signal-tests.md — the file hangs the whole suite
 // indefinitely under vitest 4.1.10 + node 26 (even with a fully mocked
 // execFile). The spawn contract is covered by test/gates.test.ts (fast).
 // Re-enable after the bug spec is resolved.
 
-import { describe, it, expect, vi } from "vitest";
-import { getTestCommand } from "../src/gates";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { createRequire } from "node:module";
+
+// Provider probe boundary: resolve the coverage provider so the command
+// carries --coverage (the S2 simulation pins the full spawn contract).
+vi.mock("node:module", () => ({
+  createRequire: vi.fn(() => ({ resolve: () => "/fake/node_modules/@vitest/coverage-v8/index.js" })),
+}));
 
 // vi.mock replaces execFile with a controllable fake for this file only.
 const execFileMock = vi.fn();
@@ -18,14 +24,21 @@ vi.mock("node:child_process", () => ({
   execFile: (...args: unknown[]) => execFileMock(...args),
 }));
 
-import { runGates } from "../src/gates";
+import { getTestCommand, runGates } from "../src/gates";
+
+const mockCreateRequire = vi.mocked(createRequire);
 
 describe("nested vitest spawn (S2 simulation)", () => {
-  it.skip("typescript gate command is exactly `npx vitest run --coverage`", () => {
+  beforeEach(() => {
+    execFileMock.mockReset();
+    mockCreateRequire.mockReturnValue({ resolve: () => "/fake/node_modules/@vitest/coverage-v8/index.js" } as never);
+  });
+
+  it("typescript gate command is exactly `npx vitest run --coverage`", () => {
     expect(getTestCommand("typescript")).toBe("npx vitest run --coverage");
   });
 
-  it.skip("runGates spawns npx vitest run --coverage (no shell, correct cwd)", async () => {
+  it("runGates spawns npx vitest run --coverage (no shell, correct cwd)", async () => {
     execFileMock.mockReset();
     // Compile step (`npx tsc --noEmit`) exits 0; test step exits 0 with a
     // coverage table row.
@@ -49,7 +62,7 @@ describe("nested vitest spawn (S2 simulation)", () => {
     expect(execFileMock).toHaveBeenCalledTimes(2);
   });
 
-  it.skip("non-zero exit surfaces as error.code → red gate (the signal)", async () => {
+  it("non-zero exit surfaces as error.code → red gate (the signal)", async () => {
     execFileMock.mockReset();
     execFileMock.mockImplementation(
       (file: string, args: string[], _opts: unknown, cb: Function) => {
