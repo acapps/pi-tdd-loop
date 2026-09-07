@@ -143,3 +143,20 @@ Commit-point table (closed list — every row is a current mutation site that wi
 |---|---|---|---|
 | 1 | needs-doc | The review of 2025-08-18 cited "14 call sites"; the closed inventory above resolves it to 14 `loop-state` sites across 5 files, but 3 of the tools.ts sites were initially miscounted as one — the inventory table is the corrected count | Accepted — table is the pin |
 | 2 | blocker | `bug-gate-signal-integrity.md` and this unit both edit `src/events/agent-settled/index.ts` (dispatcher) | Rejected as a conflict — different lines (gate await vs commit calls); ordering (gate first) makes the overlap textual-only, resolved by re-verification at implementation time |
+
+---
+
+## Resolution (merged `90e6f24`, 2026-09-06)
+
+**Single commit point in the agent-settled dispatcher:**
+
+- `handlePhaseSettled` commits exactly once per settle, at the end (negotiate path: after `handleNegotiateSettled` returns the new state; gate path: after `handleGateTransition` applies the effect). This is the authoritative commit for retry/advance/done/negotiate-advance — the state is committed AFTER the effect has mutated it (e.g. the retry effect's `turnsThisPhase = 1` reset is what gets persisted).
+- `checkLoopEscalation` commits only the terminal escalated state (the moment it is produced). Deliberately NO pre-gate turn-commit: persisting the incremented counter before the gate would defeat the retry effect's reset on the next reload (the counter would accumulate across reloads and false-positive the loop detector). S2 (counter survives reload) is satisfied by the end-of-settle commit.
+- Dispute/review handlers keep their own `commit`/`persistState` calls (they short-circuit before `handlePhaseSettled`, so their settle has no end-of-dispatcher commit — those ARE the single commit point for that settle).
+
+**Tests:**
+- `test/negotiate-persist.test.ts` (new): 5 reload rows (proposal / feedback / reprompt / auto-advance / escalation), red-verified against pre-fix code.
+- `test/events/agent-settled/index.test.ts`: entry-count pins updated to the single-commit pattern (dispute/review settles = 1 entry; gate settles = 1 entry; no-commit short-circuits = 0 entries).
+- `test/extension.test.ts`: "resets turnsThisPhase on retry" pins the post-reset value (≤1) in EVERY entry, and distinguishes loop-escalation (never fires — counter resets each retry) from round-exhaustion (expected after maxB=5 retries).
+
+**Residual:** the 14-site inventory above is partially consolidated (agent-settled dispatcher is now one point); the command/tool sites (rows 1–7, 10) still commit independently — they are outside the settle path and each is the sole commit point for its own mutation. A further consolidation (all commits through one dispatcher) is out of scope; the spec's core ask (settle-path persistence correctness) is met.

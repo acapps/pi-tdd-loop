@@ -100,3 +100,11 @@ Reload-sync table (rows = reload points; column = restored machine must satisfy)
 |---|---|---|---|
 | 1 | needs-doc | The 2025-08-18 review (B-5) described this window but attributed the re-prompt parity to "depending on parity" — the closed table above pins it: the proposal is always delivered at the Writer's (odd) round, so the restored round is always odd, so the re-prompt is always the **Writer** — deterministic, not parity-dependent | Accepted — table row 1 is the pin |
 | 2 | blocker | Implementing a local persist here would create a 15th ad-hoc `loop-state` site, defeating `refactor-single-commit-point.md` | Rejected as an option — hard dependency pinned in Interface |
+
+---
+
+## Resolution (subsumed by `90e6f24`, 2026-09-06)
+
+The negotiate settle path now commits at the dispatcher level: `handlePhaseSettled` calls `commit(state.current, pi, debug)` after `handleNegotiateSettled` returns, so the advanced round and cleared markers (`negotiateProposed` / `negotiateFeedback` / `negotiateReprompted`) persist immediately.
+
+Regression coverage: `test/negotiate-persist.test.ts` — 5 tests covering all transition paths (proposal delivered, feedback delivered, reprompt, auto-advance to B, escalation), each asserting the committed entry carries the post-transition state. Verified red against pre-fix code (git stash of `src/events/agent-settled/index.ts` → all 5 fail).

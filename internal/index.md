@@ -6,10 +6,10 @@ Conventions for specs in this directory: [docs/spec-authoring.md](../docs/spec-a
 
 | Spec | Type | Status | Dependencies (hard → soft) |
 |---|---|---|---|
-| [refactor-single-commit-point.md](refactor-single-commit-point.md) | refactor | open | hard: bug-gate-signal-integrity (**done** — merged `fc51a53`; dependency satisfied) |
-| [bug-negotiate-settle-not-persisted.md](bug-negotiate-settle-not-persisted.md) | bug | blocked | hard: refactor-single-commit-point |
-| [bug-dispute-reload-evaporation.md](bug-dispute-reload-evaporation.md) | bug | blocked | hard: refactor-single-commit-point |
-| [bug-phase-0-approval-dead-end.md](bug-phase-0-approval-dead-end.md) | bug | open | soft: refactor-single-commit-point |
+| [done-refactor-single-commit-point.md](done-refactor-single-commit-point.md) | refactor | **done** | merged `90e6f24` — dispatcher commits once per settle (end of handlePhaseSettled) + escalated at production; S2 turn counter, negotiate settle, gate settle all persist |
+| [done-bug-negotiate-settle-not-persisted.md](done-bug-negotiate-settle-not-persisted.md) | bug | **done** | subsumed by `90e6f24` — negotiate settle commits the advanced round + cleared markers; regression file `test/negotiate-persist.test.ts` (5 reload rows, red-verified against pre-fix code) |
+| [bug-dispute-reload-evaporation.md](bug-dispute-reload-evaporation.md) | bug | open | hard: refactor-single-commit-point (**done** — merged `90e6f24`; dependency satisfied) |
+| [bug-phase-0-approval-dead-end.md](bug-phase-0-approval-dead-end.md) | bug | open | soft: refactor-single-commit-point (**done**) |
 | [bug-gate-green-stays-green.md](bug-gate-green-stays-green.md) | bug | open | soft: bug-negotiate-drift (**done** — re-review landed `04b9519`; the S1 `skipIf`/30s *contract* fix this spec pins is still outstanding) |
 | [bug-gate-verdict-field.md](bug-gate-verdict-field.md) | bug | open | hard: bug-gate-signal-integrity (**done** — `allPassed` semantics in place); sequence after bug-gate-green-stays-green (same fixture) |
 | [bug-gate-slow-settle-duplicate.md](bug-gate-slow-settle-duplicate.md) | bug | open | — (filed 2026-09-06: duplicate `agent_settled` while a gate run is in flight double-runs the gate; the `NO_GATE` sentinel is exported but never returned) |
@@ -24,9 +24,9 @@ Conventions for specs in this directory: [docs/spec-authoring.md](../docs/spec-a
 
 ## Recommended order of operation
 
-1. **refactor-single-commit-point** — every other persistence fix in this batch (negotiate, dispute, Phase 0) is a *commit point*, not a feature. Without it, each fix would add another ad-hoc `appendEntry` site and the desync class would survive the fixes. Its hard dependency (bug-gate-signal-integrity) is done.
-2. **bug-negotiate-settle-not-persisted** — becomes test-only once #1 lands; cheap, and it closes the round-ping-pong desync that is the most likely to bite in daily use (negotiate is the most frequent phase).
-3. **bug-dispute-reload-evaporation** — the largest single rewrite (6 flags → 1 status object, 19 counted test flips). Last of the persistence batch because it depends on #1.
+1. **bug-dispute-reload-evaporation** — the largest single rewrite (6 flags → 1 status object, 19 counted test flips). Its hard dependency (refactor-single-commit-point) is done (`90e6f24`); the dispute handlers already commit via `persistState`, so this is now a state-model consolidation, not a new commit point.
+2. **bug-gate-green-stays-green** — fixture fix (main.go in makeGoCwd) + mandatory dispute prompt; unblocked by bug-gate-signal-integrity.
+3. **bug-gate-slow-settle-duplicate** — missing `gateInFlight` lock; two concurrent settles both run the gate (probe-confirmed).
 4. **bug-gate-green-stays-green** — the `green stays green` regression test is unpassable by construction (test-only Go module → `go build` fails → early return; S1 passes for the wrong reason). The 2026-09-06 probe confirmed the *fix* works (buildable fixture → green passes, S1 red via the test step); the contract-side fixes (fixture, mandatory-dispute prompt line, B-phase dispute flow) are unimplemented. Lands the live-toolchain regression tests that `bug-slow-gate-signal-tests` moved out of the default suite.
 5. **bug-gate-slow-settle-duplicate** — small, self-contained, safety: a duplicate settle while a gate run is in flight double-runs the gate and double-prompts. No dependency; can land any time.
 6. **bug-phase-0-approval-dead-end** — fully independent; can land any time. Least dangerous (no wrong *progress* — a confusing dead-end a human `/loop-approve` already works around).
