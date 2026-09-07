@@ -73,3 +73,16 @@ Decision table (first-match-wins):
 3. The probe scenario (two concurrent settles, nonexistent cwd) returns exactly one `NO_GATE` — re-run the probe from this spec's Problem §2 before deleting it.
 4. Grep sweep: needle `gateInFlight` in `src/events/agent-settled/gate-transition.ts` — ≥2 hits (declaration + check); needle `NO_GATE` in `src/` — returned, not just defined.
 5. Red-against-pre-fix: the 3 new tests fail (or the probe fails) when run against the pre-fix `gate-transition.ts` (stash the source change, run, unstash).
+
+---
+
+## Resolution (merged, 2026-09-06)
+
+**The lock landed as specified:**
+- `src/events/agent-settled/gate-transition.ts`: module-local `let gateInFlight = false` (declaration + check + set + `finally` clear — 4 hits); `handleGateTransition` returns the existing `NO_GATE` sentinel on a duplicate settle (no `runGates`, no `applyEffect`, no `sendUserMessage`, drop logged via `debug`); the `runGates` await + effect application is wrapped in `try/finally` so a throwing gate cannot wedge the loop.
+- `NO_GATE` went from dead code to live code (`return NO_GATE` at `gate-transition.ts:60`). The dispatcher's `applied === false` path already no-ops state, so a dropped settle writes nothing.
+- `test/events/agent-settled/gate-transition.test.ts`: new describe "duplicate settle while gate in flight" with the 3 spec'd tests — (1) concurrent settle → `NO_GATE` reference-identity, `runGates` called exactly once, zero prompts/UI on the dropped settle, first gate applies exactly once after its deferred resolves; (2) post-settle lock cleared (no wedge); (3) wedge regression (rejecting `runGates` → `finally` clears the lock, next settle runs). The live-toolchain probe variant (Problem §2) is deliberately not in the unit suite per the CLAUDE.md test-speed rule — the mocked deferred pins the same contract at the unit boundary (documented in the test header).
+- Red-verified: with the source fix stashed, test 1 fails at `expect(result2).toBe(NO_GATE)` (the duplicate settle double-ran the gate); tests 2-3 pass pre-fix (they pin the lock's *clearing*, which the pre-fix code trivially satisfies by having no lock).
+- Full suite: 1173 passed / 0 failed; `tsc --noEmit` clean.
+
+**Residual (noted in the spec, not built):** the lock is module-global, not per-`LoopState` — fine while one extension instance serves one loop; multi-loop support must key it per-state.

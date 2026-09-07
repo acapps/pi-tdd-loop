@@ -14,7 +14,7 @@
 // runGates is mocked (the only external I/O); computeTransition is real.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { handleGateTransition } from "../../../src/events/agent-settled/gate-transition";
+import { handleGateTransition, NO_GATE } from "../../../src/events/agent-settled/gate-transition";
 import { handleToolCall } from "../../../src/events/tool-call";
 import type { GateHandlerInput } from "../../../src/events/agent-settled/gate-transition";
 import type { LoopState, GateResult } from "../../../src/types";
@@ -491,5 +491,84 @@ describe("debug strings (verbatim)", () => {
     const { input, debug } = makeInput({ state: makeState({ phase: "A", round: 1 }) });
     await handleGateTransition(input);
     expect(debug).toHaveBeenCalledWith("Gate fail (1 failures) [compile=false tests=false cov=0%]");
+  });
+});
+
+// --- Duplicate-settle lock (spec: internal/bug-gate-slow-settle-duplicate.md) ---
+//
+// A second agent_settled landing while the first gate run is still in flight
+// must be dropped (NO_GATE sentinel: no runGates, no effect, no prompt). The
+// lock is module-local and cleared in `finally` so a thrown gate cannot wedge
+// the loop. The live-toolchain variant (real runGates, nonexistent cwd) is the
+// probe from the spec's Problem §2; it is not included here — the mocked
+// deferred below pins the same contract at the unit boundary (CLAUDE.md
+// test-speed rule: no real toolchain in unit tests).
+
+describe("duplicate settle while gate in flight", () => {
+  function deferred<T>(): { promise: Promise<T>; resolve: (v: T) => void; reject: (e: unknown) => void } {
+    let resolve!: (v: T) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  }
+
+  it("second settle while the first gate is in flight → NO_GATE, no runGates, no prompt, no effect", async () => {
+    const d = deferred<Awaited<ReturnType<typeof gate>>>();
+    runGatesMock.mockReturnValueOnce(d.promise);
+
+    const { input: first, pi: pi1, ctx: ctx1 } = makeInput({ state: makeState({ phase: "B", round: 1 }) });
+    const p1 = handleGateTransition(first);
+
+    // The first gate is now in flight (its runGates promise is held open).
+    const { input: second, pi: pi2, ctx: ctx2, debug: debug2 } = makeInput({ state: makeState({ phase: "B", round: 1 }) });
+    const result2 = await handleGateTransition(second);
+
+    expect(result2).toBe(NO_GATE);
+    expect(result2.applied).toBe(false);
+    expect(result2.gateResult).toBeNull();
+    // The dropped settle ran no gate, sent no prompt, touched no UI.
+    expect(runGatesMock).toHaveBeenCalledTimes(1);
+    expect(pi2.sentMessages).toHaveLength(0);
+    expect(ctx2.ui.notify).not.toHaveBeenCalled();
+    expect(ctx2.ui.setStatus).not.toHaveBeenCalled();
+    expect(debug2).toHaveBeenCalled(); // the drop is logged
+
+    // Resolve the first gate → it applies exactly once.
+    d.resolve(gate());
+    const result1 = await p1;
+    expect(result1.applied).toBe(true);
+    expect(result1).not.toBe(NO_GATE);
+    expect(pi1.sentMessages).toHaveLength(1);
+    expect(runGatesMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("after a settled gate, the next settle runs normally (lock cleared — no wedge)", async () => {
+    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "boom", tests: false, allPassed: false, coverage: 0 })));
+    const { input: first } = makeInput({ state: makeState({ phase: "A", round: 1 }) });
+    await handleGateTransition(first);
+
+    // Lock must be cleared: the next settle runs the gate again.
+    const { input: second } = makeInput({ state: makeState({ phase: "A", round: 2 }) });
+    const result = await handleGateTransition(second);
+    expect(result).not.toBe(NO_GATE);
+    expect(result.applied).toBe(true);
+    expect(runGatesMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("wedge regression: the first gate throws → lock still cleared, next settle runs", async () => {
+    runGatesMock.mockReturnValueOnce(Promise.reject(new Error("gate tool exploded")));
+    const { input: first } = makeInput({ state: makeState({ phase: "A", round: 1 }) });
+    await expect(handleGateTransition(first)).rejects.toThrow("gate tool exploded");
+
+    // The `finally` cleared the lock despite the throw.
+    runGatesMock.mockReturnValue(Promise.resolve(gate()));
+    const { input: second } = makeInput({ state: makeState({ phase: "A", round: 1 }) });
+    const result = await handleGateTransition(second);
+    expect(result).not.toBe(NO_GATE);
+    expect(result.applied).toBe(true);
+    expect(runGatesMock).toHaveBeenCalledTimes(2);
   });
 });
