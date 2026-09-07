@@ -48,19 +48,27 @@ export async function runGates(
   if (test.kind === "error") return { kind: "error", error: test.error };
 
   const output = (test.stdout ?? "") + (test.stderr ?? "");
-  const green = test.exitCode === 0;
-  result.tests = green;
-  result.allPassed = green;
-  result.failures = parseTestOutput(output, language).failures;
+  fillTestResults(result, output, test.exitCode === 0, language);
 
   // 3. Coverage sub-check (B/C only, and only on an exit-0 run — row-ordering pin:
   // a red run never reports a coverage number).
-  if (green && (phase === "B" || phase === "C")) {
+  if (result.tests && (phase === "B" || phase === "C")) {
     const coverage = parseCoverage(output, language);
     if (coverage !== null) result.coverage = coverage;
   }
 
   return { kind: "result", result };
+}
+
+function fillTestResults(
+  result: GateResult,
+  output: string,
+  green: boolean,
+  language: LanguageKey,
+): void {
+  result.tests = green;
+  result.allPassed = green;
+  result.failures = parseTestOutput(output, language).failures;
 }
 
 // --- Compile / test commands ---
@@ -157,18 +165,25 @@ function execCommand(command: string, cwd: string, timeoutMs: number): Promise<E
       return;
     }
     execFile(file, args, { cwd, timeout: timeoutMs, maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
-      // execFile sets `error` for any non-zero exit (with error.code = exit
-      // code) and for spawn failures (error.code = 'ENOENT' etc.). A non-
-      // numeric code means the tool could not run at all.
-      const code = error ? (error as NodeJS.ErrnoException).code : 0;
-      if (code !== 0 && typeof code !== "number") {
-        const message = (error as Error).message || String(error);
-        resolve({ kind: "error", error: message });
-        return;
-      }
-      resolve({ kind: "ok", exitCode: code, stdout: stdout ?? "", stderr: stderr ?? "" });
+      resolve(classifyExecOutcome(error, stdout, stderr));
     });
   });
+}
+
+// execFile sets `error` for any non-zero exit (with error.code = exit code)
+// and for spawn failures (error.code = 'ENOENT' etc.). A non-numeric code
+// means the tool could not run at all.
+function classifyExecOutcome(
+  error: Error | null | undefined,
+  stdout: string | null,
+  stderr: string | null,
+): ExecOutcome {
+  const code = error ? (error as NodeJS.ErrnoException).code : 0;
+  if (code !== 0 && typeof code !== "number") {
+    const message = (error as Error).message || String(error);
+    return { kind: "error", error: message };
+  }
+  return { kind: "ok", exitCode: code, stdout: stdout ?? "", stderr: stderr ?? "" };
 }
 
 // --- Display-only helpers (kept for existing consumers; signatures unchanged) ---

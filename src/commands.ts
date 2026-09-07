@@ -9,7 +9,7 @@ import * as GP from "./generic-prompts";
 import * as R from "./reviewer";
 import { runBaseline, formatBaselineFailure } from "./baseline";
 import { setupBranch } from "./git-workflow";
-import { getLanguageConfig, detectProject, DetectedProject } from "./languages";
+import { getLanguageConfig, detectProject } from "./languages";
 import { slugBugName, extractLoopLogs, renderBugSpec, writeBugSpec } from "./bug-spec";
 import { commit } from "./commit";
 
@@ -159,13 +159,7 @@ export function cmdLoop(
       // does not start.
       const baseline = runBaseline(ctx.cwd, language, buildTool);
       if (!baseline.ok) {
-        ctx.ui.notify(
-          `Baseline check failed: the existing test suite is not green, so the loop cannot continue.\n` +
-            formatBaselineFailure(baseline),
-          "error",
-        );
-        ctx.ui.setStatus("loop", "baseline failed — fix the test suite, then re-run /loop");
-        debug(`Phase 0 baseline: FAIL (${baseline.failures.length} failing) — loop not started`);
+        rejectLoopStart(ctx, debug, baseline);
         return;
       }
       ctx.ui.notify(
@@ -190,12 +184,7 @@ export function cmdLoop(
           debug(`--branch setup: FAIL (${setup.error})`);
           return;
         }
-        state.current.branch = setup.branch;
-        ctx.ui.notify(
-          `Branch: created '${setup.branch.name}' off '${setup.branch.base}'. The loop will merge it back on completion.`,
-          "info",
-        );
-        debug(`--branch setup: OK (${setup.branch.name} off ${setup.branch.base})`);
+        applyBranchSetup(state, ctx, debug, setup.branch);
       }
 
       // Phase 0: Spec Review (always runs)
@@ -216,6 +205,34 @@ export function cmdLoop(
       return;
     },
   };
+}
+
+function rejectLoopStart(
+  ctx: CommandContext,
+  debug: DebugFn,
+  baseline: ReturnType<typeof runBaseline>,
+): void {
+  ctx.ui.notify(
+    `Baseline check failed: the existing test suite is not green, so the loop cannot continue.\n` +
+      formatBaselineFailure(baseline),
+    "error",
+  );
+  ctx.ui.setStatus("loop", "baseline failed — fix the test suite, then re-run /loop");
+  debug(`Phase 0 baseline: FAIL (${baseline.failures.length} failing) — loop not started`);
+}
+
+function applyBranchSetup(
+  state: { current: LoopState },
+  ctx: CommandContext,
+  debug: DebugFn,
+  branch: { name: string; base: string; merged: boolean },
+): void {
+  state.current.branch = branch;
+  ctx.ui.notify(
+    `Branch: created '${branch.name}' off '${branch.base}'. The loop will merge it back on completion.`,
+    "info",
+  );
+  debug(`--branch setup: OK (${branch.name} off ${branch.base})`);
 }
 
 function buildPhaseZeroPrompt(specText: string, analysis: SpecAnalysis): string {
@@ -338,81 +355,86 @@ export function cmdDebug(
       // leftmost --log-bug / --log-bug=* token selects log-bug mode. Space form
       // consumes following non--- tokens joined with " "; equals form takes the
       // remainder verbatim. All other args are ignored in both modes.
-      const tokens = args.trim().split(/\s+/).filter(Boolean);
-      let flagIdx = -1;
-      let name = "";
-      let viaEquals = false;
-      for (let i = 0; i < tokens.length; i++) {
-        if (tokens[i] === "--log-bug") {
-          flagIdx = i;
-          break;
-        }
-        if (tokens[i].startsWith("--log-bug=")) {
-          flagIdx = i;
-          name = tokens[i].slice("--log-bug=".length);
-          viaEquals = true;
-          break;
-        }
-      }
-
-      if (flagIdx === -1) {
-        // Legacy branch — args ignored exactly as before
-        const entries = ctx.sessionManager.getEntries();
-        const logs = extractDebugLogs(entries);
-        ctx.ui.notify(
-          `Loop debug (${logs.length} entries):\n${logs.slice(-20).join("\n")}`,
-          "info",
-        );
+      const parsed = parseLogBugArgs(args);
+      if (parsed === null) {
+        showDebugLog(ctx);
         return;
       }
-
-      if (!viaEquals) {
-        const nameTokens: string[] = [];
-        for (let i = flagIdx + 1; i < tokens.length; i++) {
-          if (tokens[i].startsWith("--")) break;
-          nameTokens.push(tokens[i]);
-        }
-        name = nameTokens.join(" ");
-      }
-
-      const slug = slugBugName(name);
-      if (slug === "") {
-        ctx.ui.notify("Usage: /loop-debug --log-bug <name>", "warning");
-        return;
-      }
-
-      const markdown = renderBugSpec({
-        name,
-        slug,
-        phase: state.current.phase,
-        round: state.current.round,
-        specPath: state.current.specPath,
-        language: state.current.language,
-        lines: extractLoopLogs(ctx.sessionManager.getEntries()),
-        now: new Date(),
-      });
-      const result = writeBugSpec(ctx.cwd, slug, markdown);
-      if (result.ok) {
-        debug(`log-bug: wrote ${result.path}`);
-        ctx.ui.notify(
-          `Wrote bug-fix-${slug}.md\nNext: fill in Observed problem / Proposed fix, then /loop bug-fix-${slug}.md`,
-          "info",
-        );
-        return;
-      }
-      if (result.reason === "exists") {
-        ctx.ui.notify(
-          `bug-fix-${slug}.md already exists. Pick a different name.`,
-          "error",
-        );
-        return;
-      }
-      ctx.ui.notify(
-        `Failed to write bug-fix-${slug}.md: ${result.message}`,
-        "error",
-      );
+      runLogBug(state, debug, ctx, parsed.name);
     },
   };
+}
+
+// Parsed /loop-debug args: null = legacy mode (no --log-bug flag),
+// otherwise the bug name to slugify.
+function parseLogBugArgs(args: string): { name: string } | null {
+  const tokens = args.trim().split(/\s+/).filter(Boolean);
+  for (let i = 0; i < tokens.length; i++) {
+    if (tokens[i] === "--log-bug") {
+      const nameTokens: string[] = [];
+      for (let j = i + 1; j < tokens.length; j++) {
+        if (tokens[j].startsWith("--")) break;
+        nameTokens.push(tokens[j]);
+      }
+      return { name: nameTokens.join(" ") };
+    }
+    if (tokens[i].startsWith("--log-bug=")) {
+      return { name: tokens[i].slice("--log-bug=".length) };
+    }
+  }
+  return null;
+}
+
+function showDebugLog(ctx: CommandContext): void {
+  const logs = extractDebugLogs(ctx.sessionManager.getEntries());
+  ctx.ui.notify(
+    `Loop debug (${logs.length} entries):\n${logs.slice(-20).join("\n")}`,
+    "info",
+  );
+}
+
+function runLogBug(
+  state: { current: LoopState },
+  debug: DebugFn,
+  ctx: CommandContext,
+  name: string,
+): void {
+  const slug = slugBugName(name);
+  if (slug === "") {
+    ctx.ui.notify("Usage: /loop-debug --log-bug <name>", "warning");
+    return;
+  }
+
+  const markdown = renderBugSpec({
+    name,
+    slug,
+    phase: state.current.phase,
+    round: state.current.round,
+    specPath: state.current.specPath,
+    language: state.current.language,
+    lines: extractLoopLogs(ctx.sessionManager.getEntries()),
+    now: new Date(),
+  });
+  const result = writeBugSpec(ctx.cwd, slug, markdown);
+  if (result.ok) {
+    debug(`log-bug: wrote ${result.path}`);
+    ctx.ui.notify(
+      `Wrote bug-fix-${slug}.md\nNext: fill in Observed problem / Proposed fix, then /loop bug-fix-${slug}.md`,
+      "info",
+    );
+    return;
+  }
+  if (result.reason === "exists") {
+    ctx.ui.notify(
+      `bug-fix-${slug}.md already exists. Pick a different name.`,
+      "error",
+    );
+    return;
+  }
+  ctx.ui.notify(
+    `Failed to write bug-fix-${slug}.md: ${result.message}`,
+    "error",
+  );
 }
 
 function extractDebugLogs(entries: unknown[]): string[] {

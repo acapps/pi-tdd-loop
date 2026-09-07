@@ -48,27 +48,21 @@ export async function handleGateTransition(
 
   const outcome = await runGates(ctx.cwd, coverageThreshold, language, buildTool, phase);
 
-  let gate: GateResult | null = null;
-  let transition: { state: LoopState; effect: TransitionEffect };
-  if (outcome.kind === "result") {
-    gate = outcome.result!;
-    transition = T.computeTransition(state, gate);
-  } else {
-    transition = T.computeGateErrorTransition(state, outcome.error ?? "gate tool could not run");
-  }
+  const gate = outcome.kind === "result" ? outcome.result! : null;
+  const transition = gate
+    ? T.computeTransition(state, gate)
+    : T.computeGateErrorTransition(state, outcome.error ?? "gate tool could not run");
 
   const newState = transition.state;
-  if (gate) {
-    // G3: lastGateResult is set ONLY on a real gate result — never on error.
-    // The dispatcher assigns it onto the re-assigned state.current.
-  }
 
   const gateLog = gate
-    ? `Gate ${gate.tests ? "pass" : "fail"}${gate.failures.length > 0 || !gate.tests ? ` (${gate.failures.length} failures)` : ""} [compile=${gate.compile} tests=${gate.tests} cov=${gate.coverage}%]`
+    ? formatGateLog(gate)
     : `Gate error: ${outcome.error ?? "tool could not run"}`;
   debug(gateLog);
   debug(`→ ${transition.effect.type} (Phase ${newState.phase} round ${newState.round})`);
 
+  // G3: lastGateResult is set ONLY on a real gate result — never on error.
+  // The dispatcher assigns it onto the re-assigned state.current.
   const { applied } = applyEffect({
     state: { current: newState },
     pi,
@@ -76,14 +70,7 @@ export async function handleGateTransition(
     lang,
     debug,
     effect: transition.effect,
-    gateResult: gate ?? {
-      compile: false,
-      compileError: outcome.error ?? "",
-      tests: false,
-      allPassed: false,
-      coverage: 0,
-      failures: [],
-    },
+    gateResult: gate ?? errorGateResult(outcome.error),
   });
 
   // Git branch workflow (opt-in): on the done effect, the merge-back runs
@@ -94,4 +81,22 @@ export async function handleGateTransition(
   // applyDoneEffect, before the merge resolves — the merge is a post-step.
 
   return { state: newState, effect: transition.effect, gateResult: gate, applied };
+}
+
+function formatGateLog(gate: GateResult): string {
+  const failures = gate.failures.length > 0 || !gate.tests ? ` (${gate.failures.length} failures)` : "";
+  return `Gate ${gate.tests ? "pass" : "fail"}${failures} [compile=${gate.compile} tests=${gate.tests} cov=${gate.coverage}%]`;
+}
+
+// A gate that could not run (tool spawn error) is not a gate result — but the
+// effect still needs a sentinel result to log the failure against.
+function errorGateResult(error?: string): GateResult {
+  return {
+    compile: false,
+    compileError: error ?? "",
+    tests: false,
+    allPassed: false,
+    coverage: 0,
+    failures: [],
+  };
 }

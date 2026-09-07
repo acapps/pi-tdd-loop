@@ -127,16 +127,7 @@ export function validationErrors(data: unknown): string[] {
   if (phase !== "idle" && !isDone && typeof data.round === "number" && data.round < 1) {
     errors.push(`round must be >= 1 in non-idle phases (got ${round})`);
   }
-  if (typeof data.turnsThisPhase === "number" && data.turnsThisPhase < 0) {
-    errors.push(`turnsThisPhase must be >= 0 (got ${String(data.turnsThisPhase)})`);
-  } else if (
-    !isDone &&
-    (TURNED_PHASES as readonly string[]).includes(phase) &&
-    typeof data.turnsThisPhase === "number" &&
-    data.turnsThisPhase < 1
-  ) {
-    errors.push(`turnsThisPhase must be >= 1 in phase ${phase} (got ${turns})`);
-  }
+  checkTurnsFloor(errors, phase, isDone, data.turnsThisPhase, turns);
   if (!(Number.isNaN(disputeCount) || Number.isNaN(maxDispute)) && disputeCount > maxDispute) {
     errors.push(`disputeCount must be <= maxDispute (got ${disputeCount} > ${maxDispute})`);
   }
@@ -148,6 +139,25 @@ export function validationErrors(data: unknown): string[] {
   }
 
   return errors;
+}
+
+// turnsThisPhase floors: >= 0 everywhere; >= 1 in the active phases
+// (TURNED_PHASES) — done is exempt (see the comment above validationErrors).
+function checkTurnsFloor(
+  errors: string[],
+  phase: Phase,
+  isDone: boolean,
+  turns: unknown,
+  turnsValue: number,
+): void {
+  if (typeof turns !== "number") return;
+  if (turns < 0) {
+    errors.push(`turnsThisPhase must be >= 0 (got ${String(turns)})`);
+    return;
+  }
+  if (!isDone && (TURNED_PHASES as readonly string[]).includes(phase) && turns < 1) {
+    errors.push(`turnsThisPhase must be >= 1 in phase ${phase} (got ${turnsValue})`);
+  }
 }
 
 /**

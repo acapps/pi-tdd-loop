@@ -84,8 +84,6 @@ export function applyRetryEffect(input: EffectInput): EffectResult {
 
   state.turnsThisPhase = 1;
 
-    // Spec 09: the retired dispute branch is deleted — the settle step (Table 1)
-  // clears awaitDisputeReview before the gate ever runs, so it cannot be set here.
   debug(`Retry ${effect.phase} round ${effect.round}`);
   ctx.ui.setStatus("loop", effect.status);
   if (effect.notify) {
@@ -139,13 +137,17 @@ export function applyDoneEffect(input: EffectInput): EffectResult {
     void mergeBranchBack({ current: state }, pi, ctx, debug);
   }
 
+  reportDone(state, effect, pi, ctx);
+  return { applied: true };
+}
+
+function reportDone(state: LoopState, effect: DoneEffect, pi: ExtensionAPI, ctx: EventCtx): void {
   ctx.ui.notify(effect.notify, "info");
   ctx.ui.setStatus("loop", effect.status);
   sendPrompt(
     pi,
     GP.promptLoopComplete(state.specPath, state.disputeCount, effect.status === "done (cleaner failed)"),
   );
-  return { applied: true };
 }
 
 // Git branch workflow (opt-in via --branch): merge the feature branch back

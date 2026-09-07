@@ -206,6 +206,40 @@ function parseSpecArgs(args: string): ParsedSpecArgs {
   return { slugArg, outDir, goalTokens };
 }
 
+/** Row 4: rubric missing → warn (before the turn), proceed without it. */
+function startAuthorTurn(
+  state: { current: LoopState },
+  pi: ExtensionAPI,
+  debug: (msg: string) => void,
+  ctx: CommandContext,
+  input: { goal: string; slug: string; outDir: string; rubric: string | null },
+): void {
+  if (input.rubric === null) {
+    ctx.ui.notify(
+      "docs/spec-authoring.md not found — Author runs without the template.",
+      "warning",
+    );
+  }
+
+  // Row 5: happy path — one Author turn; stateless by contract
+  debug(
+    "spec: author turn for slug " +
+      input.slug +
+      " (loop phase: " +
+      state.current.phase +
+      ")",
+  );
+  pi.sendUserMessage(
+    renderAuthorPrompt({ ...input, now: new Date() }),
+    { triggerTurn: true },
+  );
+  ctx.ui.notify(
+    `Author: writing ${input.outDir}/${input.slug}.md. Review it, then run /loop ${input.outDir}/${input.slug}.md`,
+    "info",
+  );
+  ctx.ui.setStatus("loop", "spec author (one-shot — no loop state)");
+}
+
 export function cmdSpec(
   state: { current: LoopState },
   pi: ExtensionAPI,
@@ -239,32 +273,8 @@ export function cmdSpec(
         return;
       }
 
-      // Row 4: rubric missing → warn (before the turn), proceed without it
       const rubric = readRubric(ctx.cwd);
-      if (rubric === null) {
-        ctx.ui.notify(
-          "docs/spec-authoring.md not found — Author runs without the template.",
-          "warning",
-        );
-      }
-
-      // Row 5: happy path — one Author turn; stateless by contract
-      debug(
-        "spec: author turn for slug " +
-          slug +
-          " (loop phase: " +
-          state.current.phase +
-          ")",
-      );
-      pi.sendUserMessage(
-        renderAuthorPrompt({ goal, slug, outDir, rubric, now: new Date() }),
-        { triggerTurn: true },
-      );
-      ctx.ui.notify(
-        `Author: writing ${outDir}/${slug}.md. Review it, then run /loop ${outDir}/${slug}.md`,
-        "info",
-      );
-      ctx.ui.setStatus("loop", "spec author (one-shot — no loop state)");
+      startAuthorTurn(state, pi, debug, ctx, { goal, slug, outDir, rubric });
     },
   };
 }
