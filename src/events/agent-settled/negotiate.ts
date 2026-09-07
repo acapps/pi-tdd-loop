@@ -105,10 +105,15 @@ function deliverReprompt(
   ctx: EventCtx,
 ): void {
   ctx.ui.notify(effect.notify, effect.level);
-  const prompt = effect.prompt === REPROMPT_KEYS.WRITER
-    ? GP.promptNegotiateRepromptWriter()
+  pi.sendUserMessage(buildRepromptPrompt(effect), { triggerTurn: true });
+}
+
+// fix-negotiate-confirm-approval-loop §3: the reprompt carries the round and
+// the last proposal from the effect (deliverReprompt takes the effect).
+function buildRepromptPrompt(effect: RepromptEffect): string {
+  return effect.prompt === REPROMPT_KEYS.WRITER
+    ? GP.promptNegotiateRepromptWriter(effect.round ?? 1, effect.lastProposal ?? "")
     : GP.promptNegotiateRepromptTester();
-  pi.sendUserMessage(prompt, { triggerTurn: true });
 }
 
 function deliverAdvance(

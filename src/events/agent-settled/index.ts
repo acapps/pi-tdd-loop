@@ -64,13 +64,14 @@ function handleJustTransitioned(
   debug: (msg: string) => void,
 ): boolean {
   if (!state.current.justTransitioned) return false;
-  debug(`agent_settled: justTransitioned → clearing & triggering turn (${stateSummary(state.current)})`);
+  debug(`agent_settled: justTransitioned → clearing (no second prompt — the advance effect already sent it) (${stateSummary(state.current)})`);
   state.current.justTransitioned = false;
 
-  if (state.current.phase === "B" && state.current.round === 1) {
-    debug("agent_settled: triggering Phase B Writer turn");
-    pi.sendUserMessage(lang.prompts.promptNegotiateApproved(), { triggerTurn: true });
-  }
+  // fix-negotiate-confirm-approval-loop §5: the former `phase === "B" &&
+  // round === 1` branch re-sent promptNegotiateApproved — a double-trigger
+  // (the advance effect had already sent the phase prompt). Deleted; the
+  // handler now only clears the flag. Intended shift (pinned): an ESC'd phase
+  // turn does NOT re-deliver the prompt — the user runs /loop-continue.
   return true;
 }
 

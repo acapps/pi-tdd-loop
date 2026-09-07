@@ -7,6 +7,10 @@ import * as Cmd from "./src/commands";
 import { cmdSpec } from "./src/spec-command";
 import * as Tool from "./src/tools";
 import * as Ev from "./src/events";
+import {
+  createRepeatedToolCallHandler,
+  resetCallCounters,
+} from "./src/events/tool-call/index";
 import type { LoopState } from "./src/types";
 
 // Initialize language registry (lazy-loaded)
@@ -73,13 +77,30 @@ export default function (pi: ExtensionAPI) {
   // Events
   // =========================================================================
 
+  pi.on("agent_settled", Ev.eventAgentSettled(state, pi, debug));
   pi.on("session_start", Ev.eventSessionStart(state, pi, debug));
   pi.on("before_agent_start", Ev.eventBeforeAgentStart(state, pi, debug));
   pi.on("tool_call", Ev.eventToolCall(state, pi, debug));
-  pi.on("agent_settled", Ev.eventAgentSettled(state, pi, debug));
+  // fix-negotiate-confirm-approval-loop §4: the repeated-call breaker.
+  registerLoopBreaker(pi, debug);
 
   // Test-only seam (see __getStateForTest below).
   lastState = state;
+}
+
+// fix-negotiate-confirm-approval-loop §4: the repeated-call breaker wiring.
+// A SECOND tool_call registration (path enforcement above stays) — separate
+// module, do not consolidate. The per-turn counter map clears on turn_start
+// (every fresh turn, incl. /loop-* command turns) and on agent_settled (the
+// belt for turns that settle without a following turn_start).
+function registerLoopBreaker(pi: ExtensionAPI, debug: (msg: string) => void): void {
+  pi.on("tool_call", createRepeatedToolCallHandler(pi, debug));
+  pi.on("turn_start", () => {
+    resetCallCounters();
+  });
+  pi.on("agent_settled", () => {
+    resetCallCounters();
+  });
 }
 
 // Test-only seam: exposes the live state object of the LAST registered

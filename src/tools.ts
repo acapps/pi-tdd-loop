@@ -53,6 +53,24 @@ function isApproval(decision: string): boolean {
   return decision === "approve" || decision === "approved";
 }
 
+/**
+ * fix-negotiate-confirm-approval-loop §1: a Writer proposal is a
+ * confirmation iff it is lexically "agree" (any case, trimmed) or starts
+ * with one of the closed tail forms — "agree:" or "agree —" (em dash) or
+ * "agree -" (ASCII dash). Word-boundary: "agreement reached" is NOT a match.
+ */
+export function isAgreeProposal(lastProposal: string): boolean {
+  return startsWithAgreeToken(lastProposal.trim().toLowerCase());
+}
+
+/** The closed prefix set: the bare token plus the three pinned tail forms. */
+const AGREE_PREFIXES = ["agree:", "agree —", "agree -"];
+
+function startsWithAgreeToken(normalized: string): boolean {
+  if (normalized === "agree") return true;
+  return AGREE_PREFIXES.some((prefix) => normalized.startsWith(prefix));
+}
+
 // --- State persistence helpers ---
 
 /** Snapshot the current state into the session log (single commit point). */
@@ -313,7 +331,7 @@ function handleNegotiateReview(
     // Tester turn (even round) is a claim about the file — the Tester
     // re-reviews the contract file read-only before the advance. 'agree'
     // (row 3) asserts the file already matches and skips straight to B.
-    if (state.current.round % 2 === 0 && state.current.lastProposal !== "agree") {
+    if (state.current.round % 2 === 0 && !isAgreeProposal(state.current.lastProposal)) {
       return executeNegotiateReReview(state, pi, debug);
     }
     return executeNegotiateApprove(state, pi, debug, ctx);

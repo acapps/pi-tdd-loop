@@ -15,7 +15,7 @@ type TransitionEffect =
   | { type: "escalated"; status: string; notify: string }
   | { type: "review-request"; notify: string }
   | { type: "feedback"; notify: string }
-  | { type: "reprompt"; notify: string; level: string; prompt: string };
+  | { type: "reprompt"; notify: string; level: string; prompt: string; round?: number; lastProposal?: string };
 
 // --- Public API ---
 
@@ -136,6 +136,10 @@ function repromptWriter(state: LoopState): { state: LoopState; effect: Transitio
       notify: "Writer must use negotiate_propose tool.",
       level: "warning",
       prompt: REPROMPT_KEYS.WRITER,
+      // fix-negotiate-confirm-approval-loop §3: the effect is the carrier of
+      // state into the reprompt prompt (deliverReprompt takes the effect).
+      round: state.round,
+      lastProposal: state.lastProposal,
     },
   };
 }

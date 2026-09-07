@@ -94,7 +94,9 @@ describe("handleNegotiateSettled — reprompt", () => {
     expect(state).toEqual(before); // input never mutated
 
     expect(pi.sentMessages).toHaveLength(1);
-    expect(pi.sentMessages[0].content).toBe(GP.promptNegotiateRepromptWriter());
+    // fix-negotiate-confirm-approval-loop §3: the reprompt now carries the
+    // round and the last proposal (effect.round / effect.lastProposal).
+    expect(pi.sentMessages[0].content).toBe(GP.promptNegotiateRepromptWriter(1, ""));
     expect(pi.sentMessages[0].options).toEqual({ triggerTurn: true });
     expect(ctx.ui.notify).toHaveBeenCalledWith("Writer must use negotiate_propose tool.", "warning");
     expect(ctx.ui.setStatus).not.toHaveBeenCalled();

@@ -42,7 +42,8 @@ Review. "approve" to accept, or suggest changes via negotiate_review.`;
 export function promptNegotiateContractReReview(testFilePattern: string): string {
   return `You are the TESTER (contract re-review). The Writer's proposal was accepted. Verify the contract file matches the agreement.
 Read ${testFilePattern}. Use negotiate_review: 'approve' only if the file matches; otherwise feedback naming each drifted item.
-No file writes.`;
+No file writes.
+An 'approve' here advances the loop to Phase B.`;
 }
 
 export function promptNegotiateFeedback(decision: string): string {
@@ -53,9 +54,23 @@ ${decision}
 Revise and propose again via negotiate_propose. Do NOT write files.`;
 }
 
-export function promptNegotiateRepromptWriter(): string {
+// fix-negotiate-confirm-approval-loop §3: the reprompt carries the current
+// round and the last proposal (truncated to 200 chars + ellipsis) so the
+// Writer does not re-derive state it already produced. Empty-proposal edge
+// pinned: the trailing period belongs to the empty clause slot ("round 3.").
+const PROPOSAL_TRUNCATE_AT = 200;
+
+function repromptStateLine(round: number, lastProposal: string): string {
+  const proposalClause = lastProposal
+    ? `; last proposal: ${lastProposal.slice(0, PROPOSAL_TRUNCATE_AT)}...`
+    : "";
+  return `Current state: negotiate round ${round}${proposalClause}.`;
+}
+
+export function promptNegotiateRepromptWriter(round: number, lastProposal: string): string {
   return `Must use negotiate_propose. Do NOT write files.
 
+${repromptStateLine(round, lastProposal)}
 Call negotiate_propose now:
   - plan='agree' if tests match spec, OR
   - plan='your approach'`;

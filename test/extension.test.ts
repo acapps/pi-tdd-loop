@@ -895,6 +895,10 @@ describe("negotiate_review tool", () => {
 
     // The re-review prompt was sent to the Tester.
     expect(api.sentMessages[api.sentMessages.length - 1].content).toContain("contract re-review");
+    // fix-negotiate-confirm-approval-loop §2: the pinned advance sentence.
+    expect(api.sentMessages[api.sentMessages.length - 1].content).toContain(
+      "An 'approve' here advances the loop to Phase B."
+    );
 
     // Second approve (re-review round, odd) advances to Phase B.
     const result2 = await tool.execute(
