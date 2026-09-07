@@ -72,12 +72,45 @@ function findTool(api: TestAPI, name: string) {
   return entry!;
 }
 
-// Helper to find an event handler
-function findEventHandler(api: TestAPI, event: string) {
+// Handler-identity predicates for multi-handler events (see
+// internal/bug-fragile-event-handler-selection.md). The mock captures the exact
+// closure the extension registered; closures cannot be compared across
+// `state` instances, so selection is by source needle. `blockRepeatedCall`
+// appears only in the breaker closure (src/events/tool-call/index.ts);
+// `resetCallCounters` appears only in the two reset closures (index.ts).
+// Neither needle appears in the main handlers' source.
+const isBreakerHandler = (h: any) => h.toString().includes("blockRepeatedCall");
+const isResetHandler = (h: any) => h.toString().includes("resetCallCounters");
+// default for multi-handler events where the test wants the MAIN handler:
+const isMainHandler = (h: any) => !isBreakerHandler(h) && !isResetHandler(h);
+
+// Helper to find an event handler.
+// predicate given → first matching handler; no match → throw naming the event.
+// no predicate, 1 handler → return it. no predicate, >1 handlers → throw
+// (multiplicity must be disambiguated explicitly — the silent first-element
+// mis-selection that stalled the bug-confirm-approval run).
+function findEventHandler(
+  api: TestAPI,
+  event: string,
+  predicate?: (h: (...args: any[]) => any) => boolean,
+): (...args: any[]) => any {
   const handlers = api.eventHandlers.get(event);
-  expect(handlers).toBeDefined();
-  expect(handlers!.length).toBeGreaterThan(0);
-  return handlers![0];
+  if (!handlers) throw new Error(`no handler registered for ${event}`);
+  if (predicate) {
+    const match = handlers.find(predicate);
+    if (!match) {
+      throw new Error(
+        `no handler for ${event} matched the predicate (of ${handlers.length} registered)`,
+      );
+    }
+    return match;
+  }
+  if (handlers.length > 1) {
+    throw new Error(
+      `findEventHandler("${event}"): ${handlers.length} handlers registered, pass a predicate to disambiguate`,
+    );
+  }
+  return handlers[0];
 }
 
 // ================================================================
@@ -119,6 +152,70 @@ describe("extension factory", () => {
     for (const event of expectedEvents) {
       expect(api.eventHandlers.has(event)).toBe(true);
     }
+  });
+
+  it("registers the pinned handler counts per event", () => {
+    const api = buildTestAPI();
+    extensionFactory(api);
+
+    expect(api.eventHandlers.get("tool_call")!.length).toBe(2);
+    expect(api.eventHandlers.get("agent_settled")!.length).toBe(2);
+    expect(api.eventHandlers.get("turn_start")!.length).toBe(1);
+    expect(api.eventHandlers.get("session_start")!.length).toBe(1);
+    expect(api.eventHandlers.get("before_agent_start")!.length).toBe(1);
+  });
+
+  it("documents tool_call registration order (path enforcement before breaker)", () => {
+    // Order is documented, not depended upon: this test exists so a future
+    // reorder is a visible failure of a named test, not a silent re-pointing.
+    const api = buildTestAPI();
+    extensionFactory(api);
+
+    const [first, second] = api.eventHandlers.get("tool_call")!;
+    expect(isBreakerHandler(second)).toBe(true);
+    expect(isMainHandler(first)).toBe(true);
+  });
+});
+
+describe("findEventHandler", () => {
+  const fakeAPI = (handlers: Map<string, any[]>): TestAPI =>
+    ({ eventHandlers: handlers }) as unknown as TestAPI;
+  const h = () => () => {};
+
+  it("row 1: no handlers → throw naming the event", () => {
+    const api = fakeAPI(new Map());
+    expect(() => findEventHandler(api, "nope")).toThrow(/no handler registered for nope/);
+  });
+
+  it("row 2: predicate match → returns the matching handler", () => {
+    const a = h();
+    const b = (() => { blockRepeatedCallRef(); }) as any;
+    function blockRepeatedCallRef() {}
+    const api = fakeAPI(new Map([["ev", [a, b]]]));
+    const found = findEventHandler(api, "ev", (x) => x.toString().includes("blockRepeatedCallRef"));
+    expect(found).toBe(b);
+  });
+
+  it("row 3: predicate matches nothing → throw with the count", () => {
+    const api = fakeAPI(new Map([["ev", [h(), h()]]]));
+    expect(() => findEventHandler(api, "ev", () => false)).toThrow(
+      /no handler for ev matched the predicate \(of 2 registered\)/,
+    );
+  });
+
+  it("row 4: single handler, no predicate → returns it", () => {
+    const a = h();
+    const api = fakeAPI(new Map([["ev", [a]]]));
+    expect(findEventHandler(api, "ev")).toBe(a);
+  });
+
+  it("row 5 (regression pin): >1 handlers, no predicate → throw naming the count", () => {
+    // Pre-fix helper returned the first element silently here — the mis-selection
+    // that stalled the bug-confirm-approval implementation run.
+    const api = fakeAPI(new Map([["ev", [h(), h()]]]));
+    expect(() => findEventHandler(api, "ev")).toThrow(
+      /findEventHandler\("ev"\): 2 handlers registered, pass a predicate to disambiguate/,
+    );
   });
 });
 
@@ -1278,7 +1375,7 @@ describe("tool_call event (path enforcement)", () => {
     const loopHandler = findCommand(api, "loop");
     await loopHandler("spec.md", api._mockCtx);
 
-    const handler = findEventHandler(api, "tool_call");
+    const handler = findEventHandler(api, "tool_call", isMainHandler);
 
     // Allow *.go stub
     const stubResult = await handler(
@@ -1299,7 +1396,7 @@ describe("tool_call event (path enforcement)", () => {
     const restartHandler = findCommand(api, "loop-restart");
     await restartHandler("negotiate", api._mockCtx);
 
-    const handler = findEventHandler(api, "tool_call");
+    const handler = findEventHandler(api, "tool_call", isMainHandler);
 
     const result = await handler(
       { type: "tool_call", toolName: "write", input: { path: "pkg/handler.go" } },
@@ -1315,7 +1412,7 @@ describe("tool_call event (path enforcement)", () => {
     const restartHandler = findCommand(api, "loop-restart");
     await restartHandler("B", api._mockCtx);
 
-    const handler = findEventHandler(api, "tool_call");
+    const handler = findEventHandler(api, "tool_call", isMainHandler);
 
     const result = await handler(
       { type: "tool_call", toolName: "write", input: { path: "pkg/handler_test.go" } },
@@ -1331,7 +1428,7 @@ describe("tool_call event (path enforcement)", () => {
     const restartHandler = findCommand(api, "loop-restart");
     await restartHandler("B", api._mockCtx);
 
-    const handler = findEventHandler(api, "tool_call");
+    const handler = findEventHandler(api, "tool_call", isMainHandler);
 
     const result = await handler(
       { type: "tool_call", toolName: "write", input: { path: "pkg/handler.go" } },
@@ -1345,7 +1442,7 @@ describe("tool_call event (path enforcement)", () => {
     const restartHandler = findCommand(api, "loop-restart");
     await restartHandler("C", api._mockCtx);
 
-    const handler = findEventHandler(api, "tool_call");
+    const handler = findEventHandler(api, "tool_call", isMainHandler);
 
     const result = await handler(
       { type: "tool_call", toolName: "edit", input: { path: "pkg/handler_test.go" } },
@@ -1407,7 +1504,7 @@ describe("tool_call event (path enforcement)", () => {
       api._mockCtx
     );
 
-    const toolHandler = findEventHandler(api, "tool_call");
+    const toolHandler = findEventHandler(api, "tool_call", isMainHandler);
 
     // In escalated mode, writes should NOT be blocked
     const result = await toolHandler(
@@ -1433,7 +1530,7 @@ describe("agent_settled event (phase transitions)", () => {
   });
 
   it("returns nothing when idle", async () => {
-    const handler = findEventHandler(api, "agent_settled");
+    const handler = findEventHandler(api, "agent_settled", isMainHandler);
     await handler({ type: "agent_settled" }, api._mockCtx);
 
     // No messages sent when idle
@@ -1475,7 +1572,7 @@ describe("agent_settled event (phase transitions)", () => {
       api._mockCtx
     );
 
-    const handler = findEventHandler(api, "agent_settled");
+    const handler = findEventHandler(api, "agent_settled", isMainHandler);
     const msgCountBefore = api.sentMessages.length;
     await handler({ type: "agent_settled" }, api._mockCtx);
 
@@ -1517,7 +1614,7 @@ describe("agent_settled event (phase transitions)", () => {
       api._mockCtx
     );
 
-    const handler = findEventHandler(api, "agent_settled");
+    const handler = findEventHandler(api, "agent_settled", isMainHandler);
     const msgCountBefore = api.sentMessages.length;
     await handler({ type: "agent_settled" }, api._mockCtx);
 
@@ -1562,7 +1659,7 @@ describe("agent_settled event (phase transitions)", () => {
       api._mockCtx
     );
 
-    const handler = findEventHandler(api, "agent_settled");
+    const handler = findEventHandler(api, "agent_settled", isMainHandler);
     await handler({ type: "agent_settled" }, api._mockCtx);
 
     // After agent_settled in Phase A, gates run and result in some message
@@ -1573,7 +1670,7 @@ describe("agent_settled event (phase transitions)", () => {
     const restartHandler = findCommand(api, "loop-restart");
     await restartHandler("negotiate", api._mockCtx);
 
-    const handler = findEventHandler(api, "agent_settled");
+    const handler = findEventHandler(api, "agent_settled", isMainHandler);
     await handler({ type: "agent_settled" }, api._mockCtx);
 
     // First settle: re-prompt
@@ -1592,7 +1689,7 @@ describe("agent_settled event (phase transitions)", () => {
     const restartHandler = findCommand(api, "loop-restart");
     await restartHandler("negotiate", api._mockCtx);
 
-    const handler = findEventHandler(api, "agent_settled");
+    const handler = findEventHandler(api, "agent_settled", isMainHandler);
 
     // First settle: re-prompt
     await handler({ type: "agent_settled" }, api._mockCtx);
@@ -1613,7 +1710,7 @@ describe("agent_settled event (phase transitions)", () => {
     const restartHandler = findCommand(api, "loop-restart");
     await restartHandler("B", api._mockCtx);
 
-    const handler = findEventHandler(api, "agent_settled");
+    const handler = findEventHandler(api, "agent_settled", isMainHandler);
 
     // Trigger multiple agent_settled events — each time the gate fails (no real Go project),
     // the handler should produce a retry effect. With the fix, turnsThisPhase resets on retry

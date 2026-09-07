@@ -1,19 +1,27 @@
 // --- tool_call repeated-call breaker (new module, spec: internal/bug-negotiate-confirm-approval-loop.md §4) ---
 //
-// A per-turn circuit breaker for identical tool calls inside one turn.
+// A per-turn circuit breaker for repeated tool calls inside one turn.
 // Separate module from the existing src/events/tool-call.ts (path
 // enforcement, spec 02) — that file is untouched; the two handlers answer
 // different questions (repetition vs path permission) and have different
 // input shapes. Do not consolidate.
 //
+// Key (spec: internal/bug-loop-breaker-repetition-with-mutation.md):
+//  - the key is the SKELETON of the call — toolName + the identity fields
+//    of the input (SKELETON_FIELDS), each normalized — NOT the whole input
+//    object. The whole-object key let a one-byte argument mutation reset
+//    the counter (observed: ~100-iteration grep/cat/write ping-pong in the
+//    bug-confirm-approval implementation run). Payload fields (file
+//    content, heredoc bodies, offset/limit wobble) are excluded.
+//  - bash commands are skeletonized (commandSkeleton): heredoc bodies
+//    removed, whitespace collapsed.
+//  - custom/unknown tools fall back to the whole canonicalized input
+//    object (the pre-skeleton algorithm) — conservative byte-exact key.
+//
 // Contract (pinned):
-//  - canonical key = toolName + JSON.stringify(event.input, sortedKeys) —
-//    the WHOLE input object, recursively key-sorted (one flat key, one
-//    counter per key; narrowing to a single field would merge distinct
-//    writes to the same path into one counter).
 //  - the counter map is per-turn; cleared on turn_start AND on
 //    agent_settled (the pinned reset set).
-//  - at the 5th identical call (REPEATED_CALL_LIMIT) the handler returns
+//  - at the 5th call for a key (REPEATED_CALL_LIMIT) the handler returns
 //    { block: true, terminate: true, reason } and additionally appends a
 //    loop-debug entry and sends the verbatim user notice.
 //  - blocked calls DO count toward the limit (sticky: call 6 is also
@@ -34,7 +42,53 @@ export const REPEATED_CALL_LIMIT = 5;
 const BREAKER_NOTICE =
   "Loop breaker: the agent repeated the same tool call 5x. The call was blocked; if the repetition continues, interrupt the turn (ESC) and run /loop-continue.";
 
-// --- Canonical key ---
+// --- Skeleton key ---
+
+/**
+ * Per-tool identity fields for the key (spec: Behavior §1). First
+ * match-wins on tool name; a tool not in the map (custom tool) falls back
+ * to the whole canonicalized input object. Fields not listed are payload
+ * (excluded from the key): retry noise the agent varies to probe, not a
+ * different logical call.
+ */
+export const SKELETON_FIELDS: Record<string, readonly string[]> = {
+  bash: ["command"],
+  read: ["path"],
+  write: ["path"],
+  edit: ["path"],
+  grep: ["pattern", "path", "glob"],
+  find: ["pattern", "path"],
+  ls: ["path"],
+};
+
+/**
+ * Bash command skeleton (spec: Behavior §2):
+ *  1. strip heredoc bodies — every line from a line that starts (after
+ *     leading whitespace) with `<<` or `<<-` through its terminating
+ *     delimiter line; the marker line is kept with its delimiter word;
+ *  2. collapse every run of whitespace to a single space; trim.
+ * No shell parsing: quoted strings, $(...) subshells, and backticks are
+ * opaque text subject to whitespace collapse only (pinned limitation).
+ */
+export function commandSkeleton(command: string): string {
+  const lines = command.split("\n");
+  const kept: string[] = [];
+  let skipUntil: string | null = null;
+  for (const line of lines) {
+    if (skipUntil !== null) {
+      if (line.trim() === skipUntil) skipUntil = null;
+      continue;
+    }
+    const marker = line.match(/^\s*\S*\s*<<-?\s*(\S+)/);
+    if (marker) {
+      kept.push(line);
+      skipUntil = marker[1].replace(/["'`]/g, "");
+      continue;
+    }
+    kept.push(line);
+  }
+  return kept.join("\n").replace(/\s+/g, " ").trim();
+}
 
 /**
  * Recursively sort object keys so JSON.stringify of the same logical input
@@ -55,11 +109,31 @@ function canonicalize(value: unknown): unknown {
 }
 
 /**
- * The flat counter key: toolName + JSON.stringify(input, sortedKeys).
- * `event.input` is the canonical form — the complete input object.
+ * The flat counter key: toolName + ":" + JSON.stringify(selected, sortedKeys).
+ * `selected` is the skeleton — the SKELETON_FIELDS identity fields present
+ * in `input` (undefined values dropped, bash `command` skeletonized). For
+ * tools not in SKELETON_FIELDS, `selected` is the whole canonicalized
+ * input object (the pre-skeleton algorithm, byte-for-byte).
  */
 export function canonicalCallKey(toolName: string, input: unknown): string {
-  return toolName + JSON.stringify(canonicalize(input));
+  const fields = SKELETON_FIELDS[toolName];
+  let selected: unknown;
+  if (fields) {
+    const record =
+      input !== null && typeof input === "object" && !Array.isArray(input)
+        ? (input as Record<string, unknown>)
+        : {};
+    const out: Record<string, unknown> = {};
+    for (const field of fields) {
+      const value = record[field];
+      if (value === undefined) continue;
+      out[field] = field === "command" && typeof value === "string" ? commandSkeleton(value) : value;
+    }
+    selected = out;
+  } else {
+    selected = canonicalize(input);
+  }
+  return toolName + ":" + JSON.stringify(canonicalize(selected));
 }
 
 // --- Counter state (per-turn) ---
