@@ -220,18 +220,18 @@ describe("step 3 — loop escalation", () => {
 // --- Step 4: justTransitioned ---
 
 describe("step 4 — justTransitioned", () => {
-  it("B round 1 → clears in place, one message (negotiate approved), undefined, no gate", async () => {
+  it("B round 1 → clears in place, NO message (double-trigger deleted), undefined, no gate", async () => {
     const state = makeState({ phase: "B", round: 1, justTransitioned: true });
     const { input, pi, debug } = makeInput({ state: { current: state } });
 
     expect(await handleAgentSettled(input)).toBeUndefined();
     expect(state.justTransitioned).toBe(false); // cleared in place
-    expect(pi.sentMessages).toHaveLength(1);
-    expect(pi.sentMessages[0].content).toBe(GO.prompts.promptNegotiateApproved());
-    expect(pi.sentMessages[0].options).toEqual({ triggerTurn: true });
+    // fix-negotiate-confirm-approval-loop §5: the former B-r1 branch
+    // re-sent promptNegotiateApproved — a double-trigger. Deleted; the
+    // advance effect already sent the phase prompt.
+    expect(pi.sentMessages).toHaveLength(0);
     expect(runGatesMock).not.toHaveBeenCalled();
-    expect(debug).toHaveBeenCalledWith("agent_settled: justTransitioned → clearing & triggering turn (Phase B round 1)");
-    expect(debug).toHaveBeenCalledWith("agent_settled: triggering Phase B Writer turn");
+    expect(debug).toHaveBeenCalledWith("agent_settled: justTransitioned → clearing (no second prompt — the advance effect already sent it) (Phase B round 1)");
   });
 
   it("B round 2 → clears, NO message (spot assert, round-2 variant)", async () => {
@@ -474,7 +474,8 @@ describe("step 8 — negotiate (always true; replaces state.current, G2)", () =>
     expect(state.negotiateReprompted).toBe(false);
     expect(input.state.current.negotiateReprompted).toBe(true);
     expect(pi.sentMessages).toHaveLength(1);
-    expect(pi.sentMessages[0].content).toBe(GP.promptNegotiateRepromptWriter());
+    // fix-negotiate-confirm-approval-loop §3: reprompt carries round + last proposal.
+    expect(pi.sentMessages[0].content).toBe(GP.promptNegotiateRepromptWriter(1, ""));
     expect(pi.sentMessages[0].options).toEqual({ triggerTurn: true });
     expect(runGatesMock).not.toHaveBeenCalled();
   });

@@ -11,6 +11,28 @@ export function isToolCallEventType(_event: any): boolean {
   return false;
 }
 
+// ---- Event result types (structural mirrors of the SDK's types.d.ts) ----
+// The mock package does not re-export the SDK event union types; these
+// structural mirrors keep the extension type-clean against the mock.
+export interface ToolCallEventResult {
+  /** Block tool execution. To modify arguments, mutate `event.input` in place instead. */
+  block?: boolean;
+  reason?: string;
+  /**
+   * Hint that the agent should stop after the current tool batch when this call is blocked.
+   * Early termination only happens when every finalized tool result in the batch sets this to true.
+   */
+  terminate?: boolean;
+}
+export interface ToolCallEventBase {
+  type: "tool_call";
+  toolCallId: string;
+}
+export type ToolCallEvent = ToolCallEventBase & {
+  toolName: string;
+  input: unknown;
+};
+
 // ---- Type definitions for ExtensionAPI (structurally compatible) ----
 
 export interface ExtensionAPI {

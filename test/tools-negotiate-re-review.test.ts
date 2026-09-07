@@ -81,8 +81,13 @@ describe("negotiate_review — row 2 (contract re-review)", () => {
     expect(state.current.negotiateFeedback).toBe("");
 
     // The re-review prompt was sent, pinned verbatim against the Go pattern.
+    // fix-negotiate-confirm-approval-loop §2: the prompt now ends with the
+    // pinned advance sentence.
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GP.promptNegotiateContractReReview("*_test.go"));
+    expect(pi.sentMessages[0].content).toBe(
+      `You are the TESTER (contract re-review). The Writer's proposal was accepted. Verify the contract file matches the agreement.\nRead *_test.go. Use negotiate_review: 'approve' only if the file matches; otherwise feedback naming each drifted item.\nNo file writes.\nAn 'approve' here advances the loop to Phase B.`,
+    );
     expect(pi.sentMessages[0].options).toEqual({ triggerTurn: true });
 
     // Persisted AFTER the mutation (a reload mid-re-review must see round 3).
