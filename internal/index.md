@@ -4,42 +4,80 @@ Conventions for specs in this directory: [docs/spec-authoring.md](../docs/spec-a
 
 **Status legend:** `open` = ready to implement; `blocked` = has a hard dependency; `done` = implemented and verified (rename file `done-`-prefix).
 
+## Active specs
+
 | Spec | Type | Status | Dependencies (hard → soft) |
 |---|---|---|---|
-| [done-refactor-single-commit-point.md](done-refactor-single-commit-point.md) | refactor | **done** | merged `90e6f24` — dispatcher commits once per settle (end of handlePhaseSettled) + escalated at production; S2 turn counter, negotiate settle, gate settle all persist |
-| [done-bug-negotiate-settle-not-persisted.md](done-bug-negotiate-settle-not-persisted.md) | bug | **done** | subsumed by `90e6f24` — negotiate settle commits the advanced round + cleared markers; regression file `test/negotiate-persist.test.ts` (5 reload rows, red-verified against pre-fix code) |
-| [bug-dispute-reload-evaporation.md](bug-dispute-reload-evaporation.md) | bug | open | hard: refactor-single-commit-point (**done** — merged `90e6f24`; dependency satisfied) |
-| [bug-phase-0-approval-dead-end.md](bug-phase-0-approval-dead-end.md) | bug | open | soft: refactor-single-commit-point (**done**) |
-| [bug-gate-green-stays-green.md](bug-gate-green-stays-green.md) | bug | open | soft: bug-negotiate-drift (**done** — re-review landed `04b9519`; the S1 `skipIf`/30s *contract* fix this spec pins is still outstanding) |
-| [bug-gate-verdict-field.md](bug-gate-verdict-field.md) | bug | open | hard: bug-gate-signal-integrity (**done** — `allPassed` semantics in place); sequence after bug-gate-green-stays-green (same fixture) |
-| [bug-gate-slow-settle-duplicate.md](bug-gate-slow-settle-duplicate.md) | bug | open | — (filed 2026-09-06: duplicate `agent_settled` while a gate run is in flight double-runs the gate; the `NO_GATE` sentinel is exported but never returned) |
-| [bug-baseline-flake.md](bug-baseline-flake.md) | bug | open | — |
-| [bug-loop-breaker-repetition-with-mutation.md](bug-loop-breaker-repetition-with-mutation.md) | bug | done (merged at `4aec55d`; file not yet renamed — rename to `done-` prefix) | hard: bug-confirm-approval (merged) |
-| [bug-fragile-event-handler-selection.md](bug-fragile-event-handler-selection.md) | bug | done (merged at `4aec55d`; file not yet renamed — rename to `done-` prefix) | — (test-only) |
-| [bug-negotiate-drift.md](bug-negotiate-drift.md) | bug | done (implemented — `executeNegotiateReReview` in `src/tools.ts` + `test/tools-negotiate-re-review.test.ts`; file not yet renamed) | — (observed in the bug-gate-signal-integrity run, 2026-08-18) |
-| [bug-gate-signal-integrity.md](done-bug-gate-signal-integrity.md) | bug | done (merged at `fc51a53`, branch `gate-coverage`) | — |
-| [refactor-state-model-divergence.md](done-refactor-state-model-divergence.md) | refactor | done (merged at `f987e0f`, branch `model-divergence`) | — |
-| [bug-negotiate-confirm-approval-loop.md](done-bug-negotiate-confirm-approval-loop.md) | bug | done (merged at `b9bd8db`) | — (observed in the refactor-state-model-divergence run, 2026-09-05; fixes a defect in bug-negotiate-drift's row 2) |
-| [bug-slow-gate-signal-tests.md](done-bug-slow-gate-signal-tests.md) | bug | done (resolved 2026-09-06 — hang gone under vitest 4.1.11; 85.71 fixture was a 2-column trap; 13 skips → 0) | — |
+| [bug-dispute-reload-evaporation.md](bug-dispute-reload-evaporation.md) | bug | **open** | hard: refactor-single-commit-point (**done** — `90e6f24`; satisfied). 6 dispute flags → 1 status object; 19 counted test flips. |
+| [bug-gate-green-stays-green.md](bug-gate-green-stays-green.md) | bug | **open** | soft: bug-negotiate-drift (**done**). `makeGoCwd` still writes no `main.go` (verified 2026-09-06) → the live-toolchain `green stays green` regression is unpassable by construction; fixture fix + mandatory dispute prompt outstanding. |
+| [bug-gate-slow-settle-duplicate.md](bug-gate-slow-settle-duplicate.md) | bug | **open** | — `NO_GATE` sentinel exported (`src/events/agent-settled/gate-transition.ts:36`) but never returned; the `gateInFlight` lock was never written (probe-confirmed double-run). |
+| [bug-gate-verdict-field.md](bug-gate-verdict-field.md) | bug | **open** | hard: bug-gate-signal-integrity (**done** — `allPassed` semantics in place). `fillTestResults` (`src/gates.ts:69-70`) still sets `tests` and `allPassed` to the same `green` value; two-field verdict cleanup pending. Sequence after bug-gate-green-stays-green (shares its fixture). |
+| [bug-baseline-flake.md](bug-baseline-flake.md) | bug | **open** | — `runBaseline` → `runBaselineTests` (`src/baseline.ts:53`) runs a **real** `execSync(go test …)` from a mock cwd (shared fixture + toolchain contention → transient red at loop start). Independent. |
+| [bug-phase-0-approval-dead-end.md](bug-phase-0-approval-dead-end.md) | bug | **open** | soft: refactor-single-commit-point (**done**). `cmdApprove` (`src/commands.ts:480`) dead-end; least dangerous (a human `/loop-approve` already works around it). |
+
+## Feature specs (not bug-specs)
+
+| Spec | Type | Status | Notes |
+|---|---|---|---|
+| [spec-command.md](spec-command.md) | feature | **done** (file not renamed) | `/spec` Author command — `src/spec-command.ts` (`cmdSpec`) registered at `index.ts:57`; `test/spec-command.test.ts` present. |
+| [log-bug-spec.md](log-bug-spec.md) | feature | **done** (file not renamed) | `/loop-debug --log-bug <name>` — arg parsing + `writeBugSpec` in `src/commands.ts:354-420`; `test/bug-spec.test.ts` + `test/extension.test.ts`. |
+| [ts-gate-coverage-provider.md](ts-gate-coverage-provider.md) | feature | **done** (file not renamed) | `hasVitestCoverageProvider` probe (`src/gates.ts:126`) + conditional `getTestCommand` (`:133`); `test/gates-provider-wiring.test.ts`. Java/jacoco named-reason row stays open (out of scope here). |
+| [golden-workspace-fix.md](golden-workspace-fix.md) | feature | **open** | derive workspace root from `specPath` + enforce it in gates/tool enforcement. No `workspaceRoot`/`getWorkspaceRoot`/`isWorkspacePath` in `src/` (verified 2026-09-06). |
+| [writer-dispute-concede.md](writer-dispute-concede.md) | feature | **open** | `handleBDisputePropose` (`src/tools.ts:224`) still treats every `negotiate_propose` in Phase B as a new dispute — no Writer-concede branch. (Distinct from the Tester-concede path in spec 09.) |
+| [spec-archive-rename-failure-test.md](spec-archive-rename-failure-test.md) | test | **open** | backfill regression: `archiveSpecFile` rename-failure → `null`. `test/spec-archive.test.ts:125` documents the gap; no unit test exercises the throwing-rename path. |
+
+## Reference / non-implementable
+
+| File | Kind | Note |
+|---|---|---|
+| [vitest5-upgrade.md](vitest5-upgrade.md) | reference doc | Vitest 5.0 migration guide (vendored), **not** a loop spec. Installed vitest is **4.1.11** (verified 2026-09-06) — a real upgrade would be its own spec. |
+
+## Done
+
+| Spec | Type | Status |
+|---|---|---|
+| [done-refactor-single-commit-point.md](done-refactor-single-commit-point.md) | refactor | **done** (merged `90e6f24`) — dispatcher commits once per settle (end of `handlePhaseSettled`) + escalated at production; S2 turn counter, negotiate settle, gate settle all persist. |
+| [done-bug-negotiate-settle-not-persisted.md](done-bug-negotiate-settle-not-persisted.md) | bug | **done** (subsumed by `90e6f24`) — negotiate settle commits the advanced round + cleared markers; regression `test/negotiate-persist.test.ts` (5 reload rows, red-verified). |
+| [08-clear-dispute-flags.md](08-clear-dispute-flags.md) | bug | **done** (file not renamed) — all state builders + direct-mutation sites now clear `awaitDisputeFix`/`awaitDisputeReview` at every phase boundary (`src/transitions.ts:285-327`); regression `test/extension.test.ts:1764` (sites 6-11). Verified 2026-09-06. |
+| [09-wire-dispute-review.md](09-wire-dispute-review.md) | bug | **done** (file not renamed) — `handleDisputeReview` (`src/events/agent-settled/dispute.ts:43`) schedules the reviewer turn (Table 1), returns `handled:true`; `handleDisputeDefend`/`handleWriterConcedeFix` (Table 3); retired `applyRetryEffect` dispute branch + `GP.promptWriterDispute` + `sendContextMessage` all deleted (verified 2026-09-06). |
+| [10-report-loop-completion.md](10-report-loop-completion.md) | bug | **done** (file not renamed) — `applyDoneEffect` → `reportDone` (`src/events/agent-settled/effect-applicator.ts:144`) sends `GP.promptLoopComplete` in-transcript (`sendUserMessage`, `triggerTurn`); pinned `test/events/agent-settled/effect-applicator.test.ts:190`. Verified 2026-09-06. |
+| [bug-negotiate-drift.md](bug-negotiate-drift.md) | bug | **done** (file not renamed) — `executeNegotiateReReview` in `src/tools.ts` + `test/tools-negotiate-re-review.test.ts`. |
+| [bug-loop-breaker-repetition-with-mutation.md](bug-loop-breaker-repetition-with-mutation.md) | bug | **done** (merged `4aec55d`; file not renamed) — skeleton keying in `src/events/tool-call/index.ts`; regression `test/events/tool-call-breaker.test.ts`. |
+| [bug-fragile-event-handler-selection.md](bug-fragile-event-handler-selection.md) | bug | **done** (merged `4aec55d`; file not renamed) — `findEventHandler` predicate; test-only. |
+| [done-bug-gate-signal-integrity.md](done-bug-gate-signal-integrity.md) | bug | **done** (merged `fc51a53`, branch `gate-coverage`). |
+| [done-refactor-state-model-divergence.md](done-refactor-state-model-divergence.md) | refactor | **done** (merged `f987e0f`, branch `model-divergence`). |
+| [done-bug-negotiate-confirm-approval-loop.md](done-bug-negotiate-confirm-approval-loop.md) | bug | **done** (merged `b9bd8db`) — fixes a defect in bug-negotiate-drift's row 2. |
+| [done-bug-slow-gate-signal-tests.md](done-bug-slow-gate-signal-tests.md) | bug | **done** (resolved 2026-09-06 — hang gone under vitest 4.1.11; 85.71 fixture was a 2-column trap; 13 skips → 0). |
 
 ## Recommended order of operation
 
-1. **bug-dispute-reload-evaporation** — the largest single rewrite (6 flags → 1 status object, 19 counted test flips). Its hard dependency (refactor-single-commit-point) is done (`90e6f24`); the dispute handlers already commit via `persistState`, so this is now a state-model consolidation, not a new commit point.
-2. **bug-gate-green-stays-green** — fixture fix (main.go in makeGoCwd) + mandatory dispute prompt; unblocked by bug-gate-signal-integrity.
-3. **bug-gate-slow-settle-duplicate** — missing `gateInFlight` lock; two concurrent settles both run the gate (probe-confirmed).
-4. **bug-gate-green-stays-green** — the `green stays green` regression test is unpassable by construction (test-only Go module → `go build` fails → early return; S1 passes for the wrong reason). The 2026-09-06 probe confirmed the *fix* works (buildable fixture → green passes, S1 red via the test step); the contract-side fixes (fixture, mandatory-dispute prompt line, B-phase dispute flow) are unimplemented. Lands the live-toolchain regression tests that `bug-slow-gate-signal-tests` moved out of the default suite.
-5. **bug-gate-slow-settle-duplicate** — small, self-contained, safety: a duplicate settle while a gate run is in flight double-runs the gate and double-prompts. No dependency; can land any time.
-6. **bug-phase-0-approval-dead-end** — fully independent; can land any time. Least dangerous (no wrong *progress* — a confusing dead-end a human `/loop-approve` already works around).
-7. **bug-gate-verdict-field** — cleanup of the two-field verdict (`tests` + `allPassed`, same value); sequence after #4 (shares its fixture).
-8. **bug-baseline-flake** — `runBaseline()` runs a real `go test` from a mock cwd (shared fixture + toolchain contention → transient red at loop start); daily friction, independent.
+1. **bug-dispute-reload-evaporation** — the largest single rewrite (6 flags → 1 status object, 19 counted test flips). Hard dependency done (`90e6f24`); dispute handlers already commit via `persistState`, so this is a state-model consolidation, not a new commit point.
+2. **bug-gate-slow-settle-duplicate** — small, self-contained, safety: a duplicate settle while a gate run is in flight double-runs the gate and double-prompts. `NO_GATE` is exported but never returned; the `gateInFlight` lock is missing. No dependency; can land any time.
+3. **bug-gate-green-stays-green** — fixture fix (`main.go` in `makeGoCwd`) + mandatory dispute prompt; lands the live-toolchain regression `bug-slow-gate-signal-tests` moved out of the default suite.
+4. **bug-gate-verdict-field** — cleanup of the two-field verdict (`tests` + `allPassed`, same value, `src/gates.ts:69-70`); sequence after #3 (shares its fixture).
+5. **bug-baseline-flake** — `runBaseline` runs a real `go test` from a mock cwd (shared fixture + toolchain contention → transient red at loop start); daily friction, independent.
+6. **bug-phase-0-approval-dead-end** — fully independent; least dangerous (a confusing dead-end a human `/loop-approve` already works around).
+7. **writer-dispute-concede** — feature: Writer-accepts-test branch in `handleBDisputePropose` (distinct from the Tester-concede path spec 09 already wired).
+8. **golden-workspace-fix** — feature: derive + enforce a workspace root from `specPath`; larger blast radius (gates + tool enforcement + prompts).
+9. **spec-archive-rename-failure-test** — test-only backfill; small, independent.
 
-**What is deliberately NOT in this batch:** the `--skip-review` flag (dead end — removed from docs, not implemented), metrics (dead — deleted), and the `done`-phase display polish.
+**Deliberately NOT in the batch:** the `--skip-review` flag (dead end — removed from docs, not implemented), metrics (dead — deleted), the `done`-phase display polish, and the Vitest 5 upgrade (reference doc only; installed vitest is 4.1.11).
 
 ## Corrections applied 2026-09-06 (index was stale)
 
-- `bug-gate-signal-integrity` was listed `open` but is **done** (merged `fc51a53`); its dependents (`refactor-single-commit-point`, `bug-negotiate-settle-not-persisted`, `bug-dispute-reload-evaporation`, `bug-gate-verdict-field`) unblocked accordingly.
-- `refactor-state-model-divergence` was listed `open` but is **done** (merged `f987e0f`; file already `done-`-prefixed).
-- `bug-negotiate-drift` was listed `open` but is **done** (`executeNegotiateReReview` in `src/tools.ts`, `test/tools-negotiate-re-review.test.ts` present) — file rename pending.
-- `bug-loop-breaker-repetition-with-mutation` + `bug-fragile-event-handler-selection` were listed `open` but are **done** (merged `4aec55d`) — file renames pending.
-- `bug-slow-gate-signal-tests` was listed `open` with 13 skipped tests; **resolved** (hang gone under vitest 4.1.11, fixture trap fixed, all skips re-enabled; 1165 passed / 0 skipped / 8.6s).
-- New: `bug-gate-slow-settle-duplicate` (filed 2026-09-06 from the gate-signal-integrity verification: the `NO_GATE` duplicate-settle lock the contract file promised was never written — reproduced with a concurrent-settle probe).
+**Verified-done, previously listed open/inconsistent:**
+- `08-clear-dispute-flags`, `09-wire-dispute-review`, `10-report-loop-completion` were listed **open** but are **done** — verified against the live tree (state builders clear both flags at every boundary; `handleDisputeReview` schedules the reviewer turn + Tables 3 wired + retired branch/prompts deleted; `reportDone` sends `promptLoopComplete` in-transcript). Files not yet renamed to `done-` prefix.
+- `spec-command`, `log-bug-spec`, `ts-gate-coverage-provider` were **missing from the index entirely** — verified done (`cmdSpec` registered `index.ts:57`; `/loop-debug --log-bug` in `src/commands.ts`; `hasVitestCoverageProvider` probe + conditional `getTestCommand`).
+- `bug-negotiate-drift`, `bug-loop-breaker-repetition-with-mutation`, `bug-fragile-event-handler-selection` were listed **open** but are **done** (files not renamed).
+
+**Added to the index (were untracked):**
+- `golden-workspace-fix` (open), `writer-dispute-concede` (open), `spec-archive-rename-failure-test` (open), `vitest5-upgrade` (reference doc, not a loop spec).
+
+**Confirmed still open (re-verified against the live tree):**
+- `bug-gate-green-stays-green` — `makeGoCwd` writes no `main.go` (still unpassable by construction).
+- `bug-gate-slow-settle-duplicate` — `NO_GATE` exported but never returned; no `gateInFlight` lock.
+- `bug-gate-verdict-field` — `tests` and `allPassed` both set to the same `green` (`src/gates.ts:69-70`).
+- `bug-baseline-flake` — `runBaselineTests` runs a real `execSync(go test …)`.
+- `bug-dispute-reload-evaporation` — hard dependency satisfied (`90e6f24`); now the top priority.
+
+**Prior corrections (kept):** `bug-gate-signal-integrity` done (`fc51a53`); `refactor-state-model-divergence` done (`f987e0f`); `bug-slow-gate-signal-tests` resolved (13 skips → 0); `bug-gate-slow-settle-duplicate` filed 2026-09-06.
