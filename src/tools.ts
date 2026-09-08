@@ -167,7 +167,7 @@ export function negotiatePropose(
   return {
     name: "negotiate_propose",
     label: "Propose Implementation",
-    description: "Propose an implementation approach or dispute a test.",
+    description: "Propose an implementation approach, dispute a test, or concede with 'agree'.",
     parameters: {
       type: "object",
       properties: {
@@ -221,6 +221,30 @@ function handleNegotiatePropose(
   return executeNegotiateProposal(state, pi, debug);
 }
 
+/**
+ * writer-dispute-concede: a Phase B Writer proposal is a concession iff it is
+ * lexically "agree" (any case, trimmed). Exact match — "agreed" or "I agree"
+ * still file a dispute. Pinned separately from isApproval so a future
+ * isApproval widening does not silently change dispute semantics.
+ */
+function isConcession(plan: string): boolean {
+  return plan.trim().toLowerCase() === "agree";
+}
+
+function executeWriterConcedeDispute(
+  state: StateRef,
+  pi: ExtensionAPI,
+  debug: Debug,
+): ToolResult {
+  debug("Writer conceded — dispute closed");
+  state.current.dispute = { status: "closed" };
+  state.current.negotiateFeedback = "";
+  persistState(state, pi, debug);
+  return {
+    content: [{ text: "Dispute closed. The tests stand. Continue Phase B; the gate runs when your turn ends." }],
+  };
+}
+
 function handleBDisputePropose(
   state: StateRef,
   pi: ExtensionAPI,
@@ -228,6 +252,12 @@ function handleBDisputePropose(
   ctx: ToolCtx,
   plan: string,
 ): ToolResult {
+  // writer-dispute-concede: a concession is checked BEFORE any dispute
+  // mutation or budget consumption — it closes the dispute in-turn.
+  if (isConcession(plan)) {
+    return executeWriterConcedeDispute(state, pi, debug);
+  }
+
   // S1: the budget is consumed at RESOLUTION (handleBDisputeReview), not at
   // filing — a filed-but-lost dispute no longer burns budget.
   const filer = state.current.dispute?.filer ?? "writer";

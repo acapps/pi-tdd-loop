@@ -80,6 +80,7 @@ When done, stop producing tool calls.`,
 
 Read *.test.ts and *.ts stubs. Implement the logic. Preserve stub signatures.
 Dispute wrong tests via negotiate_propose.
+Concede with negotiate_propose("agree") if the test is correct and your code is wrong.
 
 ${CONVENTIONS}
 
@@ -91,6 +92,7 @@ When done, stop producing tool calls.`,
 ${failureSummary}
 
 Do not modify *.test.ts. Dispute wrong tests via negotiate_propose.
+Concede with negotiate_propose("agree") if the test is correct and your code is wrong.
 When done, stop producing tool calls.`,
 
     promptCleanerPhaseC: () =>

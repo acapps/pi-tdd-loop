@@ -169,6 +169,44 @@ describe("Phase B prompts (Go)", () => {
     expect(prompt).toContain("Phase B");
     expect(prompt).toContain("Write Go source files");
   });
+
+  it("promptWriterPhaseB mentions concede with negotiate_propose('agree')", () => {
+    const prompt = prompts.promptWriterPhaseB();
+    expect(prompt).toContain('Concede with negotiate_propose("agree")');
+  });
+
+  it("promptWriterPhaseBContinue mentions concede with negotiate_propose('agree')", () => {
+    const prompt = prompts.promptWriterPhaseBContinue("fail 1", 1);
+    expect(prompt).toContain('Concede with negotiate_propose("agree")');
+  });
+});
+
+describe("Phase B prompts (Java) — concede line", () => {
+  const prompts = getLanguageConfig("java").prompts;
+
+  it("promptWriterPhaseB mentions concede", () => {
+    const prompt = prompts.promptWriterPhaseB();
+    expect(prompt).toContain('Concede with negotiate_propose("agree")');
+  });
+
+  it("promptWriterPhaseBContinue mentions concede", () => {
+    const prompt = prompts.promptWriterPhaseBContinue("fail 1", 1);
+    expect(prompt).toContain('Concede with negotiate_propose("agree")');
+  });
+});
+
+describe("Phase B prompts (TypeScript) — concede line", () => {
+  const prompts = getLanguageConfig("typescript").prompts;
+
+  it("promptWriterPhaseB mentions concede", () => {
+    const prompt = prompts.promptWriterPhaseB();
+    expect(prompt).toContain('Concede with negotiate_propose("agree")');
+  });
+
+  it("promptWriterPhaseBContinue mentions concede", () => {
+    const prompt = prompts.promptWriterPhaseBContinue("fail 1", 1);
+    expect(prompt).toContain('Concede with negotiate_propose("agree")');
+  });
 });
 
 describe("Phase B dispute prompts", () => {

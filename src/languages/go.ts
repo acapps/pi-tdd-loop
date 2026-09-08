@@ -77,6 +77,7 @@ When done, stop producing tool calls.`,
 
 Read *_test.go and *.go stubs. Implement the logic. Preserve stub signatures.
 Dispute wrong tests via negotiate_propose.
+Concede with negotiate_propose("agree") if the test is correct and your code is wrong.
 
 ${CONVENTIONS}
 
@@ -88,6 +89,7 @@ When done, stop producing tool calls.`,
 ${failureSummary}
 
 Do not modify *_test.go. Dispute wrong tests via negotiate_propose.
+Concede with negotiate_propose("agree") if the test is correct and your code is wrong.
 When done, stop producing tool calls.`,
 
     promptCleanerPhaseC: () =>

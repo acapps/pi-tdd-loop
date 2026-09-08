@@ -930,6 +930,115 @@ describe("negotiate_propose tool", () => {
     expect(disputeEntries[0].data.disputeCount).toBe(0); // budget consumed at resolution, not filing
     expect(disputeEntries[0].data.filer).toBe("writer"); // disputeMode false → Writer filed
   });
+
+  // --- writer-dispute-concede: "agree" is a concession, not a filing ---
+
+  it("Phase B 'agree' → concession: dispute closed, no count, no entry", async () => {
+    const restartHandler = findCommand(api, "loop-restart");
+    await restartHandler("B", api._mockCtx);
+
+    // File a dispute first so there is something to concede.
+    const tool = findTool(api, "negotiate_propose");
+    await tool.execute("call-1", { plan: "Test X is wrong" }, undefined, undefined, api._mockExecCtx);
+
+    // Now concede.
+    const result = await tool.execute("call-2", { plan: "agree" }, undefined, undefined, api._mockExecCtx);
+
+    expect(result.content[0].text).toBe("Dispute closed. The tests stand. Continue Phase B; the gate runs when your turn ends.");
+
+    const stateEntries = api.appendedEntries.filter((e: any) => e.customType === "loop-state");
+    const lastState = stateEntries[stateEntries.length - 1]?.data;
+    expect(lastState?.dispute?.status).toBe("closed");
+
+    // No new loop-dispute entry for the concession (only the original filing).
+    const disputeEntries = api.appendedEntries.filter((e: any) => e.customType === "loop-dispute");
+    expect(disputeEntries).toHaveLength(1);
+    expect(disputeEntries[0].data.claim).toBe("Test X is wrong");
+  });
+
+  it("Phase B '  AGREE  ' → concession (trimmed + case-insensitive)", async () => {
+    const restartHandler = findCommand(api, "loop-restart");
+    await restartHandler("B", api._mockCtx);
+
+    const tool = findTool(api, "negotiate_propose");
+    const result = await tool.execute("call-1", { plan: "  AGREE  " }, undefined, undefined, api._mockExecCtx);
+
+    expect(result.content[0].text).toBe("Dispute closed. The tests stand. Continue Phase B; the gate runs when your turn ends.");
+
+    const stateEntries = api.appendedEntries.filter((e: any) => e.customType === "loop-state");
+    const lastState = stateEntries[stateEntries.length - 1]?.data;
+    expect(lastState?.dispute?.status).toBe("closed");
+  });
+
+  it("Phase B 'agreed' → files a dispute (exact-match predicate)", async () => {
+    const restartHandler = findCommand(api, "loop-restart");
+    await restartHandler("B", api._mockCtx);
+
+    const tool = findTool(api, "negotiate_propose");
+    const result = await tool.execute("call-1", { plan: "agreed" }, undefined, undefined, api._mockExecCtx);
+
+    expect(result.content[0].text).toBe("Dispute filed. STOP producing tool calls. The review is requested when your turn ends.");
+
+    const stateEntries = api.appendedEntries.filter((e: any) => e.customType === "loop-state");
+    const lastState = stateEntries[stateEntries.length - 1]?.data;
+    expect(lastState?.dispute?.status).toBe("filed");
+    expect(lastState?.dispute?.claim).toBe("agreed");
+  });
+
+  it("Phase B 'I agree with the tests' → files a dispute", async () => {
+    const restartHandler = findCommand(api, "loop-restart");
+    await restartHandler("B", api._mockCtx);
+
+    const tool = findTool(api, "negotiate_propose");
+    const result = await tool.execute("call-1", { plan: "I agree with the tests" }, undefined, undefined, api._mockExecCtx);
+
+    expect(result.content[0].text).toBe("Dispute filed. STOP producing tool calls. The review is requested when your turn ends.");
+
+    const stateEntries = api.appendedEntries.filter((e: any) => e.customType === "loop-state");
+    const lastState = stateEntries[stateEntries.length - 1]?.data;
+    expect(lastState?.dispute?.status).toBe("filed");
+    expect(lastState?.dispute?.claim).toBe("I agree with the tests");
+  });
+
+  it("concession does not trip the maxDispute limit", async () => {
+    const restartHandler = findCommand(api, "loop-restart");
+    await restartHandler("B", api._mockCtx);
+
+    // File maxDispute-1 disputes (default maxDispute=3, so 2 disputes).
+    const tool = findTool(api, "negotiate_propose");
+    await tool.execute("call-1", { plan: "Dispute 1" }, undefined, undefined, api._mockExecCtx);
+    await tool.execute("call-2", { plan: "Dispute 2" }, undefined, undefined, api._mockExecCtx);
+
+    // Concede — should NOT escalate.
+    const result = await tool.execute("call-3", { plan: "agree" }, undefined, undefined, api._mockExecCtx);
+    expect(result.content[0].text).toBe("Dispute closed. The tests stand. Continue Phase B; the gate runs when your turn ends.");
+
+    const stateEntries = api.appendedEntries.filter((e: any) => e.customType === "loop-state");
+    const lastState = stateEntries[stateEntries.length - 1]?.data;
+    expect(lastState?.phase).toBe("B");
+    expect(lastState?.dispute?.status).toBe("closed");
+  });
+
+  it("filing still escalates at the maxDispute limit", async () => {
+    const restartHandler = findCommand(api, "loop-restart");
+    await restartHandler("B", api._mockCtx);
+
+    // File maxDispute-1 disputes (default maxDispute=3, so 2 disputes).
+    const tool = findTool(api, "negotiate_propose");
+    await tool.execute("call-1", { plan: "Dispute 1" }, undefined, undefined, api._mockExecCtx);
+    await tool.execute("call-2", { plan: "Dispute 2" }, undefined, undefined, api._mockExecCtx);
+
+    // File one more — should escalate at resolution, not filing.
+    // (The escalation happens in handleBDisputeReview, not handleBDisputePropose,
+    // so the 3rd filing just files. We verify the filing path is unchanged.)
+    const result = await tool.execute("call-3", { plan: "Dispute 3" }, undefined, undefined, api._mockExecCtx);
+    expect(result.content[0].text).toBe("Dispute filed. STOP producing tool calls. The review is requested when your turn ends.");
+
+    const stateEntries = api.appendedEntries.filter((e: any) => e.customType === "loop-state");
+    const lastState = stateEntries[stateEntries.length - 1]?.data;
+    expect(lastState?.phase).toBe("B");
+    expect(lastState?.dispute?.status).toBe("filed");
+  });
 });
 
 // ================================================================
@@ -1115,11 +1224,13 @@ describe("negotiate_review tool", () => {
     const restartHandler = findCommand(api, "loop-restart");
     await restartHandler("B", api._mockCtx);
 
-    // Enter the dispute-fix window (Tester-filed direction requires disputeMode).
+    // File a dispute (writer-filed by default; the review approve triggers the
+    // tester-fix flow which exercises the same code path as the old
+    // tester-filed direction).
     const proposeTool = findTool(api, "negotiate_propose");
     await proposeTool.execute(
       "call-1",
-      { plan: "agree" }, // negotiate phase? no — Phase B: this files a dispute
+      { plan: "Test X is wrong" },
       undefined,
       undefined,
       api._mockExecCtx

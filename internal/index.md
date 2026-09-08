@@ -23,7 +23,7 @@ Conventions for specs in this directory: [docs/spec-authoring.md](../docs/spec-a
 | [log-bug-spec.md](log-bug-spec.md) | feature | **done** (file not renamed) | `/loop-debug --log-bug <name>` — arg parsing + `writeBugSpec` in `src/commands.ts:354-420`; `test/bug-spec.test.ts` + `test/extension.test.ts`. |
 | [ts-gate-coverage-provider.md](ts-gate-coverage-provider.md) | feature | **done** (file not renamed) | `hasVitestCoverageProvider` probe (`src/gates.ts:126`) + conditional `getTestCommand` (`:133`); `test/gates-provider-wiring.test.ts`. Java/jacoco named-reason row stays open (out of scope here). |
 | [golden-workspace-fix.md](golden-workspace-fix.md) | feature | **open** | derive workspace root from `specPath` + enforce it in gates/tool enforcement. No `workspaceRoot`/`getWorkspaceRoot`/`isWorkspacePath` in `src/` (verified 2026-09-06). |
-| [writer-dispute-concede.md](writer-dispute-concede.md) | feature | **open** | `handleBDisputePropose` (`src/tools.ts:224`) still treats every `negotiate_propose` in Phase B as a new dispute — no Writer-concede branch. (Distinct from the Tester-concede path in spec 09.) |
+| [writer-dispute-concede.md](done-writer-dispute-concede.md) | feature | **done** (merged 2026-09-06) — `isConcession` + `executeWriterConcedeDispute` in `src/tools.ts`; Phase B `negotiate_propose("agree")` is a concession (closes dispute, no count, no entry); 6 prompt lines added (3 languages × 2 prompts); 7 new tests in `test/extension.test.ts` + 6 prompt pins in `test/prompts.test.ts`. |
 | [spec-archive-rename-failure-test.md](spec-archive-rename-failure-test.md) | test | **open** | backfill regression: `archiveSpecFile` rename-failure → `null`. `test/spec-archive.test.ts:125` documents the gap; no unit test exercises the throwing-rename path. |
 
 ## Reference / non-implementable
@@ -52,14 +52,14 @@ Conventions for specs in this directory: [docs/spec-authoring.md](../docs/spec-a
 | [done-bug-dispute-reload-evaporation.md](done-bug-dispute-reload-evaporation.md) | bug | **done** (2026-09-06) — 6 dispute flags → 1 `DisputeState` status object; `migrateDispute` in session-start; `clearTransientFlags` no longer touches dispute; budget at resolution not filing; 4 handlers rewritten; 19+ test flips across 8 files; 1170 tests passing. |
 | [done-bug-gate-green-stays-green.md](done-bug-gate-green-stays-green.md) | bug | **done** (2026-09-06) — `makeGoCwd` fixture now writes `main.go` (buildable Go module); Writer prompt mandates `negotiate_propose` exit path for unpassable tests; "green stays green" live-toolchain regression added to `test/gate-signal-integrity.test.ts`. |
 | [done-bug-gate-verdict-field.md](done-bug-gate-verdict-field.md) | bug | **done** (2026-09-06) — `GateResult.tests` deleted; `allPassed` is the single verdict field; 11 src files + 28 test files updated; T4 regression red-verified. |
+| [done-writer-dispute-concede.md](done-writer-dispute-concede.md) | feature | **done** (2026-09-06) — Phase B `negotiate_propose("agree")` is a concession (closes dispute, no count, no entry); `isConcession` + `executeWriterConcedeDispute` in `src/tools.ts`; 6 prompt lines added; 7 new tests + 6 prompt pins. |
 
 ## Recommended order of operation
 
 1. **bug-baseline-flake** — `runBaseline` runs a real `go test` from a mock cwd (shared fixture + toolchain contention → transient red at loop start); daily friction, independent.
 2. **bug-phase-0-approval-dead-end** — fully independent; least dangerous (a confusing dead-end a human `/loop-approve` already works around).
-3. **writer-dispute-concede** — feature: Writer-accepts-test branch in `handleBDisputePropose` (distinct from the Tester-concede path spec 09 already wired).
-4. **golden-workspace-fix** — feature: derive + enforce a workspace root from `specPath`; larger blast radius (gates + tool enforcement + prompts).
-5. **spec-archive-rename-failure-test** — test-only backfill; small, independent.
+3. **golden-workspace-fix** — feature: derive + enforce a workspace root from `specPath`; larger blast radius (gates + tool enforcement + prompts).
+4. **spec-archive-rename-failure-test** — test-only backfill; small, independent.
 
 **Deliberately NOT in the batch:** the `--skip-review` flag (dead end — removed from docs, not implemented), metrics (dead — deleted), the `done`-phase display polish, and the Vitest 5 upgrade (reference doc only; installed vitest is 4.1.11).
 
