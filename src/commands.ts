@@ -66,6 +66,10 @@ function buildRestartPrompt(state: LoopState, specPath: string): string {
     case "negotiate": return GP.promptWriterNegotiate(specPath, lang.testFilePattern);
     case "B": return lang.prompts.promptWriterPhaseB();
     case "C": return lang.prompts.promptCleanerRestart();
+    case "review": return `Phase 0: Spec review. Use negotiate_propose to approve or provide feedback.`;
+    case "done": return `Phase done. Loop complete.`;
+    case "escalated": return `Phase escalated. Awaiting human intervention.`;
+    case "idle": return `Phase idle. Run /loop to start.`;
     default: return "";
   }
 }
@@ -84,7 +88,7 @@ function resetPhaseState(state: LoopState): void {
 
 function resolvePhaseArg(raw: string): Phase {
   const target = raw.trim().toLowerCase();
-  if (!["a", "negotiate", "b", "c"].includes(target)) {
+  if (!["review", "a", "negotiate", "b", "c", "done", "escalated", "idle"].includes(target)) {
     throw new Error("Invalid phase");
   }
   return target === "negotiate" ? "negotiate" : (target.toUpperCase() as Phase);

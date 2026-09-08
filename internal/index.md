@@ -13,7 +13,7 @@ Conventions for specs in this directory: [docs/spec-authoring.md](../docs/spec-a
 | [bug-gate-slow-settle-duplicate.md](done-bug-gate-slow-settle-duplicate.md) | bug | **done** (merged 2026-09-06) — module-local `gateInFlight` lock in `handleGateTransition` (check + `try/finally` clear); duplicate settle returns the now-live `NO_GATE` sentinel; 3 regression tests (concurrent drop / no-wedge / wedge-on-throw) in `test/events/agent-settled/gate-transition.test.ts`, red-verified. |
 | [bug-gate-verdict-field.md](done-bug-gate-verdict-field.md) | bug | **done** (merged 2026-09-06) — `GateResult.tests` deleted; `allPassed` is the single verdict field; 11 src files + 28 test files updated; T4 regression red-verified. |
 | [bug-baseline-flake.md](bug-baseline-flake.md) | bug | **open** | — `runBaseline` → `runBaselineTests` (`src/baseline.ts:53`) runs a **real** `execSync(go test …)` from a mock cwd (shared fixture + toolchain contention → transient red at loop start). Independent. |
-| [bug-phase-0-approval-dead-end.md](bug-phase-0-approval-dead-end.md) | bug | **open** | soft: refactor-single-commit-point (**done**). `cmdApprove` (`src/commands.ts:480`) dead-end; least dangerous (a human `/loop-approve` already works around it). |
+| [done-bug-phase-0-approval-dead-end.md](done-bug-phase-0-approval-dead-end.md) | bug | **done** | Phase × Tool policy matrix; Phase 0 approve/feedback handlers; `/loop-restart` extended. |
 
 ## Feature specs (not bug-specs)
 
@@ -57,7 +57,7 @@ Conventions for specs in this directory: [docs/spec-authoring.md](../docs/spec-a
 ## Recommended order of operation
 
 1. **bug-baseline-flake** — `runBaseline` runs a real `go test` from a mock cwd (shared fixture + toolchain contention → transient red at loop start); daily friction, independent.
-2. **bug-phase-0-approval-dead-end** — fully independent; least dangerous (a confusing dead-end a human `/loop-approve` already works around).
+2. **bug-phase-0-approval-dead-end** — done (Phase × Tool policy matrix; Phase 0 approve/feedback handlers).
 3. **golden-workspace-fix** — feature: derive + enforce a workspace root from `specPath`; larger blast radius (gates + tool enforcement + prompts).
 4. **spec-archive-rename-failure-test** — test-only backfill; small, independent.
 

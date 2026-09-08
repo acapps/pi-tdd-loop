@@ -157,6 +157,95 @@ function applyTransitionEffect(
   ctx.ui.setStatus("loop", "status" in effect ? effect.status : "Phase B — round 1");
 }
 
+// --- Phase × Tool policy (bug-phase-0-approval-dead-end) ---
+//
+// The (phase × tool) matrix is a closed, exhaustive policy at the type level:
+// a new Phase without a policy row is a compile error.
+
+type ProposePolicy = "phase0" | "negotiate" | "dispute" | "reject";
+type ReviewPolicy = "phase0" | "negotiate" | "dispute" | "reject";
+
+const PROPOSE_POLICY: Record<Phase, ProposePolicy> = {
+  review: "phase0", negotiate: "negotiate", B: "dispute",
+  A: "reject", C: "reject", done: "reject", escalated: "reject", idle: "reject",
+};
+const REVIEW_POLICY: Record<Phase, ReviewPolicy> = {
+  review: "phase0", negotiate: "negotiate", B: "dispute",
+  A: "reject", C: "reject", done: "reject", escalated: "reject", idle: "reject",
+};
+
+const PROPOSE_REJECT_TEXT = "negotiate_propose is not available in this phase.";
+const REVIEW_REJECT_TEXT = "negotiate_review is not available in this phase.";
+
+// --- Phase 0 handlers (bug-phase-0-approval-dead-end) ---
+
+/**
+ * Phase 0 approve: the same transition as cmdApprove (src/commands.ts).
+ * "Same transition, two entry points" — the agent's negotiate_propose("approve")
+ * and the human's /loop-approve perform identical field writes.
+ */
+function executePhase0Approve(
+  state: StateRef,
+  pi: ExtensionAPI,
+  ctx: ToolCtx,
+  debug: Debug,
+): ToolResult {
+  debug("Phase 0 approve → Phase A, round 1");
+  state.current.phase = "A";
+  state.current.round = 1;
+  state.current.awaitingReview = false;
+  state.current.turnsThisPhase = 1;
+
+  const lang = getLanguageConfig(state.current.language);
+  ctx.ui.notify("Spec review approved. Phase A: Tester writes contract.", "info");
+  ctx.ui.setStatus("loop", "Phase A — round 1");
+  persistState(state, pi, debug);
+
+  pi.sendUserMessage(
+    lang.prompts.promptTesterPhaseA(state.current.specPath, state.current.buildTool),
+    { triggerTurn: true },
+  );
+  return { content: [{ text: "Proposal recorded. Moving to Phase A." }] };
+}
+
+/**
+ * Phase 0 feedback: record the plan as review feedback. Does NOT auto-reloop
+ * Phase 0 — a human decides via /loop-approve or /loop-continue.
+ */
+function executePhase0Feedback(
+  state: StateRef,
+  pi: ExtensionAPI,
+  ctx: ToolCtx,
+  debug: Debug,
+  plan: string,
+): ToolResult {
+  debug(`Phase 0 feedback: ${plan.slice(0, 60)}`);
+  state.current.lastProposal = plan;
+  persistState(state, pi, debug);
+  ctx.ui.notify("Phase 0: feedback recorded. The review continues — refine the spec or re-run /loop.", "info");
+  return { content: [{ text: "Feedback recorded. The review continues." }] };
+}
+
+/**
+ * Reject: the tool is not available in this phase. No state mutation of any
+ * kind — in particular lastProposal is NOT written (the poisoning fix).
+ */
+function executeReject(
+  state: StateRef,
+  pi: ExtensionAPI,
+  debug: Debug,
+  toolName: string,
+  text: string,
+): ToolResult {
+  debug(`${toolName} rejected in phase ${state.current.phase}`);
+  pi.appendEntry("loop-refusal", {
+    phase: state.current.phase,
+    tool: toolName,
+    reason: "not-available-in-phase",
+  });
+  return { content: [{ text }] };
+}
+
 // --- negotiate_propose ---
 
 export function negotiatePropose(
@@ -194,15 +283,21 @@ function handlePropose(
   const phase = state.current.phase as Phase;
   debug(`negotiate_propose: plan=${plan.slice(0, 80)}... phase=${phase}`);
 
-  state.current.lastProposal = plan;
-
-  if (isNegotiatePhase(phase)) {
-    return handleNegotiatePropose(state, pi, debug, ctx, plan);
+  switch (PROPOSE_POLICY[phase]) {
+    case "negotiate":
+      state.current.lastProposal = plan;
+      return handleNegotiatePropose(state, pi, debug, ctx, plan);
+    case "dispute":
+      state.current.lastProposal = plan;
+      return handleBDisputePropose(state, pi, debug, ctx, plan);
+    case "phase0":
+      if (plan === "approve") {
+        return executePhase0Approve(state, pi, ctx, debug);
+      }
+      return executePhase0Feedback(state, pi, ctx, debug, plan);
+    case "reject":
+      return executeReject(state, pi, debug, "negotiate_propose", PROPOSE_REJECT_TEXT);
   }
-  if (isPhaseB(phase)) {
-    return handleBDisputePropose(state, pi, debug, ctx, plan);
-  }
-  return buildProposeResult();
 }
 
 function handleNegotiatePropose(
@@ -342,13 +437,19 @@ function handleReview(
   const phase = state.current.phase as Phase;
   debug(`negotiate_review: decision=${decision.slice(0, 80)}... phase=${phase}`);
 
-  if (isNegotiatePhase(phase)) {
-    return handleNegotiateReview(state, pi, debug, ctx, decision);
+  switch (REVIEW_POLICY[phase]) {
+    case "negotiate":
+      return handleNegotiateReview(state, pi, debug, ctx, decision);
+    case "dispute":
+      return handleBDisputeReview(state, pi, debug, ctx, decision);
+    case "phase0":
+      if (isApproval(decision)) {
+        return executePhase0Approve(state, pi, ctx, debug);
+      }
+      return executePhase0Feedback(state, pi, ctx, debug, decision);
+    case "reject":
+      return executeReject(state, pi, debug, "negotiate_review", REVIEW_REJECT_TEXT);
   }
-  if (isPhaseB(phase)) {
-    return handleBDisputeReview(state, pi, debug, ctx, decision);
-  }
-  return buildReviewResult(phase, decision);
 }
 
 function handleNegotiateReview(
