@@ -13,8 +13,7 @@ import { describe, it, expect, vi } from "vitest";
 // not possible.) The fake is a plain vi.fn() queued with per-test behavior.
 const execFileMock = vi.fn();
 vi.mock("node:child_process", () => ({
-  execFile: (...args: unknown[]) => execFileMock(...args),
-}));
+  execFile: (...args: unknown[]) => execFileMock(...args)}));
 
 // The test file's own imports (vitest, the mock factory above) can load
 // node:child_process through other modules before vi.mock's factory is
@@ -25,8 +24,7 @@ execFileMock.mockImplementation(
     if (typeof cb === "function") {
       cb(new Error("execFile not stubbed in this test"), "", "");
     }
-  },
-);
+  });
 
 import {
   branchNameFromSpec,
@@ -35,8 +33,7 @@ import {
   resolveMainline,
   setupBranch,
   commitAndMerge,
-  verifyMergeComplete,
-} from "../src/git-workflow";
+  verifyMergeComplete} from "../src/git-workflow";
 import { mergeBranchBack, verifyBranchMerge } from "../src/events/agent-settled/effect-applicator";
 import { parseLoopArgs, formatStatus } from "../src/selectors";
 import type { LoopState } from "../src/types";
@@ -60,25 +57,20 @@ function makeState(overrides: Partial<LoopState> = {}): LoopState {
     maxDispute: 3,
     maxTurnsPerPhase: 5,
     coverageThreshold: 80,
-    disputeMode: false,
     disputeCount: 0,
     turnsThisPhase: 1,
     lastProposal: "",
     lastPhase: "C",
     justTransitioned: false,
     negotiateReprompted: false,
-    awaitDisputeFix: false,
-    awaitDisputeReview: false,
-    ...overrides,
-  };
+    ...overrides};
 }
 
 function makeMockCtx(cwd = "/tmp/test-project"): any {
   return {
     ui: { notify: vi.fn(), setStatus: vi.fn() },
     sessionManager: { getEntries: () => [] },
-    cwd,
-  };
+    cwd};
 }
 
 /**
@@ -104,8 +96,7 @@ function queueGitResponses(responses: { ok: boolean; stdout?: string; stderr?: s
         (err as { code: number | string }).code = r.code ?? 1;
         cb(err, r.stdout ?? "", r.stderr ?? "");
       }
-    },
-  );
+    });
 }
 
 // ================================================================
@@ -238,8 +229,7 @@ describe("setupBranch", () => {
     const result = await setupBranch("/tmp/x", "internal/01-feature.md");
     expect(result).toEqual({
       kind: "ok",
-      branch: { name: "loop/01-feature", base: "main", merged: false },
-    });
+      branch: { name: "loop/01-feature", base: "main", merged: false }});
   });
 
   it("uses the explicit name when given", async () => {
@@ -447,8 +437,7 @@ describe("mergeBranchBack", () => {
     expect(state.current.branch?.merged).toBe(true);
     expect(ctx.ui.notify).toHaveBeenCalledWith(
       expect.stringContaining("Merged 'loop/f' into 'main'"),
-      "info",
-    );
+      "info");
     // No Writer prompt on a clean merge.
     expect(pi.sentMessages).toHaveLength(0);
   });
@@ -473,8 +462,7 @@ describe("mergeBranchBack", () => {
     // A warning was raised.
     expect(ctx.ui.notify).toHaveBeenCalledWith(
       expect.stringContaining("Merge conflict"),
-      "warning",
-    );
+      "warning");
   });
 
   it("error: warns, merged stays false, no Writer prompt", async () => {
@@ -491,8 +479,7 @@ describe("mergeBranchBack", () => {
     expect(pi.sentMessages).toHaveLength(0);
     expect(ctx.ui.notify).toHaveBeenCalledWith(
       expect.stringContaining("Merge back failed"),
-      "warning",
-    );
+      "warning");
   });
 });
 
@@ -525,8 +512,7 @@ describe("verifyBranchMerge", () => {
     expect(state.current.branch?.merged).toBe(true);
     expect(ctx.ui.notify).toHaveBeenCalledWith(
       expect.stringContaining("Merge complete"),
-      "info",
-    );
+      "info");
   });
 
   it("still conflicted: escalates (single attempt spent), merged stays false", async () => {
@@ -541,8 +527,7 @@ describe("verifyBranchMerge", () => {
     expect(state.current.branch?.merged).toBe(false);
     expect(ctx.ui.notify).toHaveBeenCalledWith(
       expect.stringContaining("single attempt is spent"),
-      "warning",
-    );
+      "warning");
   });
 });
 
@@ -556,8 +541,7 @@ describe("parseLoopArgs --branch", () => {
       specPath: "spec.md",
       coverage: undefined,
       language: undefined,
-      branch: "my-branch",
-    });
+      branch: "my-branch"});
   });
 
   it("parses --branch=<name> (equals form)", () => {
@@ -565,8 +549,7 @@ describe("parseLoopArgs --branch", () => {
       specPath: "spec.md",
       coverage: undefined,
       language: undefined,
-      branch: "feat/x",
-    });
+      branch: "feat/x"});
   });
 
   it("absent → branch undefined", () => {
@@ -578,8 +561,7 @@ describe("parseLoopArgs --branch", () => {
       specPath: "spec.md",
       coverage: 90,
       language: "go",
-      branch: "b",
-    });
+      branch: "b"});
   });
 });
 

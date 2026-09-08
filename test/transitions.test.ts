@@ -26,17 +26,13 @@ function makeState(overrides: Partial<LoopState> & NegotiateMarkers = {}): LoopS
     maxDispute: 3,
     maxTurnsPerPhase: 5,
     coverageThreshold: 80,
-    disputeMode: false,
     disputeCount: 0,
     turnsThisPhase: 0,
     lastProposal: "",
     lastPhase: "idle",
     justTransitioned: false,
     negotiateReprompted: false,
-    awaitDisputeFix: false,
-    awaitDisputeReview: false,
-    ...overrides,
-  };
+    ...overrides};
 }
 
 function makeGateResult(overrides = {}): GateResult {
@@ -47,8 +43,7 @@ function makeGateResult(overrides = {}): GateResult {
     coverage: 0,
     failures: [],
     allPassed: false,
-    ...overrides,
-  };
+    ...overrides};
 }
 
 // --- computeNegotiateTransition ---
@@ -99,8 +94,7 @@ describe("computeNegotiateTransition", () => {
       lastProposal: "plan X",
       negotiateProposed: true,
       negotiateFeedback: "stale",
-      negotiateReprompted: true,
-    });
+      negotiateReprompted: true});
     const before = JSON.parse(JSON.stringify(state));
     const result = T.computeNegotiateTransition(state) as NegResult;
 
@@ -266,35 +260,35 @@ describe("Phase C transitions (via computeTransition)", () => {
 
 describe("Dispute fix transitions (via computeTransition)", () => {
   it("allPassed: advances to Phase C", () => {
-    const state = makeState({ phase: "B", round: 1, disputeMode: true });
+    const state = makeState({ phase: "B", round: 1, dispute: { status: "conceded", filer: "writer" } });
     const gateResult = makeGateResult({ compile: true, tests: true, coverage: 85, allPassed: true });
     const result = T.computeTransition(state, gateResult);
 
     expect(result.effect.type).toBe("advance");
     expect(result.state.phase).toBe("C");
-    expect(result.state.disputeMode).toBe(false);
+    expect(result.state.dispute?.status === "conceded").toBe(false);
   });
 
   it("tests fail: Writer retries", () => {
-    const state = makeState({ phase: "B", round: 1, disputeMode: true });
+    const state = makeState({ phase: "B", round: 1, dispute: { status: "conceded", filer: "writer" } });
     const gateResult = makeGateResult({ compile: true, tests: false, coverage: 0, failures: [{ test: "T", subtest: "", output: "" }] });
     const result = T.computeTransition(state, gateResult);
 
     expect(result.effect.type).toBe("retry");
     expect(result.state.phase).toBe("B");
     expect(result.state.round).toBe(2);
-    expect(result.state.disputeMode).toBe(false);
+    expect(result.state.dispute?.status === "conceded").toBe(false);
   });
 
   it("compile fail: Tester retries", () => {
-    const state = makeState({ phase: "B", round: 1, disputeMode: true });
+    const state = makeState({ phase: "B", round: 1, dispute: { status: "conceded", filer: "writer" } });
     const gateResult = makeGateResult({ compile: false, compileError: "type mismatch" });
     const result = T.computeTransition(state, gateResult);
 
     expect(result.effect.type).toBe("retry");
     expect(result.state.phase).toBe("B");
     expect(result.state.round).toBe(2);
-    expect(result.state.disputeMode).toBe(false);
+    expect(result.state.dispute?.status === "conceded").toBe(false);
     if (result.effect.type === "retry") {
       expect(result.effect.notify).toContain("compile");
     }
@@ -327,7 +321,7 @@ describe("computeTransition (dispatcher)", () => {
   });
 
   it("dispatches to dispute fix", () => {
-    const state = makeState({ phase: "B", round: 1, disputeMode: true });
+    const state = makeState({ phase: "B", round: 1, dispute: { status: "conceded", filer: "writer" } });
     const gateResult = makeGateResult({ compile: true, tests: true, coverage: 85, allPassed: true });
     const result = T.computeTransition(state, gateResult);
 
@@ -371,79 +365,79 @@ describe("phase-boundary dispute-flag clearing (spec 08)", () => {
   const failB = () => makeGateResult({ compile: true, tests: false, coverage: 0, failures: [{ test: "T", subtest: "", output: "" }] });
 
   it("site 1 — advanceToNegotiate: both flags cleared at the A→negotiate boundary", () => {
-    const state = makeState({ phase: "A", round: 1, awaitDisputeFix: true, awaitDisputeReview: true });
+    const state = makeState({ phase: "A", round: 1 });
     const result = T.computeTransition(state, allPass());
 
     expect(result.state.phase).toBe("negotiate");
-    expect(result.state.awaitDisputeFix).toBe(false);
-    expect(result.state.awaitDisputeReview).toBe(false);
+    expect(result.state.dispute?.status === "conceded").toBe(false);
+    expect(result.state.dispute?.status === "defended").toBe(false);
 
     // edge: a single live flag — cleared unconditionally
-    const one = makeState({ phase: "A", round: 1, awaitDisputeReview: true });
+    const one = makeState({ phase: "A", round: 1 });
     const rOne = T.computeTransition(one, allPass());
-    expect(rOne.state.awaitDisputeFix).toBe(false);
-    expect(rOne.state.awaitDisputeReview).toBe(false);
+    expect(rOne.state.dispute?.status === "conceded").toBe(false);
+    expect(rOne.state.dispute?.status === "defended").toBe(false);
   });
 
   it("site 2 — advanceToPhaseB: both flags cleared at the negotiate→B boundary", () => {
-    const state = makeState({ phase: "negotiate", round: 2, negotiateReprompted: true, awaitDisputeFix: true, awaitDisputeReview: true });
+    const state = makeState({ phase: "negotiate", round: 2, negotiateReprompted: true });
     const result = T.computeNegotiateTransition(state);
 
     expect(result.state.phase).toBe("B");
-    expect(result.state.awaitDisputeFix).toBe(false);
-    expect(result.state.awaitDisputeReview).toBe(false);
+    expect(result.state.dispute?.status === "conceded").toBe(false);
+    expect(result.state.dispute?.status === "defended").toBe(false);
 
     // edge: single live flag
-    const one = makeState({ phase: "negotiate", round: 2, negotiateReprompted: true, awaitDisputeFix: true });
+    const one = makeState({ phase: "negotiate", round: 2, negotiateReprompted: true });
     const rOne = T.computeNegotiateTransition(one);
-    expect(rOne.state.awaitDisputeFix).toBe(false);
-    expect(rOne.state.awaitDisputeReview).toBe(false);
+    expect(rOne.state.dispute?.status === "conceded").toBe(false);
+    expect(rOne.state.dispute?.status === "defended").toBe(false);
   });
 
   it("site 3 — advanceToPhaseC: both flags cleared at the B→C boundary (beside disputeMode)", () => {
-    const state = makeState({ phase: "B", round: 2, disputeMode: true, awaitDisputeFix: true, awaitDisputeReview: true });
+    const state = makeState({ phase: "B", round: 2, dispute: { status: "conceded", filer: "writer" } });
     const result = T.computeTransition(state, allPass());
 
     expect(result.state.phase).toBe("C");
-    expect(result.state.disputeMode).toBe(false);
-    expect(result.state.awaitDisputeFix).toBe(false);
-    expect(result.state.awaitDisputeReview).toBe(false);
+    expect(result.state.dispute?.status === "conceded").toBe(false);
+    expect(result.state.dispute?.status === "conceded").toBe(false);
+    expect(result.state.dispute?.status === "defended").toBe(false);
 
     // edge: single live flag, no dispute mode
-    const one = makeState({ phase: "B", round: 1, awaitDisputeFix: true });
+    const one = makeState({ phase: "B", round: 1 });
     const rOne = T.computeTransition(one, allPass());
-    expect(rOne.state.awaitDisputeFix).toBe(false);
-    expect(rOne.state.awaitDisputeReview).toBe(false);
+    expect(rOne.state.dispute?.status === "conceded").toBe(false);
+    expect(rOne.state.dispute?.status === "defended").toBe(false);
   });
 
   it("site 4 — escalateTo: both flags cleared at the B→escalated boundary", () => {
-    const state = makeState({ phase: "B", round: 5, maxB: 5, awaitDisputeFix: true, awaitDisputeReview: true });
+    const state = makeState({ phase: "B", round: 5, maxB: 5 });
     const result = T.computeTransition(state, failB());
 
     expect(result.state.phase).toBe("escalated");
     expect(result.state.lastPhase).toBe("B");
-    expect(result.state.awaitDisputeFix).toBe(false);
-    expect(result.state.awaitDisputeReview).toBe(false);
+    expect(result.state.dispute?.status === "conceded").toBe(false);
+    expect(result.state.dispute?.status === "defended").toBe(false);
 
     // edge: single live flag
-    const one = makeState({ phase: "B", round: 5, maxB: 5, awaitDisputeReview: true });
+    const one = makeState({ phase: "B", round: 5, maxB: 5 });
     const rOne = T.computeTransition(one, failB());
-    expect(rOne.state.awaitDisputeFix).toBe(false);
-    expect(rOne.state.awaitDisputeReview).toBe(false);
+    expect(rOne.state.dispute?.status === "conceded").toBe(false);
+    expect(rOne.state.dispute?.status === "defended").toBe(false);
   });
 
   it("site 5 — markDone: both flags cleared at the C→done boundary", () => {
-    const state = makeState({ phase: "C", round: 1, awaitDisputeFix: true, awaitDisputeReview: true });
+    const state = makeState({ phase: "C", round: 1 });
     const result = T.computeTransition(state, allPass());
 
     expect(result.state.phase).toBe("done");
-    expect(result.state.awaitDisputeFix).toBe(false);
-    expect(result.state.awaitDisputeReview).toBe(false);
+    expect(result.state.dispute?.status === "conceded").toBe(false);
+    expect(result.state.dispute?.status === "defended").toBe(false);
 
     // edge: single live flag
-    const one = makeState({ phase: "C", round: 1, awaitDisputeReview: true });
+    const one = makeState({ phase: "C", round: 1 });
     const rOne = T.computeTransition(one, allPass());
-    expect(rOne.state.awaitDisputeFix).toBe(false);
-    expect(rOne.state.awaitDisputeReview).toBe(false);
+    expect(rOne.state.dispute?.status === "conceded").toBe(false);
+    expect(rOne.state.dispute?.status === "defended").toBe(false);
   });
 });

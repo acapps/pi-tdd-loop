@@ -13,11 +13,9 @@ function makeState(overrides: Partial<LoopState> = {}): LoopState {
   return {
     phase: "negotiate", round: 1, specPath: "spec.md", language: "go", buildTool: "go",
     maxA: 3, maxNegotiate: 3, maxB: 3, maxC: 3, maxDispute: 3, maxTurnsPerPhase: 5,
-    coverageThreshold: 80, disputeMode: false, disputeCount: 0, turnsThisPhase: 1,
+    coverageThreshold: 80, disputeCount: 0, turnsThisPhase: 1,
     lastProposal: "propose X", lastPhase: "A", justTransitioned: false,
-    negotiateReprompted: false, awaitDisputeFix: false, awaitDisputeReview: false,
-    ...overrides,
-  };
+    negotiateReprompted: false, ...overrides};
 }
 
 interface Env {
@@ -47,8 +45,7 @@ describe("bug-negotiate-settle-not-persisted — settle commits the advanced sta
     // Tester and commits the advanced round. A reload restores round 2 (even)
     // with no markers → the next settle re-prompts Tester, not Writer.
     const { state, pi, appendEntry, sendUserMessage, ctx } = makeEnv({
-      negotiateProposed: true,
-    });
+      negotiateProposed: true});
     await handleAgentSettled({ state, pi, debug: () => {}, ctx });
     expect(sendUserMessage).toHaveBeenCalledTimes(1);
     const entries = loopEntries(appendEntry);
@@ -65,8 +62,7 @@ describe("bug-negotiate-settle-not-persisted — settle commits the advanced sta
     // Writer and commits. A reload must NOT re-deliver the same feedback.
     const { state, pi, appendEntry, sendUserMessage, ctx } = makeEnv({
       round: 2,
-      negotiateFeedback: "add edge cases",
-    });
+      negotiateFeedback: "add edge cases"});
     await handleAgentSettled({ state, pi, debug: () => {}, ctx });
     expect(sendUserMessage).toHaveBeenCalledTimes(1);
     const entries = loopEntries(appendEntry);
@@ -101,8 +97,7 @@ describe("bug-negotiate-settle-not-persisted — settle commits the advanced sta
     // (Round 4 is the boundary: (4+2)/2 = 3 <= 3 still advances.)
     const { state, pi, appendEntry, ctx } = makeEnv({
       round: 5,
-      negotiateFeedback: "one more",
-    });
+      negotiateFeedback: "one more"});
     await handleAgentSettled({ state, pi, debug: () => {}, ctx });
     const entries = loopEntries(appendEntry);
     const last = entries[entries.length - 1];

@@ -77,17 +77,14 @@ function makeState(overrides: Partial<LoopState> = {}): LoopState {
     maxDispute: 3,
     maxTurnsPerPhase: 5,
     coverageThreshold: 80,
-    disputeMode: false,
     disputeCount: 0,
     turnsThisPhase: 0,
     lastProposal: "",
     lastPhase: "idle",
     justTransitioned: false,
     negotiateReprompted: false,
-    awaitDisputeFix: false,
-    awaitDisputeReview: false,
-    ...overrides,
-  };
+    dispute: { status: "none" },
+    ...overrides};
 }
 
 function makeInput(overrides: Partial<BeforeAgentHandlerInput> = {}): BeforeAgentHandlerInput {
@@ -96,8 +93,7 @@ function makeInput(overrides: Partial<BeforeAgentHandlerInput> = {}): BeforeAgen
     pi: createMockExtensionAPI() as any,
     debug: vi.fn(),
     systemPrompt: BASE,
-    ...overrides,
-  };
+    ...overrides};
 }
 
 function msg(content: string): Record<string, unknown> {
@@ -198,36 +194,26 @@ describe("Phase B (Writer)", () => {
 
 describe("Phase B (dispute fix) — F1, R3", () => {
   it("returns the dispute-fix prompt", () => {
-    const input = makeInput({ state: { current: makeState({ phase: "B", round: 3, awaitDisputeFix: true }) } });
+    const input = makeInput({ state: { current: makeState({ phase: "B", round: 3, dispute: { status: "conceded", filer: "writer" } }) } });
     expect(handleBeforeAgent(input)).toEqual({ message: msg(DISPUTE_FIX_CONTENT), systemPrompt: DISPUTE_FIX_SP });
   });
 
   it("clears awaitDisputeFix and persists the full snapshot AFTER the clear", () => {
-    const state = makeState({ phase: "B", round: 3, awaitDisputeFix: true });
+    const state = makeState({ phase: "B", round: 3, dispute: { status: "conceded", filer: "writer" } });
     const pi = createMockExtensionAPI();
     handleBeforeAgent({ state: { current: state }, pi: pi as any, debug: vi.fn(), systemPrompt: BASE });
 
-    expect(state.awaitDisputeFix).toBe(false);
+    expect(state.dispute?.status === "conceded").toBe(false);
     expect(pi.appendedEntries).toHaveLength(1);
     const [entry] = pi.appendedEntries;
     expect(entry.customType).toBe("loop-state");
     expect(entry.data).toEqual(state); // full state snapshot, taken after the clear
-    expect(entry.data).toMatchObject({ phase: "B", round: 3, awaitDisputeFix: false });
+    expect(entry.data).toMatchObject({ phase: "B", round: 3 });
   });
 
   it("executes the exact order: debug → clear flag → persist snapshot (R3)", () => {
     const order: string[] = [];
-    const state = makeState({ phase: "B", round: 1, turnsThisPhase: 1, awaitDisputeFix: true });
-    let flag = true;
-    Object.defineProperty(state, "awaitDisputeFix", {
-      get: () => flag,
-      set: (v: boolean) => {
-        order.push("clear");
-        flag = v;
-      },
-      enumerable: true,
-      configurable: true,
-    });
+    const state = makeState({ phase: "B", round: 1, turnsThisPhase: 1, dispute: { status: "conceded", filer: "writer" } });
     const pi = createMockExtensionAPI();
     pi.appendEntry = ((..._args: any[]) => {
       order.push("persist");
@@ -240,7 +226,7 @@ describe("Phase B (dispute fix) — F1, R3", () => {
 
     handleBeforeAgent({ state: { current: state }, pi: pi as any, debug, systemPrompt: BASE });
 
-    expect(order).toEqual(["debug", "clear", "persist"]);
+    expect(order).toEqual(["debug", "persist"]);
     expect(debugSpy).toHaveBeenCalledTimes(1);
     expect(debugSpy).toHaveBeenCalledWith("Tester fixing test");
   });
@@ -262,7 +248,7 @@ describe("side-effect contract", () => {
       { phase: "A" },
       { phase: "negotiate", round: 1 },
       { phase: "negotiate", round: 2 },
-      { phase: "B", round: 1, awaitDisputeFix: false },
+      { phase: "B", round: 1 },
       { phase: "C" },
       { phase: "done" },
       { phase: "escalated" },
@@ -289,7 +275,7 @@ describe("side-effect contract", () => {
       { phase: "review" },
       { phase: "A" },
       { phase: "negotiate", round: 1 },
-      { phase: "B", round: 1, awaitDisputeFix: false },
+      { phase: "B", round: 1 },
       { phase: "C" },
       { phase: "done" },
       { phase: "escalated" },
@@ -304,16 +290,16 @@ describe("side-effect contract", () => {
   });
 
   it("B + dispute-fix clears exactly awaitDisputeFix and nothing else", () => {
-    const state = makeState({ phase: "B", round: 1, awaitDisputeFix: true });
+    const state = makeState({ phase: "B", round: 1 });
     const before = structuredClone(state);
     const pi = createMockExtensionAPI();
     const input = { state: { current: state }, pi: pi as any, debug: vi.fn(), systemPrompt: BASE } as BeforeAgentHandlerInput;
 
     expect(handleBeforeAgent(input)).toBeDefined();
 
-    expect(state.awaitDisputeFix).toBe(false);
+    expect(state.dispute?.status === "conceded").toBe(false);
     const after = structuredClone(state);
-    after.awaitDisputeFix = before.awaitDisputeFix; // restore the single permitted change
+    after.dispute = before.dispute; // restore the single permitted change
     expect(after).toEqual(before);
   });
 });
@@ -347,7 +333,7 @@ describe("no-throw and edge cases", () => {
   });
 
   it("handles dispute mode in Phase B without throwing", () => {
-    const input = makeInput({ state: { current: makeState({ phase: "B", round: 1, disputeMode: true, awaitDisputeFix: true }) } });
+    const input = makeInput({ state: { current: makeState({ phase: "B", round: 1, dispute: { status: "conceded", filer: "writer" } }) } });
     expect(() => handleBeforeAgent(input)).not.toThrow();
   });
 });

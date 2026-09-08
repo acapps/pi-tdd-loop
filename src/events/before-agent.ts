@@ -4,7 +4,7 @@
 // Scope convention (spec R1): the entry receives the wrapper
 // `{ state: { current }, ... }` and unwraps to the bare `LoopState` before
 // dispatch. All helpers take the bare `LoopState` — in helper scope,
-// `state.round` / `state.awaitDisputeFix` refer to the current round/flag.
+// `state.round` / `state.dispute` refer to the current round/dispute status.
 // The wrapper exists only at the entry boundary.
 
 import type { LoopState } from "../types";
@@ -155,7 +155,7 @@ function buildWriterPrompt(
   debug: DebugFn,
   systemPrompt: string,
 ): BeforeAgentHandlerOutput {
-  if (state.awaitDisputeFix) {
+  if (state.dispute?.status === "conceded" && state.dispute?.filer === "writer") {
     return buildDisputeFixPrompt(state, pi, debug, systemPrompt);
   }
   debug(`Writer round ${state.round}`);
@@ -175,10 +175,10 @@ function buildDisputeFixPrompt(
   debug: DebugFn,
   systemPrompt: string,
 ): BeforeAgentHandlerOutput {
-  // Exact order (R3): debug → clear flag → persist snapshot AFTER the clear.
-  // A session reload mid-dispute-fix must see the cleared flag.
+  // Exact order (R3): debug → clear status → persist snapshot AFTER the
+  // clear. A session reload mid-dispute-fix must see the closed status.
   debug("Tester fixing test");
-  state.awaitDisputeFix = false;
+  state.dispute = { ...state.dispute, status: "closed" };
   commit(state, pi, debug);
   return {
     message: buildContextMessage(

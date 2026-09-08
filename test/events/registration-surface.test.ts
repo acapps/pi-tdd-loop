@@ -87,7 +87,7 @@ const ENTRY_PATH = path.join(ROOT, "index.ts");
 // `pi.registerCommand("spec", ...)` line are the only spec-command changes to
 // index.ts. The registration-block diagnostic guard
 // below still enforces the registration-surface invariant.
-const ENTRY_SHA256 = "430929a4a4767c1ef266c303a550ed5ef605d6a697edd804631e64b16bc3a698";
+const ENTRY_SHA256 = "62c879ee5476faf10957263044db5aac6adad38ce36168bc482de71745bb05e2";
 
 // F3 sweep needle (built to keep this file clean).
 const NEEDLE = new RegExp("events" + String.raw`\.ts`);
@@ -110,30 +110,23 @@ function makeState(overrides: Partial<LoopState> = {}): LoopState {
     maxDispute: 3,
     maxTurnsPerPhase: 5,
     coverageThreshold: 80,
-    disputeMode: false,
     disputeCount: 0,
     turnsThisPhase: 0,
     lastProposal: "",
     lastPhase: "idle",
     justTransitioned: false,
     negotiateReprompted: false,
-    awaitDisputeFix: false,
-    awaitDisputeReview: false,
-    ...overrides,
-  };
+    ...overrides};
 }
 
 function makeCtx(entries: unknown[] = []): EventCtx {
   return {
     ui: {
       notify: vi.fn(),
-      setStatus: vi.fn(),
-    },
+      setStatus: vi.fn()},
     sessionManager: {
-      getEntries: () => entries,
-    },
-    cwd: "/tmp/test",
-  };
+      getEntries: () => entries},
+    cwd: "/tmp/test"};
 }
 
 function listFiles(dir: string): string[] {
@@ -180,12 +173,10 @@ describe("shim deletion + registration-surface placement", () => {
     const src = readFileSync(BARREL_PATH, "utf8");
     for (const mod of ["session-start", "before-agent", "tool-call", "agent-settled"]) {
       expect(src, `barrel imports from ./${mod}`).toMatch(
-        new RegExp(`from ['"]\\./${mod}(\\.(js|ts))?['"]`),
-      );
+        new RegExp(`from ['"]\\./${mod}(\\.(js|ts))?['"]`));
     }
     expect(src, "no pre-move ./events/ import paths remain in the barrel").not.toMatch(
-      /from ['"]\.\/events\//,
-    );
+      /from ['"]\.\/events\//);
   });
 
   it("EventCtx has exactly one definition across src/ (V1)", () => {
@@ -242,8 +233,7 @@ describe("barrel runtime surface", () => {
     const ctx: EventCtx = {
       ui: { notify: () => {}, setStatus: () => {} },
       sessionManager: { getEntries: () => [] },
-      cwd: "/tmp/test",
-    };
+      cwd: "/tmp/test"};
     expect(ctx.sessionManager.getEntries()).toEqual([]);
     expect(ctx.cwd).toBe("/tmp/test");
   });
@@ -313,8 +303,7 @@ describe("type-check (V3)", () => {
     const res = spawnSync(
       process.execPath,
       [path.join(ROOT, "node_modules/typescript/lib/tsc.js"), "--noEmit"],
-      { cwd: ROOT, encoding: "utf8", timeout: 180_000 },
-    );
+      { cwd: ROOT, encoding: "utf8", timeout: 180_000 });
     expect(res.status, `tsc failed:\n${res.stdout}\n${res.stderr}`).toBe(0);
   }, 240_000);
 });
@@ -328,8 +317,7 @@ describe("session_start factory — delegation contract", () => {
     const handler = barrel.eventSessionStart(
       { current: makeState() },
       createMockExtensionAPI(),
-      vi.fn(),
-    );
+      vi.fn());
     expect(typeof handler).toBe("function");
   });
 
@@ -380,8 +368,7 @@ describe("session_start factory — delegation contract", () => {
       const handler = barrel.eventSessionStart(
         { current: makeState() },
         createMockExtensionAPI(),
-        vi.fn(),
-      );
+        vi.fn());
       expect(await handler({}, makeCtx([]))).toBeUndefined();
     } finally {
       spy.mockRestore();
@@ -416,8 +403,7 @@ describe("before_agent_start factory — extraction + delegation contract", () =
       const handler = barrel.eventBeforeAgentStart(
         { current: makeState() },
         createMockExtensionAPI(),
-        vi.fn(),
-      );
+        vi.fn());
       await handler({});
       expect(spy).toHaveBeenCalledTimes(1);
       expect(spy.mock.calls[0][0].systemPrompt).toBeUndefined();
@@ -432,8 +418,7 @@ describe("before_agent_start factory — extraction + delegation contract", () =
       const handler = barrel.eventBeforeAgentStart(
         { current: makeState() },
         createMockExtensionAPI(),
-        vi.fn(),
-      );
+        vi.fn());
       await handler({ systemPrompt: "" });
       expect(spy.mock.calls[0][0].systemPrompt).toBe("");
     } finally {
@@ -448,8 +433,7 @@ describe("before_agent_start factory — extraction + delegation contract", () =
       const handler = barrel.eventBeforeAgentStart(
         { current: makeState() },
         createMockExtensionAPI(),
-        vi.fn(),
-      );
+        vi.fn());
       expect(await handler({ systemPrompt: "p" })).toBe(sentinel);
     } finally {
       spy.mockRestore();
@@ -462,8 +446,7 @@ describe("before_agent_start factory — extraction + delegation contract", () =
       const handler = barrel.eventBeforeAgentStart(
         { current: makeState() },
         createMockExtensionAPI(),
-        vi.fn(),
-      );
+        vi.fn());
       await expect(handler(null)).rejects.toThrow(TypeError);
       await expect(handler(undefined)).rejects.toThrow(TypeError);
       expect(spy).not.toHaveBeenCalled();
@@ -503,8 +486,7 @@ describe("tool_call factory — extraction + delegation contract", () => {
       const handler = barrel.eventToolCall(
         { current: makeState() },
         createMockExtensionAPI(),
-        vi.fn(),
-      );
+        vi.fn());
       const result = await handler({ toolName: "bash" }, makeCtx([]));
       expect(spy).toHaveBeenCalledTimes(1);
       expect(spy.mock.calls[0][0].path).toBeUndefined();
@@ -520,8 +502,7 @@ describe("tool_call factory — extraction + delegation contract", () => {
       const handler = barrel.eventToolCall(
         { current: makeState() },
         createMockExtensionAPI(),
-        vi.fn(),
-      );
+        vi.fn());
       await handler({ toolName: "bash", input: {} }, makeCtx([]));
       expect(spy.mock.calls[0][0].path).toBeUndefined();
     } finally {
@@ -535,8 +516,7 @@ describe("tool_call factory — extraction + delegation contract", () => {
       const handler = barrel.eventToolCall(
         { current: makeState() },
         createMockExtensionAPI(),
-        vi.fn(),
-      );
+        vi.fn());
       await handler({ toolName: "bash", input: null as any }, makeCtx([]));
       expect(spy.mock.calls[0][0].path).toBeUndefined();
     } finally {
@@ -550,8 +530,7 @@ describe("tool_call factory — extraction + delegation contract", () => {
       const handler = barrel.eventToolCall(
         { current: makeState() },
         createMockExtensionAPI(),
-        vi.fn(),
-      );
+        vi.fn());
       await handler({ toolName: "write", input: { path: "/x", other: "1" } }, makeCtx([]));
       const input = spy.mock.calls[0][0];
       expect(input.path).toBe("/x");
@@ -567,8 +546,7 @@ describe("tool_call factory — extraction + delegation contract", () => {
       const handler = barrel.eventToolCall(
         { current: makeState() },
         createMockExtensionAPI(),
-        vi.fn(),
-      );
+        vi.fn());
       await handler({ toolName: "", input: undefined }, makeCtx([]));
       expect(spy.mock.calls[0][0].toolName).toBe("");
     } finally {
@@ -583,8 +561,7 @@ describe("tool_call factory — extraction + delegation contract", () => {
       const handler = barrel.eventToolCall(
         { current: makeState() },
         createMockExtensionAPI(),
-        vi.fn(),
-      );
+        vi.fn());
       expect(await handler({ toolName: "write", input: { path: "/x" } }, makeCtx([]))).toBe(sentinel);
     } finally {
       spy.mockRestore();
@@ -597,8 +574,7 @@ describe("tool_call factory — extraction + delegation contract", () => {
       const handler = barrel.eventToolCall(
         { current: makeState() },
         createMockExtensionAPI(),
-        vi.fn(),
-      );
+        vi.fn());
       await expect(handler(null, makeCtx([]))).rejects.toThrow(TypeError);
       await expect(handler(undefined, makeCtx([]))).rejects.toThrow(TypeError);
       expect(spy).not.toHaveBeenCalled();

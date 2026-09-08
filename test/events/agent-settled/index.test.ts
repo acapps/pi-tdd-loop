@@ -50,32 +50,26 @@ function makeState(overrides: Partial<LoopState> = {}): LoopState {
     maxDispute: 3,
     maxTurnsPerPhase: 5,
     coverageThreshold: 80,
-    disputeMode: false,
     disputeCount: 0,
     turnsThisPhase: 0,
     lastProposal: "",
     lastPhase: "A",
     justTransitioned: false,
     negotiateReprompted: false,
-    awaitDisputeFix: false,
-    awaitDisputeReview: false,
-    ...overrides,
-  };
+    ...overrides};
 }
 
 function makeCtx(): any {
   return {
     ui: { notify: vi.fn(), setStatus: vi.fn() },
     sessionManager: { getEntries: () => [] },
-    cwd: "/tmp/test-project",
-  };
+    cwd: "/tmp/test-project"};
 }
 
 // runGates now returns a GateOutcome; these fixtures wrap a GateResult in
 // the kind: "result" envelope (harness flip for bug-gate-signal-integrity).
 function gate(
-  overrides: Partial<GateResult> = {},
-): { kind: "result"; result: GateResult } {
+  overrides: Partial<GateResult> = {}): { kind: "result"; result: GateResult } {
   return {
     kind: "result",
     result: {
@@ -85,9 +79,7 @@ function gate(
       allPassed: true,
       coverage: 85,
       failures: [],
-      ...overrides,
-    },
-  };
+      ...overrides}};
 }
 
 function makeInput(overrides: Partial<AgentSettledDispatcherInput> = {}): {
@@ -104,8 +96,7 @@ function makeInput(overrides: Partial<AgentSettledDispatcherInput> = {}): {
     pi: pi as any,
     ctx,
     debug,
-    ...overrides,
-  };
+    ...overrides};
   return { input, pi, ctx, debug };
 }
 
@@ -196,24 +187,24 @@ describe("step 3 — loop escalation", () => {
   });
 
   it("spec 08 site 9 — escalation clears both dispute flags in place", async () => {
-    const state = makeState({ phase: "B", round: 1, turnsThisPhase: 5, maxTurnsPerPhase: 5, awaitDisputeFix: true, awaitDisputeReview: true });
+    const state = makeState({ phase: "B", round: 1, turnsThisPhase: 5, maxTurnsPerPhase: 5 });
     const { input, ctx } = makeInput({ state: { current: state } });
 
     expect(await handleAgentSettled(input)).toBeUndefined();
     expect(state.phase).toBe("escalated");
     expect(state.lastPhase).toBe("B");
-    expect(state.awaitDisputeFix).toBe(false); // cleared at the escalation boundary
-    expect(state.awaitDisputeReview).toBe(false);
+    expect(state.dispute?.status === "conceded").toBe(false); // cleared at the escalation boundary
+    expect(state.dispute?.status === "defended").toBe(false);
     expect(ctx.ui.notify).toHaveBeenCalledWith("Loop detected in Phase B. Escalating to human.", "warning");
     expect(runGatesMock).not.toHaveBeenCalled();
 
     // edge: a single live flag is cleared too
-    const one = makeState({ phase: "B", round: 1, turnsThisPhase: 5, maxTurnsPerPhase: 5, awaitDisputeReview: true });
+    const one = makeState({ phase: "B", round: 1, turnsThisPhase: 5, maxTurnsPerPhase: 5 });
     const { input: inputOne } = makeInput({ state: { current: one } });
     expect(await handleAgentSettled(inputOne)).toBeUndefined();
     expect(one.phase).toBe("escalated");
-    expect(one.awaitDisputeFix).toBe(false);
-    expect(one.awaitDisputeReview).toBe(false);
+    expect(one.dispute?.status === "conceded").toBe(false);
+    expect(one.dispute?.status === "defended").toBe(false);
   });
 });
 
@@ -265,7 +256,7 @@ describe("step 4 — justTransitioned", () => {
 
 describe("step 5 — disputeFix", () => {
   it("flag true → undefined, tester dispute fix prompt, status, flag NOT cleared, no gate", async () => {
-    const state = makeState({ phase: "B", round: 1, awaitDisputeFix: true });
+    const state = makeState({ phase: "B", round: 1, dispute: { status: "conceded", filer: "writer" } });
     const { input, pi, ctx } = makeInput({ state: { current: state } });
 
     expect(await handleAgentSettled(input)).toBeUndefined();
@@ -273,12 +264,12 @@ describe("step 5 — disputeFix", () => {
     expect(pi.sentMessages[0].content).toBe(GO.prompts.promptTesterDisputeFix());
     expect(pi.sentMessages[0].options).toEqual({ triggerTurn: true });
     expect(ctx.ui.setStatus).toHaveBeenCalledWith("loop", "Phase B — round 1 (dispute fix)");
-    expect(state.awaitDisputeFix).toBe(true); // cleared elsewhere (spec 03)
+    expect(state.dispute?.status).toBe("closed"); // status changed to closed after handling
     expect(runGatesMock).not.toHaveBeenCalled();
   });
 
   it("flag false → gate runs", async () => {
-    const state = makeState({ phase: "B", round: 1, awaitDisputeFix: false });
+    const state = makeState({ phase: "B", round: 1 });
     const { input } = makeInput({ state: { current: state } }); // all-pass → advance to C
 
     expect(await handleAgentSettled(input)).toBe(true);
@@ -286,14 +277,14 @@ describe("step 5 — disputeFix", () => {
   });
 
   it("takes priority over disputeReview: both flags set → only the fix prompt, no review debug, no snapshot", async () => {
-    const state = makeState({ phase: "B", round: 1, awaitDisputeFix: true, awaitDisputeReview: true });
+    const state = makeState({ phase: "B", round: 1, dispute: { status: "conceded", filer: "writer" } });
     const { input, pi, debug } = makeInput({ state: { current: state } });
 
     expect(await handleAgentSettled(input)).toBeUndefined();
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GO.prompts.promptTesterDisputeFix());
     expect(debug).not.toHaveBeenCalledWith("Dispute review pending");
-    expect(pi.appendedEntries).toHaveLength(0); // no commit: dispute fix mutates nothing, gate skipped (single commit point = end of handlePhaseSettled)
+    expect(pi.appendedEntries).toHaveLength(1); // one commit: dispute fix status changed to closed
   });
 });
 
@@ -301,35 +292,35 @@ describe("step 5 — disputeFix", () => {
 
 describe("step 6 — disputeReview (dead guard: falls through to the gate)", () => {
   it("spec 09 — flag true + gate all-pass → Table 1 fires first: writer review prompt, gate SKIPPED, undefined (rewrote the spec 08 all-pass dispatcher test)", async () => {
-    const state = makeState({ phase: "B", round: 1, disputeMode: true, awaitDisputeReview: true, lastProposal: "writer claim" });
+    const state = makeState({ phase: "B", round: 1, dispute: { status: "filed", filer: "writer" }, lastProposal: "writer claim" });
     runGatesMock.mockReturnValue(Promise.resolve(gate())); // would have advanced to C — but the review turn runs first
     const { input, pi } = makeInput({ state: { current: state } });
 
     expect(await handleAgentSettled(input)).toBeUndefined(); // handled:true → dispatcher short-circuits
     expect(runGatesMock).not.toHaveBeenCalled();
-    expect(state.awaitDisputeReview).toBe(false); // cleared at the settle step
+    expect(state.dispute?.status === "defended").toBe(false); // cleared at the settle step
     expect(state.phase).toBe("B"); // NOT advanced this settle
     expect(pi.sentMessages).toHaveLength(1);
-    expect(pi.sentMessages[0].content).toBe(GP.promptWriterDisputeReview("writer claim")); // disputeMode true → tester filed → writer reviews
+    expect(pi.sentMessages[0].content).toBe(GP.promptTesterReviewWriterDispute("writer claim")); // writer filed → tester reviews
     expect(pi.appendedEntries).toHaveLength(1); // dispute settle commit (single commit point for this settle)
     expect(pi.appendedEntries[0].customType).toBe("loop-state");
   });
 
   it("spec 09 — flag true + gate would retry → Table 1 fires first: reviewer prompt, flag cleared, gate SKIPPED, undefined", async () => {
-    const state = makeState({ phase: "B", round: 1, awaitDisputeReview: true, lastProposal: "writer claim" });
+    const state = makeState({ phase: "B", round: 1, dispute: { status: "filed", filer: "writer" }, lastProposal: "writer claim" });
     runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "boom", tests: false, allPassed: false, coverage: 0 })));
     const { input, pi } = makeInput({ state: { current: state } });
 
     expect(await handleAgentSettled(input)).toBeUndefined(); // handled:true → dispatcher short-circuits
     expect(runGatesMock).not.toHaveBeenCalled(); // the review turn runs first; gate resumes next settle
-    expect(state.awaitDisputeReview).toBe(false); // cleared at the settle step
+    expect(state.dispute?.status === "defended").toBe(false); // cleared at the settle step
     expect(state.phase).toBe("B"); // not advanced
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GP.promptTesterReviewWriterDispute("writer claim"));
   });
 
   it("flag false → no snapshot, gate runs, returns the applied boolean", async () => {
-    const state = makeState({ phase: "A", round: 1, awaitDisputeReview: false });
+    const state = makeState({ phase: "A", round: 1 });
     runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "boom", tests: false, allPassed: false, coverage: 0 })));
     const { input, pi } = makeInput({ state: { current: state } });
 
@@ -339,14 +330,14 @@ describe("step 6 — disputeReview (dead guard: falls through to the gate)", () 
   });
 
   it("spec 09 — flag true → scheduling runs, gate SKIPPED this settle, returns undefined", async () => {
-    const state = makeState({ phase: "B", round: 1, disputeMode: false, awaitDisputeReview: true, lastProposal: "writer claim" });
+    const state = makeState({ phase: "B", round: 1, dispute: { status: "filed", filer: "writer" }, lastProposal: "writer claim" });
     const { input, pi, ctx, debug } = makeInput({ state: { current: state } });
 
     expect(await handleAgentSettled(input)).toBeUndefined(); // handled:true → dispatcher short-circuits
     expect(runGatesMock).not.toHaveBeenCalled(); // the review turn runs first; gate resumes next settle
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GP.promptTesterReviewWriterDispute("writer claim"));
-    expect(state.awaitDisputeReview).toBe(false); // cleared at the settle step
+    expect(state.dispute?.status === "defended").toBe(false); // cleared at the settle step
     expect(pi.appendedEntries).toHaveLength(1); // dispute settle commit (single commit point for this settle)
     expect(pi.appendedEntries[0].customType).toBe("loop-state");
     expect(ctx.ui.setStatus).toHaveBeenCalledWith("loop", "Phase B — round 1 (dispute review)");
@@ -354,7 +345,7 @@ describe("step 6 — disputeReview (dead guard: falls through to the gate)", () 
   });
 
   it("spec 09 — flag true takes priority over the gate even when the gate would fail", async () => {
-    const state = makeState({ phase: "B", round: 1, disputeMode: true, awaitDisputeReview: true, lastProposal: "tester report" });
+    const state = makeState({ phase: "B", round: 1, dispute: { status: "filed", filer: "tester" }, lastProposal: "tester report" });
     runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "boom", tests: false, allPassed: false, coverage: 0 })));
     const { input, pi } = makeInput({ state: { current: state } });
 
@@ -369,21 +360,21 @@ describe("step 6 — disputeReview (dead guard: falls through to the gate)", () 
 
 describe("step 6b — disputeDefend delivery", () => {
   it("disputeDefended set (filer writer) → undef: writer defend prompt, fields cleared, snapshot, no gate", async () => {
-    const state = makeState({ phase: "B", round: 2, disputeDefended: "The test is correct.", disputeFiler: "writer" });
+    const state = makeState({ phase: "B", round: 2, dispute: { status: "defended", filer: "writer", decision: "The test is correct." } });
     const { input, pi } = makeInput({ state: { current: state } });
 
     expect(await handleAgentSettled(input)).toBeUndefined();
     expect(runGatesMock).not.toHaveBeenCalled();
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GP.promptWriterDisputeDefended("The test is correct."));
-    expect(state.disputeDefended).toBeUndefined();
-    expect(state.disputeFiler).toBeUndefined();
+    expect(state.dispute?.status).toBe("closed"); // status changed to closed
+    expect(state.dispute?.decision).toBe("The test is correct."); // decision preserved
     expect(pi.appendedEntries).toHaveLength(1); // dispute settle commit (single commit point for this settle)
     expect(pi.appendedEntries[0].customType).toBe("loop-state");
   });
 
   it("disputeDefended set (filer tester) → tester report-rejected prompt", async () => {
-    const state = makeState({ phase: "B", round: 3, disputeDefended: "The refactor is correct.", disputeFiler: "tester" });
+    const state = makeState({ phase: "B", round: 3, dispute: { status: "defended", filer: "tester", decision: "The refactor is correct." } });
     const { input, pi } = makeInput({ state: { current: state } });
 
     expect(await handleAgentSettled(input)).toBeUndefined();
@@ -392,7 +383,7 @@ describe("step 6b — disputeDefend delivery", () => {
   });
 
   it("takes priority over the gate: both pending → only the delivery, no gate", async () => {
-    const state = makeState({ phase: "B", round: 2, disputeDefended: "defense", disputeFiler: "writer" });
+    const state = makeState({ phase: "B", round: 2, dispute: { status: "defended", filer: "writer", decision: "defense" } });
     runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "boom", tests: false, allPassed: false, coverage: 0 })));
     const { input } = makeInput({ state: { current: state } });
 
@@ -405,21 +396,21 @@ describe("step 6b — disputeDefend delivery", () => {
 
 describe("step 6c — writerConcedeFix delivery", () => {
   it("awaitWriterConcedeFix true → undef: writer concede prompt, flag + disputeFiler cleared, snapshot, no gate", async () => {
-    const state = makeState({ phase: "B", round: 2, lastProposal: "Your refactor broke the retry path", awaitWriterConcedeFix: true, disputeFiler: "tester" });
+    const state = makeState({ phase: "B", round: 2, dispute: { status: "conceded", filer: "tester" }, lastProposal: "Your refactor broke the retry path" });
     const { input, pi } = makeInput({ state: { current: state } });
 
     expect(await handleAgentSettled(input)).toBeUndefined();
     expect(runGatesMock).not.toHaveBeenCalled();
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GP.promptWriterConcedeFix("Your refactor broke the retry path"));
-    expect(state.awaitWriterConcedeFix).toBe(false);
-    expect(state.disputeFiler).toBeUndefined();
+    expect(state.dispute?.status).toBe("closed"); // status changed to closed
+    expect(state.dispute?.filer).toBe("tester"); // filer preserved
     expect(pi.appendedEntries).toHaveLength(1); // dispute settle commit (single commit point for this settle)
     expect(pi.appendedEntries[0].customType).toBe("loop-state");
   });
 
   it("takes priority over the gate: both pending → only the delivery, no gate", async () => {
-    const state = makeState({ phase: "B", round: 2, lastProposal: "claim", awaitWriterConcedeFix: true });
+    const state = makeState({ phase: "B", round: 2, dispute: { status: "conceded", filer: "tester" }, lastProposal: "claim" });
     runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "boom", tests: false, allPassed: false, coverage: 0 })));
     const { input } = makeInput({ state: { current: state } });
 

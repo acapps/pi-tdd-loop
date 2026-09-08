@@ -58,8 +58,7 @@ function checkLoopEscalation(
   debug(`Loop detected (${state.current.turnsThisPhase} turns in phase ${state.current.phase}), escalating`);
   state.current.lastPhase = state.current.phase;
   state.current.phase = "escalated";
-  state.current.awaitDisputeFix = false;
-  state.current.awaitDisputeReview = false;
+  state.current.dispute = { status: "none" };
   ctx.ui.notify(`Loop detected in Phase ${state.current.lastPhase}. Escalating to human.`, "warning");
   ctx.ui.setStatus("loop", "escalated (loop detected)");
   commit(state.current, pi, debug); // S2: the escalated state commits the moment it is produced

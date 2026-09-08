@@ -33,7 +33,7 @@ export default function (pi: ExtensionAPI) {
     maxDispute: 3,
     maxTurnsPerPhase: 5,
     coverageThreshold: 80,
-    disputeMode: false,
+    dispute: { status: "none" },
     disputeCount: 0,
     turnsThisPhase: 0,
     lastProposal: "",
@@ -42,8 +42,6 @@ export default function (pi: ExtensionAPI) {
     negotiateReprompted: false,
     negotiateProposed: false,
     negotiateFeedback: "",
-    awaitDisputeFix: false,
-    awaitDisputeReview: false,
   }};
 
   function debug(msg: string) {

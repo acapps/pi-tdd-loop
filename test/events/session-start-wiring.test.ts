@@ -47,30 +47,24 @@ function makeState(overrides: Partial<LoopState> = {}): LoopState {
     maxDispute: 3,
     maxTurnsPerPhase: 5,
     coverageThreshold: 80,
-    disputeMode: false,
     disputeCount: 0,
     turnsThisPhase: 0,
     lastProposal: "",
     lastPhase: "idle",
     justTransitioned: false,
     negotiateReprompted: false,
-    awaitDisputeFix: false,
-    awaitDisputeReview: false,
-    ...overrides,
-  };
+    dispute: { status: "none" },
+    ...overrides};
 }
 
 function makeCtx(entries: unknown[] = []): any {
   return {
     ui: {
       notify: vi.fn(),
-      setStatus: vi.fn(),
-    },
+      setStatus: vi.fn()},
     sessionManager: {
-      getEntries: () => entries,
-    },
-    cwd: "/tmp/test",
-  };
+      getEntries: () => entries},
+    cwd: "/tmp/test"};
 }
 
 function loopStateEntry(data: Partial<LoopState>): { type: string; customType: string; data: LoopState } {
@@ -95,8 +89,7 @@ describe("eventSessionStart → handleSessionStart (delegation)", () => {
     const handler = eventSessionStart(
       { current: makeState() },
       createMockExtensionAPI(),
-      vi.fn(),
-    );
+      vi.fn());
     expect(typeof handler).toBe("function");
   });
 
@@ -151,8 +144,7 @@ describe("eventSessionStart → handleSessionStart (delegation)", () => {
     const handler = eventSessionStart(
       { current: makeState() },
       pi,
-      vi.fn(),
-    );
+      vi.fn());
     await handler({}, makeCtx([loopStateEntry({ phase: "B", round: 2 })]));
     expect(pi.appendedEntries).toHaveLength(0);
     expect(pi.sentMessages).toHaveLength(0);
@@ -169,8 +161,7 @@ describe("state restoration on reload (no behavioral change)", () => {
       phase: "B",
       round: 3,
       turnsThisPhase: 1,
-      specPath: "internal/01-wire-session-start.md",
-    });
+      specPath: "internal/01-wire-session-start.md"});
     const { state, ctx, handler } = makeInput([entry]);
     await handler({}, ctx);
     expect(state.current.phase).toBe("B");
@@ -184,22 +175,16 @@ describe("state restoration on reload (no behavioral change)", () => {
       phase: "C",
       round: 2,
       turnsThisPhase: 1,
-      disputeMode: true,
-      justTransitioned: true,
+      dispute: { status: "conceded", filer: "writer" }, justTransitioned: true,
       negotiateReprompted: true,
-      awaitDisputeFix: true,
-      awaitDisputeReview: true,
       disputeCount: 2,
       lastProposal: "keep this",
-      lastPhase: "B",
-    });
+      lastPhase: "B"});
     const { state, handler } = makeInput([entry]);
     await handler({}, makeCtx([entry]));
-    expect(state.current.disputeMode).toBe(false);
+    expect(state.current.dispute?.status).toBe("conceded"); // preserved (spec 09)
     expect(state.current.justTransitioned).toBe(false);
     expect(state.current.negotiateReprompted).toBe(false);
-    expect(state.current.awaitDisputeFix).toBe(false);
-    expect(state.current.awaitDisputeReview).toBe(false);
     // Persistent fields survive
     expect(state.current.disputeCount).toBe(2);
     expect(state.current.lastProposal).toBe("keep this");
@@ -316,16 +301,14 @@ describe("monolith cleanup (duplicate helpers removed)", () => {
 
   it("imports handleSessionStart from ./session-start", () => {
     expect(readEventsSource()).toMatch(
-      /from\s+['"]\.\/session-start(\.js)?['"]/,
-    );
+      /from\s+['"]\.\/session-start(\.js)?['"]/);
   });
 
   it("no longer defines restoreState / findLastLoopState / clearTransientFlags", () => {
     const src = readEventsSource();
     for (const name of ["restoreState", "findLastLoopState", "clearTransientFlags"]) {
       expect(src, `${name} should be removed from src/events/index.ts`).not.toMatch(
-        new RegExp(`(function\\s+|const\\s+)${name}\\b`),
-      );
+        new RegExp(`(function\\s+|const\\s+)${name}\\b`));
     }
   });
 
@@ -370,23 +353,18 @@ describe("extension entry point (index.ts) — session_start seam", () => {
           maxDispute: 3,
           maxTurnsPerPhase: 5,
           coverageThreshold: 90,
-          disputeMode: true, // should be cleared
+          dispute: { status: "conceded", filer: "writer" }, // should be cleared
           disputeCount: 1,
           turnsThisPhase: 1,
           lastProposal: "some plan",
           lastPhase: "A",
           justTransitioned: true, // should be cleared
-          negotiateReprompted: false,
-          awaitDisputeFix: false,
-          awaitDisputeReview: false,
-        },
-      },
+          negotiateReprompted: false}},
     ];
     const ctx = {
       ui,
       sessionManager: { getEntries: () => entries },
-      cwd: "/tmp/test-project",
-    };
+      cwd: "/tmp/test-project"};
 
     await handlers[0]({ type: "session_start", reason: "reload" }, ctx);
 

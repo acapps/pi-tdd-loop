@@ -20,31 +20,24 @@ function makeState(overrides = {}): LoopState {
     maxDispute: 3,
     maxTurnsPerPhase: 5,
     coverageThreshold: 80,
-    disputeMode: false,
     disputeCount: 0,
     turnsThisPhase: 0,
     lastProposal: "",
     lastPhase: "idle",
     justTransitioned: false,
     negotiateReprompted: false,
-    awaitDisputeFix: false,
-    awaitDisputeReview: false,
-    ...overrides,
-  };
+    ...overrides};
 }
 
 function makeMockCtx(overrides: { cwd?: string } = {}): any {
   return {
     ui: {
       notify: vi.fn(),
-      setStatus: vi.fn(),
-    },
+      setStatus: vi.fn()},
     sessionManager: {
-      getEntries: () => [],
-    },
+      getEntries: () => []},
     cwd: "/tmp/test-project",
-    ...overrides,
-  };
+    ...overrides};
 }
 
 function makeInput(overrides: Partial<ToolCallHandlerInput> = {}): ToolCallHandlerInput {
@@ -55,15 +48,13 @@ function makeInput(overrides: Partial<ToolCallHandlerInput> = {}): ToolCallHandl
     toolName: "write",
     path: "src/main.go",
     ctx: makeMockCtx(),
-    ...overrides,
-  };
+    ...overrides};
 }
 
 describe("handleToolCall", () => {
   it("returns undefined for escalated phase (stub)", () => {
     const input = makeInput({
-      state: { current: makeState({ phase: "escalated" }) },
-    });
+      state: { current: makeState({ phase: "escalated" }) }});
     const result = handleToolCall(input);
     expect(result).toBeUndefined();
   });
@@ -104,16 +95,14 @@ describe("handleToolCall", () => {
   it("handles Phase A with test file path", () => {
     const input = makeInput({
       state: { current: makeState({ phase: "A" }) },
-      path: "src/main_test.go",
-    });
+      path: "src/main_test.go"});
     expect(() => handleToolCall(input)).not.toThrow();
   });
 
   it("handles Phase A with source file path", () => {
     const input = makeInput({
       state: { current: makeState({ phase: "A" }) },
-      path: "src/main.go",
-    });
+      path: "src/main.go"});
     expect(() => handleToolCall(input)).not.toThrow();
   });
 
@@ -121,56 +110,49 @@ describe("handleToolCall", () => {
     const input = makeInput({
       state: { current: makeState({ phase: "negotiate" }) },
       toolName: "write",
-      path: "src/main.go",
-    });
+      path: "src/main.go"});
     expect(() => handleToolCall(input)).not.toThrow();
   });
 
   it("handles Phase B with source file path", () => {
     const input = makeInput({
       state: { current: makeState({ phase: "B" }) },
-      path: "src/main.go",
-    });
+      path: "src/main.go"});
     expect(() => handleToolCall(input)).not.toThrow();
   });
 
   it("handles Phase B with test file path", () => {
     const input = makeInput({
       state: { current: makeState({ phase: "B" }) },
-      path: "src/main_test.go",
-    });
+      path: "src/main_test.go"});
     expect(() => handleToolCall(input)).not.toThrow();
   });
 
   it("handles Phase C with source file path", () => {
     const input = makeInput({
       state: { current: makeState({ phase: "C" }) },
-      path: "src/main.go",
-    });
+      path: "src/main.go"});
     expect(() => handleToolCall(input)).not.toThrow();
   });
 
   it("handles Phase C with test file path", () => {
     const input = makeInput({
       state: { current: makeState({ phase: "C" }) },
-      path: "src/main_test.go",
-    });
+      path: "src/main_test.go"});
     expect(() => handleToolCall(input)).not.toThrow();
   });
 
   it("handles dispute mode active", () => {
     const input = makeInput({
-      state: { current: makeState({ phase: "B", disputeMode: true }) },
-      path: "src/main.go",
-    });
+      state: { current: makeState({ phase: "B", dispute: { status: "conceded", filer: "writer" } }) },
+      path: "src/main.go"});
     expect(() => handleToolCall(input)).not.toThrow();
   });
 
   it("handles awaitDisputeReview active", () => {
     const input = makeInput({
-      state: { current: makeState({ phase: "B", awaitDisputeReview: true }) },
-      path: "src/main.go",
-    });
+      state: { current: makeState({ phase: "B" }) },
+      path: "src/main.go"});
     expect(() => handleToolCall(input)).not.toThrow();
   });
 

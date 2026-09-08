@@ -18,17 +18,13 @@ function makeState(phase: Phase = "idle", overrides = {}): LoopState {
     maxDispute: 3,
     maxTurnsPerPhase: 5,
     coverageThreshold: 80,
-    disputeMode: false,
     disputeCount: 0,
     turnsThisPhase: 0,
     lastProposal: "",
     lastPhase: "idle",
     justTransitioned: false,
     negotiateReprompted: false,
-    awaitDisputeFix: false,
-    awaitDisputeReview: false,
-    ...overrides,
-  };
+    ...overrides};
 }
 
 describe("formatStatus", () => {
@@ -50,9 +46,7 @@ describe("formatStatus", () => {
         failures: [
           { test: "TestAdd", subtest: "", output: "expected 3, got 2\n" },
         ],
-        allPassed: false,
-      },
-    });
+        allPassed: false}});
     const result = formatStatus(state);
     expect(result).toContain("Phase: A, round 2");
     expect(result).toContain("compile: ✓");
@@ -64,8 +58,7 @@ describe("formatStatus", () => {
   const failures = Array.from({ length: 8 }, (_, i) => ({
       test: `Test${i}`,
       subtest: "",
-      output: `fail ${i}\n`,
-    }));
+      output: `fail ${i}\n`}));
     const state = makeState("B", {
       round: 3,
       lastGateResult: {
@@ -74,9 +67,7 @@ describe("formatStatus", () => {
         tests: false,
         coverage: 0,
         failures,
-        allPassed: false,
-      },
-    });
+        allPassed: false}});
     const result = formatStatus(state);
     expect(result).toContain("... and 3 more");
   });
@@ -91,9 +82,7 @@ describe("formatStatus", () => {
         tests: true,
         coverage: 92.5,
         failures: [],
-        allPassed: true,
-      },
-    });
+        allPassed: true}});
     const result = formatStatus(state);
     expect(result).toContain("92.5%");
     expect(result).toContain("threshold: 90%");

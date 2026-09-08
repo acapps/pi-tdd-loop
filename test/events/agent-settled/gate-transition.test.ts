@@ -48,17 +48,14 @@ function makeState(overrides: Partial<LoopState> = {}): LoopState {
     maxDispute: 3,
     maxTurnsPerPhase: 5,
     coverageThreshold: 80,
-    disputeMode: false,
     disputeCount: 0,
     turnsThisPhase: 0,
     lastProposal: "",
     lastPhase: "A",
     justTransitioned: false,
     negotiateReprompted: false,
-    awaitDisputeFix: false,
-    awaitDisputeReview: false,
-    ...overrides,
-  };
+    dispute: { status: "none" },
+    ...overrides};
 }
 
 function makeCtx(overrides: { cwd?: string } = {}): any {
@@ -66,15 +63,13 @@ function makeCtx(overrides: { cwd?: string } = {}): any {
     ui: { notify: vi.fn(), setStatus: vi.fn() },
     sessionManager: { getEntries: () => [] },
     cwd: "/tmp/test-project",
-    ...overrides,
-  };
+    ...overrides};
 }
 
 // runGates now returns a GateOutcome; these fixtures wrap a GateResult in
 // the kind: "result" envelope (harness flip for bug-gate-signal-integrity).
 function gate(
-  overrides: Partial<GateResult> = {},
-): { kind: "result"; result: GateResult } {
+  overrides: Partial<GateResult> = {}): { kind: "result"; result: GateResult } {
   return {
     kind: "result",
     result: {
@@ -84,14 +79,11 @@ function gate(
       allPassed: true,
       coverage: 85,
       failures: [],
-      ...overrides,
-    },
-  };
+      ...overrides}};
 }
 
 function gateResult(
-  overrides: Partial<GateResult> = {},
-): GateResult {
+  overrides: Partial<GateResult> = {}): GateResult {
   return {
     compile: true,
     compileError: "",
@@ -99,8 +91,7 @@ function gateResult(
     allPassed: true,
     coverage: 85,
     failures: [],
-    ...overrides,
-  };
+    ...overrides};
 }
 
 function makeInput(overrides: Partial<GateHandlerInput> = {}): {
@@ -118,8 +109,7 @@ function makeInput(overrides: Partial<GateHandlerInput> = {}): {
     ctx,
     lang: GO,
     debug,
-    ...overrides,
-  };
+    ...overrides};
   return { input, pi, ctx, debug };
 }
 
@@ -148,8 +138,7 @@ afterEach(() => {
 describe("handleGateTransition — contract basics", () => {
   it("calls runGates with (ctx.cwd, coverageThreshold, language, buildTool, phase)", async () => {
     const { input } = makeInput({
-      state: makeState({ phase: "C", round: 2, coverageThreshold: 60, language: "java", buildTool: "gradle" }),
-    });
+      state: makeState({ phase: "C", round: 2, coverageThreshold: 60, language: "java", buildTool: "gradle" })});
     await handleGateTransition(input);
     expect(runGatesMock).toHaveBeenCalledTimes(1);
     expect(runGatesMock).toHaveBeenCalledWith("/tmp/test-project", 60, "java", "gradle", "C");
@@ -292,14 +281,14 @@ describe("Phase B", () => {
   });
 
   it("allPassed → advance to C: cleaner prompt, disputeMode cleared, round reset", async () => {
-    const { input, pi, ctx } = makeInput({ state: makeState({ phase: "B", round: 2, disputeMode: true }) });
+    const { input, pi, ctx } = makeInput({ state: makeState({ phase: "B", round: 2, dispute: { status: "conceded", filer: "writer" } }) });
     const result = await handleGateTransition(input);
 
     expect(result.applied).toBe(true);
     expect(result.state.phase).toBe("C");
     expect(result.state.round).toBe(1);
     expect(result.state.turnsThisPhase).toBe(1);
-    expect(result.state.disputeMode).toBe(false);
+    expect(result.state.dispute?.status === "conceded").toBe(false);
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GO.prompts.promptCleanerPhaseC());
     expect(pi.sentMessages[0].options).toEqual({ triggerTurn: true });
@@ -310,14 +299,13 @@ describe("Phase B", () => {
   it("spec 09 — retired dispute branch: stale flag no longer special-cased; normal writer retry path runs", async () => {
     runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "boom", tests: false, allPassed: false, coverage: 0, failures: [{ test: "TestAdd", subtest: "", output: "x" }] })));
     const { input, pi, ctx, debug } = makeInput({
-      state: makeState({ phase: "B", round: 1, awaitDisputeReview: true, lastProposal: "writer claim" }),
-    });
+      state: makeState({ phase: "B", round: 1, lastProposal: "writer claim" })});
     const result = await handleGateTransition(input);
 
     expect(result.applied).toBe(true);
     expect(result.state.round).toBe(2);
     expect(result.state.turnsThisPhase).toBe(1);
-    expect(result.state.awaitDisputeReview).toBe(true); // flag untouched — the settle step is the only sanctioned clearer
+    expect(result.state.dispute?.status).toBe("none"); // dispute cleared by handleDisputeFixIncomplete
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GO.prompts.promptWriterPhaseBContinue("  - TestAdd\nx", 1));
     expect(pi.sentMessages[0].options).toEqual({ triggerTurn: true });
@@ -329,11 +317,11 @@ describe("Phase B", () => {
   it("dispute fix incomplete (disputeMode, compile pass, tests fail) → disputeMode cleared, round+1, writer continue prompt", async () => {
     const failures = [{ test: "TestFoo", subtest: "", output: "fail" }];
     runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: true, tests: false, allPassed: false, coverage: 50, failures })));
-    const { input, pi, ctx } = makeInput({ state: makeState({ phase: "B", round: 1, disputeMode: true }) });
+    const { input, pi, ctx } = makeInput({ state: makeState({ phase: "B", round: 1, dispute: { status: "conceded", filer: "writer" } }) });
     const result = await handleGateTransition(input);
 
     expect(result.applied).toBe(true);
-    expect(result.state.disputeMode).toBe(false);
+    expect(result.state.dispute?.status === "conceded").toBe(false);
     expect(result.state.round).toBe(2);
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GO.prompts.promptWriterPhaseBContinue(formatFailures(failures), 1));
@@ -343,11 +331,11 @@ describe("Phase B", () => {
 
   it("dispute fix compile fail (disputeMode) → disputeMode cleared, round+1, compile retry prompt", async () => {
     runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "still broken", tests: false, allPassed: false, coverage: 0 })));
-    const { input, pi, ctx } = makeInput({ state: makeState({ phase: "B", round: 1, disputeMode: true }) });
+    const { input, pi, ctx } = makeInput({ state: makeState({ phase: "B", round: 1, dispute: { status: "conceded", filer: "writer" } }) });
     const result = await handleGateTransition(input);
 
     expect(result.applied).toBe(true);
-    expect(result.state.disputeMode).toBe(false);
+    expect(result.state.dispute?.status === "conceded").toBe(false);
     expect(result.state.round).toBe(2);
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GO.prompts.promptTesterCompileRetry("still broken"));
@@ -357,14 +345,13 @@ describe("Phase B", () => {
 
   it("spec 08 regression (session 01a00dba tail): passing gate in B with awaitDisputeReview → C with the flag cleared, tool calls unblocked", async () => {
     const { input, pi, ctx } = makeInput({
-      state: makeState({ phase: "B", round: 2, disputeMode: true, awaitDisputeReview: true, lastProposal: "writer claim" }),
-    });
+      state: makeState({ phase: "B", round: 2, dispute: { status: "conceded", filer: "writer" }, lastProposal: "writer claim" })});
     const result = await handleGateTransition(input);
 
     expect(result.applied).toBe(true);
     expect(result.state.phase).toBe("C");
-    expect(result.state.awaitDisputeReview).toBe(false); // cleared at the B→C boundary
-    expect(result.state.disputeMode).toBe(false);
+    expect(result.state.dispute?.status === "defended").toBe(false); // cleared at the B→C boundary
+    expect(result.state.dispute?.status === "conceded").toBe(false);
 
     // rule 2 off: a pathless read in Phase C is not blocked (was blocked pre-fix)
     const blocked = handleToolCall({
@@ -373,8 +360,7 @@ describe("Phase B", () => {
       debug: vi.fn(),
       toolName: "read",
       path: undefined, // F3: pathless tools extract undefined
-      ctx,
-    });
+      ctx});
     expect(blocked).toBeUndefined();
 
     // F3: raw events deliver null — same: not blocked
@@ -384,8 +370,7 @@ describe("Phase B", () => {
       debug: vi.fn(),
       toolName: "read",
       path: null as any,
-      ctx,
-    });
+      ctx});
     expect(blockedNull).toBeUndefined();
   });
 });

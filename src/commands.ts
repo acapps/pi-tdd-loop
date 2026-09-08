@@ -73,13 +73,12 @@ function buildRestartPrompt(state: LoopState, specPath: string): string {
 function resetPhaseState(state: LoopState): void {
   state.round = 1;
   state.disputeCount = 0;
-  state.disputeMode = false;
+  state.dispute = { status: "none" };
   state.negotiateReprompted = false;
   state.negotiateProposed = false;
   state.negotiateFeedback = "";
   state.justTransitioned = false;
-  state.awaitDisputeFix = false;
-  state.awaitDisputeReview = false;
+  state.dispute = { status: "none" };
   state.turnsThisPhase = 1;
 }
 
@@ -110,7 +109,7 @@ function createInitialState(
     maxDispute: 3,
     maxTurnsPerPhase: 5,
     coverageThreshold: coverage ?? 80,
-    disputeMode: false,
+    dispute: { status: "none" },
     disputeCount: 0,
     turnsThisPhase: 1,
     lastProposal: "",
@@ -119,8 +118,6 @@ function createInitialState(
     negotiateReprompted: false,
     negotiateProposed: false,
     negotiateFeedback: "",
-    awaitDisputeFix: false,
-    awaitDisputeReview: false,
   };
 }
 
@@ -465,10 +462,8 @@ export function cmdCancel(
     description: "Cancel the loop and return to idle",
     handler: async (_args: string, ctx: CommandContext) => {
       state.current.phase = "idle";
-      state.current.awaitDisputeFix = false;
-      state.current.awaitDisputeReview = false;
+      state.current.dispute = { status: "none" };
       state.current.round = 0;
-      state.current.disputeMode = false;
       debug("Command: /loop-cancel → idle");
       ctx.ui.notify("Loop cancelled.", "info");
       ctx.ui.setStatus("loop", "idle");

@@ -30,17 +30,13 @@ function makeState(overrides?: Partial<LoopState>): LoopState {
     maxDispute: 3,
     maxTurnsPerPhase: 5,
     coverageThreshold: 80,
-    disputeMode: false,
     disputeCount: 0,
     turnsThisPhase: 1,
     lastProposal: "",
     lastPhase: "A",
     justTransitioned: false,
     negotiateReprompted: false,
-    awaitDisputeFix: false,
-    awaitDisputeReview: false,
-    ...overrides,
-  };
+    ...overrides};
 }
 
 function makeInitialState(): LoopState {
@@ -49,8 +45,7 @@ function makeInitialState(): LoopState {
     round: 0,
     specPath: "",
     turnsThisPhase: 0,
-    lastPhase: "idle",
-  });
+    lastPhase: "idle"});
 }
 
 function stateEntry(data: unknown): Record<string, unknown> {
@@ -144,11 +139,9 @@ describe("handleSessionStart — restore validation (quarantine)", () => {
       ctx: {
         ui: { notify: vi.fn(), setStatus: vi.fn() },
         sessionManager: { getEntries: () => entries },
-        cwd: "/tmp/test",
-      } as never,
+        cwd: "/tmp/test"} as never,
       debug: vi.fn(),
-      ...overrides,
-    };
+      ...overrides};
   }
 
   it("quarantines an invalid restored entry: pinned status + debug, state NOT loaded", () => {
@@ -209,16 +202,13 @@ describe("handleSessionStart — restore validation (quarantine)", () => {
   it("still clears transient flags on a valid restore", () => {
     const saved = makeState({
       justTransitioned: true,
-      negotiateReprompted: true,
-      awaitDisputeFix: true,
-      awaitDisputeReview: true,
-    });
+      negotiateReprompted: true});
     const input = makeInput([stateEntry(saved)]);
     handleSessionStart(input);
     expect(input.state.current.justTransitioned).toBe(false);
     expect(input.state.current.negotiateReprompted).toBe(false);
-    expect(input.state.current.awaitDisputeFix).toBe(false);
-    expect(input.state.current.awaitDisputeReview).toBe(false);
+    expect(input.state.current.dispute?.status === "conceded").toBe(false);
+    expect(input.state.current.dispute?.status === "defended").toBe(false);
   });
 
   it("ignores entries that are not loop-state entries (no quarantine, no restore)", () => {

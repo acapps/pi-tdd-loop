@@ -23,30 +23,23 @@ function makeState(overrides = {}): LoopState {
     maxDispute: 3,
     maxTurnsPerPhase: 5,
     coverageThreshold: 80,
-    disputeMode: false,
     disputeCount: 0,
     turnsThisPhase: 0,
     lastProposal: "",
     lastPhase: "idle",
     justTransitioned: false,
     negotiateReprompted: false,
-    awaitDisputeFix: false,
-    awaitDisputeReview: false,
-    ...overrides,
-  };
+    ...overrides};
 }
 
 function makeMockCtx(entries: unknown[] = [], cwd = "/tmp/test"): any {
   return {
     ui: {
       notify: vi.fn(),
-      setStatus: vi.fn(),
-    },
+      setStatus: vi.fn()},
     sessionManager: {
-      getEntries: () => entries,
-    },
-    cwd,
-  };
+      getEntries: () => entries},
+    cwd};
 }
 
 function makeInput(overrides: Partial<SessionStartHandlerInput> = {}): SessionStartHandlerInput {
@@ -54,8 +47,7 @@ function makeInput(overrides: Partial<SessionStartHandlerInput> = {}): SessionSt
     state: { current: makeState() },
     ctx: makeMockCtx(),
     debug: vi.fn(),
-    ...overrides,
-  };
+    ...overrides};
 }
 
 describe("handleSessionStart", () => {
@@ -66,8 +58,7 @@ describe("handleSessionStart", () => {
 
   it("handles empty entries array (no previous state)", () => {
     const input = makeInput({
-      ctx: makeMockCtx([]),
-    });
+      ctx: makeMockCtx([])});
     handleSessionStart(input);
     expect(input.debug).toHaveBeenCalled();
   });
@@ -90,8 +81,7 @@ describe("handleSessionStart", () => {
     const state = makeState({
       specFindings: undefined,
       awaitingReview: undefined,
-      lastGateResult: undefined,
-    });
+      lastGateResult: undefined});
     const input = makeInput({ state: { current: state } });
     expect(() => handleSessionStart(input)).not.toThrow();
   });
@@ -148,10 +138,8 @@ describe("handleSessionStart", () => {
     expect(healed.negotiateFeedback).toBe("");
     expect(input.state.current.phase).toBe("negotiate");
 
-    // Spec 09: the three new dispute fields are cleared by clearTransientFlags.
-    expect(input.state.current.disputeDefended).toBeUndefined();
-    expect(input.state.current.awaitWriterConcedeFix).toBe(false);
-    expect(input.state.current.disputeFiler).toBeUndefined();
+    // Spec 09: the dispute is preserved (not cleared by clearTransientFlags).
+    expect(input.state.current.dispute?.status).toBe("none"); // default (no dispute in saved state)
   });
 
   it("clears the spec 09 dispute fields even when saved with pending values", () => {
@@ -159,10 +147,7 @@ describe("handleSessionStart", () => {
       phase: "B",
       round: 2,
       turnsThisPhase: 1,
-      disputeDefended: "defense text",
-      awaitWriterConcedeFix: true,
-      disputeFiler: "tester",
-    });
+      dispute: { status: "conceded", filer: "writer" }});
     const ctx = makeMockCtx([
       { type: "custom", customType: "loop-state", data: saved },
     ]);
@@ -170,8 +155,7 @@ describe("handleSessionStart", () => {
 
     handleSessionStart(input);
 
-    expect(input.state.current.disputeDefended).toBeUndefined();
-    expect(input.state.current.awaitWriterConcedeFix).toBe(false);
-    expect(input.state.current.disputeFiler).toBeUndefined();
+    expect(input.state.current.dispute?.status).toBe("conceded"); // preserved (spec 09)
+    expect(input.state.current.dispute?.filer).toBe("writer"); // preserved
   });
 });

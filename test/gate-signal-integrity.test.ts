@@ -42,8 +42,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // would break them; the mocked runGates wiring lives in
 // test/gates-provider-wiring.test.ts instead).
 vi.mock("node:module", () => ({
-  createRequire: vi.fn(),
-}));
+  createRequire: vi.fn()}));
 
 import { createRequire } from "node:module";
 import { runGates, parseCoverage, getTestCommand, hasVitestCoverageProvider } from "../src/gates";
@@ -79,17 +78,13 @@ function makeState(overrides: Partial<LoopState> = {}): LoopState {
     maxDispute: 3,
     maxTurnsPerPhase: 5,
     coverageThreshold: 80,
-    disputeMode: false,
     disputeCount: 0,
     turnsThisPhase: 0,
     lastProposal: "",
     lastPhase: "A",
     justTransitioned: false,
     negotiateReprompted: false,
-    awaitDisputeFix: false,
-    awaitDisputeReview: false,
-    ...overrides,
-  };
+    ...overrides};
 }
 
 function makeGate(overrides: Partial<GateResult> = {}): GateResult {
@@ -100,8 +95,7 @@ function makeGate(overrides: Partial<GateResult> = {}): GateResult {
     allPassed: true,
     coverage: 85,
     failures: [],
-    ...overrides,
-  };
+    ...overrides};
 }
 
 // Verbatim example strings pinned in the spec's Coverage parse patterns table.
@@ -363,15 +357,13 @@ function makeTsCwd(): string {
   mkdirSync(join(dir, "src"), { recursive: true });
   writeFileSync(
     join(dir, "package.json"),
-    JSON.stringify({ name: "gate-ts", private: true, type: "module" }),
-  );
+    JSON.stringify({ name: "gate-ts", private: true, type: "module" }));
   // A test that fails at runtime → non-zero exit, no `FAIL <id>` line shape
   // that the old parser could miss (vitest does print FAIL, but the exit
   // code is the signal either way).
   writeFileSync(
     join(dir, "src", "fail.test.ts"),
-    "import { it, expect } from 'vitest';\nit('fails', () => { expect(1).toBe(2); });\n",
-  );
+    "import { it, expect } from 'vitest';\nit('fails', () => { expect(1).toBe(2); });\n");
   return dir;
 }
 
@@ -400,20 +392,17 @@ describe("constants — RETRY_PROMPTS new keys", () => {
 describe("generic-prompts — gate error / coverage prompts", () => {
   it("promptGateError renders the pinned verbatim string", () => {
     expect(GP.promptGateError("spawn go ENOENT")).toBe(
-      "Gate could not run: spawn go ENOENT. Fix the environment and retry.",
-    );
+      "Gate could not run: spawn go ENOENT. Fix the environment and retry.");
   });
 
   it("promptCoverageBelowThreshold renders the pinned verbatim string", () => {
     expect(GP.promptCoverageBelowThreshold(62.5, 80)).toBe(
-      "Coverage 62.5% is below the 80% threshold.",
-    );
+      "Coverage 62.5% is below the 80% threshold.");
   });
 
   it("promptCoverageBelowThreshold with integer values", () => {
     expect(GP.promptCoverageBelowThreshold(60, 80)).toBe(
-      "Coverage 60% is below the 80% threshold.",
-    );
+      "Coverage 60% is below the 80% threshold.");
   });
 });
 
@@ -446,8 +435,7 @@ describe("transitions — Phase B coverage rows (T1/T2)", () => {
     expect(result.effect.type).toBe("retry");
     if (result.effect.type === "retry") {
       expect(result.effect.notify).toBe(
-        "Coverage 62.5% is below the 80% threshold.",
-      );
+        "Coverage 62.5% is below the 80% threshold.");
       expect(result.effect.level).toBe("warning");
       expect(result.effect.prompt).toBe(RETRY_PROMPTS.COVERAGE_BELOW_THRESHOLD);
     }
@@ -465,8 +453,7 @@ describe("transitions — Phase B coverage rows (T1/T2)", () => {
     const state = makeState({ phase: "B", round: 1, coverageThreshold: 80 });
     const result = T.computeTransition(
       state,
-      makeGate({ tests: false, allPassed: false, coverage: 0, failures: [{ test: "T", subtest: "", output: "x" }] }),
-    );
+      makeGate({ tests: false, allPassed: false, coverage: 0, failures: [{ test: "T", subtest: "", output: "x" }] }));
     expect(result.effect.type).toBe("retry");
     if (result.effect.type === "retry") {
       // The existing writer retry, NOT the coverage retry.
@@ -492,8 +479,7 @@ describe("transitions — T5 gate error (computeGateErrorTransition)", () => {
     expect(result.effect.type).toBe("retry");
     if (result.effect.type === "retry") {
       expect(result.effect.notify).toBe(
-        "Gate could not run: spawn go ENOENT. Fix the environment and retry.",
-      );
+        "Gate could not run: spawn go ENOENT. Fix the environment and retry.");
       expect(result.effect.level).toBe("warning");
       expect(result.effect.prompt).toBe(RETRY_PROMPTS.GATE_ERROR);
     }
@@ -549,8 +535,7 @@ describe("GateOutcome shape", () => {
   it("kind 'result' carries a GateResult; kind 'error' carries a string error", () => {
     const resultOutcome: GateOutcome = {
       kind: "result",
-      result: makeGate(),
-    };
+      result: makeGate()};
     expect(resultOutcome.kind).toBe("result");
     expect(resultOutcome.result).toBeDefined();
 

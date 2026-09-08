@@ -40,17 +40,13 @@ function makeState(overrides: Partial<LoopState> & NegotiateMarkers = {}): LoopS
     maxDispute: 3,
     maxTurnsPerPhase: 5,
     coverageThreshold: 80,
-    disputeMode: false,
     disputeCount: 0,
     turnsThisPhase: 0,
     lastProposal: "",
     lastPhase: "A",
     justTransitioned: false,
     negotiateReprompted: false,
-    awaitDisputeFix: false,
-    awaitDisputeReview: false,
-    ...overrides,
-  };
+    ...overrides};
 }
 
 function makeInput(overrides: Partial<NegotiateHandlerInput> = {}): {
@@ -68,8 +64,7 @@ function makeInput(overrides: Partial<NegotiateHandlerInput> = {}): {
     ctx,
     lang: GO,
     debug,
-    ...overrides,
-  };
+    ...overrides};
   return { input, pi, ctx, debug };
 }
 

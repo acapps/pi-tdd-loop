@@ -33,17 +33,13 @@ function makeState(overrides: Partial<LoopState> = {}): LoopState {
     maxDispute: 3,
     maxTurnsPerPhase: 5,
     coverageThreshold: 80,
-    disputeMode: false,
     disputeCount: 0,
     turnsThisPhase: 0,
     lastProposal: "",
     lastPhase: "idle",
     justTransitioned: false,
     negotiateReprompted: false,
-    awaitDisputeFix: false,
-    awaitDisputeReview: false,
-    ...overrides,
-  };
+    ...overrides};
 }
 
 function makeInput(overrides: Partial<ReviewHandlerInput> = {}): {
@@ -61,8 +57,7 @@ function makeInput(overrides: Partial<ReviewHandlerInput> = {}): {
     ctx,
     lang: GO,
     debug,
-    ...overrides,
-  };
+    ...overrides};
   return { input, pi, ctx, debug };
 }
 

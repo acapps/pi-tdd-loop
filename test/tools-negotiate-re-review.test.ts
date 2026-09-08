@@ -33,7 +33,6 @@ function makeState(overrides: Partial<LoopState> = {}): { current: LoopState } {
       maxDispute: 3,
       maxTurnsPerPhase: 5,
       coverageThreshold: 80,
-      disputeMode: false,
       disputeCount: 0,
       turnsThisPhase: 1,
       lastProposal: "plan X",
@@ -42,11 +41,7 @@ function makeState(overrides: Partial<LoopState> = {}): { current: LoopState } {
       negotiateReprompted: false,
       negotiateProposed: false,
       negotiateFeedback: "",
-      awaitDisputeFix: false,
-      awaitDisputeReview: false,
-      ...overrides,
-    },
-  };
+      ...overrides}};
 }
 
 function makeCtx(): any {
@@ -86,8 +81,7 @@ describe("negotiate_review — row 2 (contract re-review)", () => {
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GP.promptNegotiateContractReReview("*_test.go"));
     expect(pi.sentMessages[0].content).toBe(
-      `You are the TESTER (contract re-review). The Writer's proposal was accepted. Verify the contract file matches the agreement.\nRead *_test.go. Use negotiate_review: 'approve' only if the file matches; otherwise feedback naming each drifted item.\nNo file writes.\nAn 'approve' here advances the loop to Phase B.`,
-    );
+      `You are the TESTER (contract re-review). The Writer's proposal was accepted. Verify the contract file matches the agreement.\nRead *_test.go. Use negotiate_review: 'approve' only if the file matches; otherwise feedback naming each drifted item.\nNo file writes.\nAn 'approve' here advances the loop to Phase B.`);
     expect(pi.sentMessages[0].options).toEqual({ triggerTurn: true });
 
     // Persisted AFTER the mutation (a reload mid-re-review must see round 3).

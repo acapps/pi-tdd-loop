@@ -17,25 +17,21 @@ export interface LoopState {
   maxDispute: number;
   maxTurnsPerPhase: number;
   coverageThreshold: number;
-  disputeMode: boolean;
+  // Dispute lifecycle (bug-dispute-reload-evaporation): one status object
+  // replaces the old 6 flat fields (disputeMode, awaitDisputeFix,
+  // awaitDisputeReview, disputeDefended, awaitWriterConcedeFix, disputeFiler).
+  dispute?: DisputeState;
   disputeCount: number;
   turnsThisPhase: number;
   lastProposal: string;
   lastPhase: Phase;
   justTransitioned: boolean;
   negotiateReprompted: boolean;
-  awaitDisputeFix: boolean;
-  awaitDisputeReview: boolean;
   lastGateResult?: GateResult;
   // Negotiate round (spec 07): set by tools, consumed + cleared by the settle
   // handler; undefined and "" both mean "no feedback pending".
   negotiateProposed?: boolean;
   negotiateFeedback?: string;
-  // Dispute review wiring (spec 09): the pending review decision and its
-  // recorded filer. Consumed + cleared by the settle delivery handlers.
-  disputeDefended?: string;
-  awaitWriterConcedeFix?: boolean;
-  disputeFiler?: "writer" | "tester";
   // Phase 0
   specFindings?: Finding[];
   awaitingReview?: boolean;
@@ -50,6 +46,24 @@ export interface FailingTest {
   test: string;
   subtest: string;
   output: string;
+}
+
+// Dispute lifecycle (bug-dispute-reload-evaporation.md). The status is the
+// only mechanism: a reload never destroys a pending dispute — filed /
+// in-review / conceded / defended survive restore and redeliver on the next
+// settle; closed / none are no-ops.
+export type DisputeStatus = "none" | "filed" | "in-review" | "conceded" | "defended" | "closed";
+
+export interface DisputeState {
+  status: DisputeStatus;
+  // Set at filing (was: re-derived from disputeMode).
+  filer?: "writer" | "tester";
+  // The proposal text that filed it (was: lastProposal, shared).
+  claim?: string;
+  // The review decision (was: disputeDefended).
+  decision?: string;
+  // Round at filing — for the redelivery prompt.
+  filedRound?: number;
 }
 
 export interface GateResult {

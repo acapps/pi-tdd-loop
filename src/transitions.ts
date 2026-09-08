@@ -190,7 +190,7 @@ function handleTesterCompileFail(
 // --- Phase B ---
 
 function isWriterDisputeFixIncomplete(state: LoopState): boolean {
-  return state.phase === "B" && state.disputeMode;
+  return state.phase === "B" && (state.dispute?.status === "conceded" || state.dispute?.status === "defended");
 }
 
 function handleDisputeFixIncomplete(
@@ -282,8 +282,7 @@ function advanceToNegotiate(state: LoopState): LoopState {
     phase: "negotiate" as Phase,
     round: 1,
     turnsThisPhase: 1,
-    awaitDisputeFix: false,
-    awaitDisputeReview: false,
+    dispute: { status: "none" },
   };
 }
 
@@ -295,8 +294,7 @@ function advanceToPhaseB(state: LoopState): LoopState {
     turnsThisPhase: 1,
     justTransitioned: true,
     lastPhase: state.phase,
-    awaitDisputeFix: false,
-    awaitDisputeReview: false,
+    dispute: { status: "none" },
   };
 }
 
@@ -306,9 +304,7 @@ function advanceToPhaseC(state: LoopState): LoopState {
     phase: "C" as Phase,
     round: 1,
     turnsThisPhase: 1,
-    disputeMode: false,
-    awaitDisputeFix: false,
-    awaitDisputeReview: false,
+    dispute: { status: "none" },
   };
 }
 
@@ -318,17 +314,16 @@ function escalateTo(state: LoopState, fromPhase: string): LoopState {
     phase: "escalated" as Phase,
     lastPhase: state.phase as Phase,
     turnsThisPhase: 1,
-    awaitDisputeFix: false,
-    awaitDisputeReview: false,
+    dispute: { status: "none" },
   };
 }
 
 export function markDone(state: LoopState): LoopState {
-  return { ...state, phase: "done" as Phase, lastPhase: state.phase as Phase, turnsThisPhase: 1, awaitDisputeFix: false, awaitDisputeReview: false };
+  return { ...state, phase: "done" as Phase, lastPhase: state.phase as Phase, turnsThisPhase: 1, dispute: { status: "none" } };
 }
 
 function clearDisputeMode(state: LoopState): LoopState {
-  return { ...state, disputeMode: false, round: state.round + 1 };
+  return { ...state, dispute: { status: "none" }, round: state.round + 1 };
 }
 
 // --- Effect builders ---

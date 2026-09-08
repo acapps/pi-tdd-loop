@@ -4,7 +4,7 @@
 // Decision table (internal/02-implement-tool-call-handler.md), evaluated in
 // order, first match wins. Mirrors the former eventToolCall in src/events/index.ts
 // verbatim, including the F1-F5 review fixes:
-//   F1: rule 6's !disputeMode exclusion (dispute-fix turn may write test files)
+//   F1: rule 6's dispute-fix-turn exclusion (conceded + writer filed; the Tester may write test files)
 //   F2: rule 2 is debug-only — it emits no loop-refusal entry
 //   F3: missing path (undefined/null) never throws; only rules 2 and 4 can block
 
@@ -65,18 +65,32 @@ function isProjectPath(path: string | null | undefined, cwd: string): boolean {
 
 // Rule 2 — awaiting dispute review: block every tool call.
 // F2: debug only — no loop-refusal entry.
+// Keyed on the dispute status (bug-dispute-reload-evaporation): a writer-
+// filed dispute is "filed" until its settle schedules the review, so the
+// block covers both "filed" and "in-review" (was: awaitDisputeReview, which
+// was set only at filing — same window, new key).
 function blockDisputeReview(input: EnforcementInput): ToolCallBlockResult | undefined {
   const { state, debug, toolName } = input;
-  if (!state.awaitDisputeReview) return undefined;
+  const status = state.dispute?.status;
+  if (status !== "filed" && status !== "in-review") return undefined;
   debug(`Blocked: ${toolName} (awaiting dispute review)`);
   return { block: true, reason: DISPUTE_REVIEW_REASON };
 }
 
 // Rule 3 — dispute mode: block non-test paths (any tool, any phase).
 // The entry hardcodes tool "write" (monolith behavior), even for edit.
+// Pinned window (was: disputeMode): a writer-filed dispute is blocked from
+// filing ("filed"/"in-review") until the review resolves; a tester-filed
+// dispute is blocked while the Writer's concede-fix turn is pending
+// ("conceded" + filer tester).
 function blockDisputeWrite(input: EnforcementInput): ToolCallBlockResult | undefined {
   const { state, lang, pi, debug, path } = input;
-  if (!state.disputeMode || !path || lang.isTestFile(path)) return undefined;
+  const d = state.dispute;
+  if (!d) return undefined;
+  const inFixWindow =
+    (d.status === "filed" || d.status === "in-review") && d.filer !== "tester"
+    || (d.status === "conceded" && d.filer === "tester");
+  if (!inFixWindow || !path || lang.isTestFile(path)) return undefined;
   debug(`Blocked: ${path} (dispute mode, not test file)`);
   pi.appendEntry("loop-refusal", { phase: "B-dispute", path, tool: "write" });
   return { block: true, reason: lang.refusalMessage.phaseC };
@@ -103,12 +117,13 @@ function blockPhaseAWrite(input: EnforcementInput): ToolCallBlockResult | undefi
 }
 
 // Rule 6 — phases B/C: no test-file modifications.
-// F1: skipped during the dispute-fix turn (disputeMode) so the Tester can fix
-// *_test.go; rule 3 still blocks non-test writes in that turn.
+// F1: skipped during the dispute-fix turn (conceded + writer filed) so the
+// Tester can fix *_test.go; rule 3 still blocks non-test writes in that turn.
 function blockPhaseBCWrite(input: EnforcementInput): ToolCallBlockResult | undefined {
   const { state, lang, pi, debug, toolName, path, cwd } = input;
   const inPhaseBC = state.phase === "B" || state.phase === "C";
-  if (!inPhaseBC || state.disputeMode || !isWriteAction(toolName)) return undefined;
+  const inDisputeFixTurn = state.dispute?.status === "conceded" && state.dispute?.filer === "writer";
+  if (!inPhaseBC || inDisputeFixTurn || !isWriteAction(toolName)) return undefined;
   if (!isProjectPath(path, cwd) || path == null || !lang.isTestFile(path)) return undefined;
   debug(`Blocked: ${toolName} ${path} (phase ${state.phase}, is test file)`);
   pi.appendEntry("loop-refusal", { phase: state.phase, path, tool: toolName });

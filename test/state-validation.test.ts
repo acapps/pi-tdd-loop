@@ -32,17 +32,13 @@ function makeState(overrides?: Partial<LoopState>): LoopState {
     maxDispute: 3,
     maxTurnsPerPhase: 5,
     coverageThreshold: 80,
-    disputeMode: false,
     disputeCount: 0,
     turnsThisPhase: 1,
     lastProposal: "",
     lastPhase: "A",
     justTransitioned: false,
     negotiateReprompted: false,
-    awaitDisputeFix: false,
-    awaitDisputeReview: false,
-    ...overrides,
-  };
+    ...overrides};
 }
 
 /** Live initial state — index.ts (idle, round 0, turnsThisPhase 0). */
@@ -60,16 +56,12 @@ function makeInitialState(): LoopState {
     maxDispute: 3,
     maxTurnsPerPhase: 5,
     coverageThreshold: 80,
-    disputeMode: false,
     disputeCount: 0,
     turnsThisPhase: 0,
     lastProposal: "",
     lastPhase: "idle",
     justTransitioned: false,
-    negotiateReprompted: false,
-    awaitDisputeFix: false,
-    awaitDisputeReview: false,
-  };
+    negotiateReprompted: false};
 }
 
 /** markDone(makeState({phase:"C"})) — transitions.ts keeps round, sets lastPhase to source phase, turnsThisPhase 1. */
@@ -186,8 +178,7 @@ describe("validateLoopState — shape: field types and enums", () => {
         C: makeState({ phase: "C", lastPhase: "B" }),
         done: makeState({ phase: "done", lastPhase: "C" }),
         escalated: escalateFixture("C"),
-        idle: makeInitialState(),
-      }[phase];
+        idle: makeInitialState()}[phase];
       expect(validateLoopState(valid)).toBe(true);
     }
   );
@@ -217,11 +208,8 @@ describe("validateLoopState — shape: field types and enums", () => {
   });
 
   it.each([
-    "disputeMode",
     "justTransitioned",
     "negotiateReprompted",
-    "awaitDisputeFix",
-    "awaitDisputeReview",
   ] as const)("rejects when boolean field %s is a number", (field) => {
     expect(validateLoopState(makeState({ [field]: 1 } as Partial<LoopState>))).toBe(false);
   });
@@ -234,7 +222,7 @@ describe("validateLoopState — shape: field types and enums", () => {
   );
 
   it("rejects when a required boolean is missing", () => {
-    const { awaitDisputeReview: _x, ...rest } = makeState();
+    const { justTransitioned: _x, ...rest } = makeState();
     expect(validateLoopState(rest)).toBe(false);
   });
 
@@ -521,16 +509,12 @@ describe("validateLoopState — return contract", () => {
         maxDispute: null,
         maxTurnsPerPhase: null,
         coverageThreshold: null,
-        disputeMode: "no",
         disputeCount: null,
         turnsThisPhase: null,
         lastProposal: 0,
         lastPhase: null,
         justTransitioned: null,
-        negotiateReprompted: null,
-        awaitDisputeFix: null,
-        awaitDisputeReview: null,
-      })
+        negotiateReprompted: null})
     ).toBe(false);
   });
 

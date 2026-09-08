@@ -20,8 +20,7 @@ import {
   applyDoneEffect,
   applyEscalatedEffect,
   buildRetryPrompt,
-  buildAdvancePrompt,
-} from "../../../src/events/agent-settled/effect-applicator";
+  buildAdvancePrompt} from "../../../src/events/agent-settled/effect-applicator";
 import type { EffectInput } from "../../../src/events/agent-settled/effect-applicator";
 import type { LoopState, GateResult, FailingTest } from "../../../src/types";
 import * as GP from "../../../src/generic-prompts";
@@ -54,17 +53,14 @@ function makeState(overrides = {}): LoopState {
     maxDispute: 3,
     maxTurnsPerPhase: 5,
     coverageThreshold: 80,
-    disputeMode: false,
     disputeCount: 0,
     turnsThisPhase: 0,
     lastProposal: "",
     lastPhase: "idle",
     justTransitioned: false,
     negotiateReprompted: false,
-    awaitDisputeFix: false,
-    awaitDisputeReview: false,
-    ...overrides,
-  };
+    dispute: { status: "none" },
+    ...overrides};
 }
 
 function makeGateResult(overrides = {}): GateResult {
@@ -75,21 +71,17 @@ function makeGateResult(overrides = {}): GateResult {
     allPassed: false,
     coverage: 0,
     failures: [],
-    ...overrides,
-  };
+    ...overrides};
 }
 
 function makeMockCtx(): any {
   return {
     ui: {
       notify: vi.fn(),
-      setStatus: vi.fn(),
-    },
+      setStatus: vi.fn()},
     sessionManager: {
-      getEntries: () => [],
-    },
-    cwd: "/tmp/test-project",
-  };
+      getEntries: () => []},
+    cwd: "/tmp/test-project"};
 }
 
 // Prompt fns are vi.fn()s so tests can assert exact call args; their return
@@ -104,9 +96,7 @@ function makeMockLang(): any {
       promptTesterCompileRetry: vi.fn((err: string) => `Compile error: ${err}`),
       promptWriterPhaseBContinue: vi.fn((summary: string, count: number) => `Continue: ${count} failures\n${summary}`),
       promptCleanerRetry: vi.fn((summary: string, count: number) => `Cleaner retry: ${count} failures\n${summary}`),
-      promptCleanerPhaseC: vi.fn(() => "Phase C"),
-    },
-  };
+      promptCleanerPhaseC: vi.fn(() => "Phase C")}};
 }
 
 function makeInput(overrides: Partial<EffectInput> = {}): EffectInput {
@@ -118,8 +108,7 @@ function makeInput(overrides: Partial<EffectInput> = {}): EffectInput {
     debug: vi.fn(),
     effect: { type: "noop" },
     gateResult: makeGateResult(),
-    ...overrides,
-  };
+    ...overrides};
 }
 
 // ================================================================
@@ -152,10 +141,8 @@ describe("applyEffect (dispatcher)", () => {
         status: "Phase A — round 2",
         notify: "Gate failed.",
         level: "warning",
-        prompt: RETRY_PROMPTS.TESTER_COMPILE_RETRY,
-      },
-      gateResult: makeGateResult({ compile: false, compileError: "boom" }),
-    });
+        prompt: RETRY_PROMPTS.TESTER_COMPILE_RETRY},
+      gateResult: makeGateResult({ compile: false, compileError: "boom" })});
     const result = applyEffect(input);
     expect(result.applied).toBe(true);
     expect(piOf(input).sentMessages).toHaveLength(1);
@@ -168,9 +155,7 @@ describe("applyEffect (dispatcher)", () => {
         phase: "negotiate",
         status: "Phase negotiate — round 1",
         notify: "Advancing.",
-        prompt: ADVANCE_PROMPTS.WRITER_NEGOTIATE,
-      },
-    });
+        prompt: ADVANCE_PROMPTS.WRITER_NEGOTIATE}});
     const result = applyEffect(input);
     expect(result.applied).toBe(true);
     expect(piOf(input).sentMessages).toHaveLength(1);
@@ -182,8 +167,7 @@ describe("applyEffect (dispatcher)", () => {
   // → clean-finish variant. Do not "fix" the fixture status.
   it("dispatches done effect: applied, notified, completion prompt sent", () => {
     const input = makeInput({
-      effect: { type: "done", status: "All phases complete.", notify: "Loop complete." },
-    });
+      effect: { type: "done", status: "All phases complete.", notify: "Loop complete." }});
     const result = applyEffect(input);
     expect(result.applied).toBe(true);
     expect(piOf(input).sentMessages).toHaveLength(1);
@@ -195,8 +179,7 @@ describe("applyEffect (dispatcher)", () => {
 
   it("dispatches escalated effect: applied, warning notify, no prompt sent", () => {
     const input = makeInput({
-      effect: { type: "escalated", status: "escalated (Phase A exhausted)", notify: "Phase A exhausted. Escalating to human." },
-    });
+      effect: { type: "escalated", status: "escalated (Phase A exhausted)", notify: "Phase A exhausted. Escalating to human." }});
     const result = applyEffect(input);
     expect(result.applied).toBe(true);
     expect(piOf(input).sentMessages).toHaveLength(0);
@@ -210,8 +193,7 @@ describe("applyEffect (dispatcher)", () => {
     const state = makeState({ phase: "negotiate", turnsThisPhase: 3 });
     const input = makeInput({
       state: { current: state },
-      effect: { type: "reprompt", notify: "Negotiate again.", level: "info", prompt: "reprompt prompt" },
-    });
+      effect: { type: "reprompt", notify: "Negotiate again.", level: "info", prompt: "reprompt prompt" }});
     const result = applyEffect(input);
     expect(result.applied).toBe(false);
     expect(piOf(input).sentMessages).toHaveLength(0);
@@ -251,8 +233,7 @@ describe("applyEffect (dispatcher)", () => {
 describe("applyRetryEffect", () => {
   it("returns applied: true", () => {
     const input = makeInput({
-      effect: { type: "retry", phase: "A", round: 2, status: "Phase A — round 2", level: "warning" },
-    });
+      effect: { type: "retry", phase: "A", round: 2, status: "Phase A — round 2", level: "warning" }});
     const result = applyRetryEffect(input);
     expect(result.applied).toBe(true);
     expect(piOf(input).sentMessages).toHaveLength(0); // no notify, no prompt
@@ -262,8 +243,7 @@ describe("applyRetryEffect", () => {
     const state = makeState({ phase: "A", turnsThisPhase: 5 });
     const input = makeInput({
       state: { current: state },
-      effect: { type: "retry", phase: "A", round: 2, status: "Phase A — round 2", level: "warning" },
-    });
+      effect: { type: "retry", phase: "A", round: 2, status: "Phase A — round 2", level: "warning" }});
     const result = applyRetryEffect(input);
     expect(result.applied).toBe(true);
     expect(state.turnsThisPhase).toBe(1);
@@ -278,10 +258,8 @@ describe("applyRetryEffect", () => {
         status: "Phase A — round 2",
         notify: "Compile failed.",
         level: "warning",
-        prompt: RETRY_PROMPTS.TESTER_COMPILE_RETRY,
-      },
-      gateResult: makeGateResult({ compile: false, compileError: "type mismatch" }),
-    });
+        prompt: RETRY_PROMPTS.TESTER_COMPILE_RETRY},
+      gateResult: makeGateResult({ compile: false, compileError: "type mismatch" })});
     applyRetryEffect(input);
     expect(input.lang.prompts.promptTesterCompileRetry).toHaveBeenCalledWith("type mismatch");
     expect(piOf(input).sentMessages).toHaveLength(1);
@@ -300,10 +278,8 @@ describe("applyRetryEffect", () => {
         status: "Phase B — round 2",
         notify: "Tests failed.",
         level: "warning",
-        prompt: RETRY_PROMPTS.WRITER_PHASE_B_RETRY,
-      },
-      gateResult: makeGateResult({ compile: true, tests: false, allPassed: false, failures }),
-    });
+        prompt: RETRY_PROMPTS.WRITER_PHASE_B_RETRY},
+      gateResult: makeGateResult({ compile: true, tests: false, allPassed: false, failures })});
     applyRetryEffect(input);
     expect(input.lang.prompts.promptWriterPhaseBContinue).toHaveBeenCalledWith(formatFailures(failures), 1);
     expect(piOf(input).sentMessages).toHaveLength(1);
@@ -311,25 +287,22 @@ describe("applyRetryEffect", () => {
 
   it("handles awaitDisputeReview retry without throwing", () => {
     const input = makeInput({
-      state: { current: makeState({ phase: "B", awaitDisputeReview: true }) },
-      effect: { type: "retry", phase: "B", round: 2, status: "Phase B — round 2", level: "warning" },
-    });
+      state: { current: makeState({ phase: "B" }) },
+      effect: { type: "retry", phase: "B", round: 2, status: "Phase B — round 2", level: "warning" }});
     expect(() => applyRetryEffect(input)).not.toThrow();
   });
 
   it("handles empty failures array without throwing (no prompt sent)", () => {
     const input = makeInput({
       effect: { type: "retry", phase: "A", round: 1, status: "Phase A — round 1" },
-      gateResult: makeGateResult({ failures: [] }),
-    });
+      gateResult: makeGateResult({ failures: [] })});
     expect(() => applyRetryEffect(input)).not.toThrow();
     expect(piOf(input).sentMessages).toHaveLength(0);
   });
 
   it("handles undefined prompt in retry effect without throwing (no prompt sent)", () => {
     const input = makeInput({
-      effect: { type: "retry", phase: "A", round: 1, status: "Phase A — round 1" },
-    });
+      effect: { type: "retry", phase: "A", round: 1, status: "Phase A — round 1" }});
     expect(() => applyRetryEffect(input)).not.toThrow();
     expect(piOf(input).sentMessages).toHaveLength(0);
   });
@@ -350,11 +323,9 @@ describe("retired dispute branch (spec 09)", () => {
       state: {
         current: makeState({
           phase: "B",
-          awaitDisputeReview: true, // stale — the settle step clears it before the gate
+          // stale — the settle step clears it before the gate
           lastProposal: "Test is wrong: TestAdd",
-          ...stateOverrides,
-        }),
-      },
+          ...stateOverrides})},
       effect: {
         type: "retry",
         phase: "B",
@@ -362,10 +333,8 @@ describe("retired dispute branch (spec 09)", () => {
         status: "Phase B — round 2",
         notify: "Gate failed.",
         level: "warning",
-        prompt: RETRY_PROMPTS.WRITER_PHASE_B_RETRY,
-      },
-      gateResult: makeGateResult({ failures: [{ test: "TestAdd", subtest: "", output: "x" }] }),
-    });
+        prompt: RETRY_PROMPTS.WRITER_PHASE_B_RETRY},
+      gateResult: makeGateResult({ failures: [{ test: "TestAdd", subtest: "", output: "x" }] })});
   }
 
   it("runs the normal retry path with a stale flag: status + notify + writer retry prompt", () => {
@@ -380,10 +349,10 @@ describe("retired dispute branch (spec 09)", () => {
   });
 
   it("does NOT early-return: no dispute prompt is sent (retired filer prompt deleted)", () => {
-    const input = makeStaleFlagInput();
+    const input = makeStaleFlagInput({ dispute: { status: "defended", filer: "writer" } });
     applyRetryEffect(input);
     // The retired branch's signature (flag clear + dispute prompt) is gone.
-    expect(input.state.current.awaitDisputeReview).toBe(true); // flag untouched here (settle clears it)
+    expect(input.state.current.dispute?.status === "defended").toBe(true); // flag untouched here (settle clears it)
     expect(piOf(input).sentMessages).toHaveLength(1);
     expect(piOf(input).sentMessages[0].options).toEqual({ triggerTurn: true });
     expect(piOf(input).sentMessages[0].content).not.toContain("negotiate_review");
@@ -397,8 +366,7 @@ describe("retired dispute branch (spec 09)", () => {
 describe("notify behavior (G3)", () => {
   it("retry: notify undefined → ui.notify not called, status still set", () => {
     const input = makeInput({
-      effect: { type: "retry", phase: "A", round: 1, status: "Phase A — round 1" },
-    });
+      effect: { type: "retry", phase: "A", round: 1, status: "Phase A — round 1" }});
     applyRetryEffect(input);
     expect(input.ctx.ui.notify).not.toHaveBeenCalled();
     expect(input.ctx.ui.setStatus).toHaveBeenCalledWith("loop", "Phase A — round 1");
@@ -406,40 +374,35 @@ describe("notify behavior (G3)", () => {
 
   it("retry: notify set, level undefined → level falls back to 'info'", () => {
     const input = makeInput({
-      effect: { type: "retry", phase: "A", round: 1, status: "s", notify: "Gate failed." },
-    });
+      effect: { type: "retry", phase: "A", round: 1, status: "s", notify: "Gate failed." }});
     applyRetryEffect(input);
     expect(input.ctx.ui.notify).toHaveBeenCalledWith("Gate failed.", "info");
   });
 
   it("retry: level set → effect.level is used", () => {
     const input = makeInput({
-      effect: { type: "retry", phase: "A", round: 1, status: "s", notify: "Gate failed.", level: "warning" },
-    });
+      effect: { type: "retry", phase: "A", round: 1, status: "s", notify: "Gate failed.", level: "warning" }});
     applyRetryEffect(input);
     expect(input.ctx.ui.notify).toHaveBeenCalledWith("Gate failed.", "warning");
   });
 
   it("advance: notify unconditional at 'info'", () => {
     const input = makeInput({
-      effect: { type: "advance", phase: "negotiate", status: "s", notify: "Advancing." },
-    });
+      effect: { type: "advance", phase: "negotiate", status: "s", notify: "Advancing." }});
     applyAdvanceEffect(input);
     expect(input.ctx.ui.notify).toHaveBeenCalledWith("Advancing.", "info");
   });
 
   it("done: notify unconditional at 'info'", () => {
     const input = makeInput({
-      effect: { type: "done", status: "s", notify: "Loop complete." },
-    });
+      effect: { type: "done", status: "s", notify: "Loop complete." }});
     applyDoneEffect(input);
     expect(input.ctx.ui.notify).toHaveBeenCalledWith("Loop complete.", "info");
   });
 
   it("escalated: notify at 'warning' (the only warning level)", () => {
     const input = makeInput({
-      effect: { type: "escalated", status: "s", notify: "Escalating." },
-    });
+      effect: { type: "escalated", status: "s", notify: "Escalating." }});
     applyEscalatedEffect(input);
     expect(input.ctx.ui.notify).toHaveBeenCalledWith("Escalating.", "warning");
   });
@@ -452,8 +415,7 @@ describe("notify behavior (G3)", () => {
 describe("debug strings (G4)", () => {
   it("retry normal path: 'Retry <phase> round <round>'", () => {
     const input = makeInput({
-      effect: { type: "retry", phase: "A", round: 2, status: "s", level: "warning" },
-    });
+      effect: { type: "retry", phase: "A", round: 2, status: "s", level: "warning" }});
     applyRetryEffect(input);
     expect(input.debug).toHaveBeenCalledWith("Retry A round 2");
   });
@@ -464,24 +426,21 @@ describe("debug strings (G4)", () => {
 
   it("advance: 'Advance → <phase>'", () => {
     const input = makeInput({
-      effect: { type: "advance", phase: "negotiate", status: "s", notify: "n" },
-    });
+      effect: { type: "advance", phase: "negotiate", status: "s", notify: "n" }});
     applyAdvanceEffect(input);
     expect(input.debug).toHaveBeenCalledWith("Advance → negotiate");
   });
 
   it("done: 'Done'", () => {
     const input = makeInput({
-      effect: { type: "done", status: "s", notify: "n" },
-    });
+      effect: { type: "done", status: "s", notify: "n" }});
     applyDoneEffect(input);
     expect(input.debug).toHaveBeenCalledWith("Done");
   });
 
   it("escalated: 'Escalated (<status>)'", () => {
     const input = makeInput({
-      effect: { type: "escalated", status: "Phase A exhausted", notify: "n" },
-    });
+      effect: { type: "escalated", status: "Phase A exhausted", notify: "n" }});
     applyEscalatedEffect(input);
     expect(input.debug).toHaveBeenCalledWith("Escalated (Phase A exhausted)");
   });
@@ -494,8 +453,7 @@ describe("debug strings (G4)", () => {
 describe("applyAdvanceEffect", () => {
   it("returns applied: true (no prompt → nothing sent)", () => {
     const input = makeInput({
-      effect: { type: "advance", phase: "B", status: "s", notify: "Advancing." },
-    });
+      effect: { type: "advance", phase: "B", status: "s", notify: "Advancing." }});
     const result = applyAdvanceEffect(input);
     expect(result.applied).toBe(true);
     expect(piOf(input).sentMessages).toHaveLength(0);
@@ -513,9 +471,7 @@ describe("applyAdvanceEffect", () => {
           phase: "C",
           status: "Phase C — round 1",
           notify: "Advancing.",
-          prompt: ADVANCE_PROMPTS.CLEANER_PHASE_C,
-        },
-      });
+          prompt: ADVANCE_PROMPTS.CLEANER_PHASE_C}});
       applyAdvanceEffect(input);
       expect(archiveSpy).toHaveBeenCalledWith("spec.md", "/tmp/test-project");
       expect(input.ctx.ui.notify).toHaveBeenCalledWith("Spec archived: done-spec.md", "info");
@@ -534,9 +490,7 @@ describe("applyAdvanceEffect", () => {
           phase: "C",
           status: "Phase C — round 1",
           notify: "Advancing.",
-          prompt: ADVANCE_PROMPTS.CLEANER_PHASE_C,
-        },
-      });
+          prompt: ADVANCE_PROMPTS.CLEANER_PHASE_C}});
       expect(() => applyAdvanceEffect(input)).not.toThrow();
       expect(input.ctx.ui.notify).not.toHaveBeenCalledWith("Spec archived: undefined", "info");
     } finally {
@@ -548,8 +502,7 @@ describe("applyAdvanceEffect", () => {
     const archiveSpy = vi.spyOn(archive, "archiveSpecFile").mockReturnValue("done-spec.md");
     try {
       const input = makeInput({
-        effect: { type: "advance", phase: "B", status: "s", notify: "Advancing." },
-      });
+        effect: { type: "advance", phase: "B", status: "s", notify: "Advancing." }});
       applyAdvanceEffect(input);
       expect(archiveSpy).not.toHaveBeenCalled();
     } finally {
@@ -566,9 +519,7 @@ describe("applyAdvanceEffect", () => {
           phase: "negotiate",
           status: "s",
           notify: "Advancing.",
-          prompt: ADVANCE_PROMPTS.WRITER_NEGOTIATE,
-        },
-      });
+          prompt: ADVANCE_PROMPTS.WRITER_NEGOTIATE}});
       applyAdvanceEffect(input);
       expect(archiveSpy).not.toHaveBeenCalled();
     } finally {
@@ -580,8 +531,7 @@ describe("applyAdvanceEffect", () => {
     const state = makeState({ phase: "A", turnsThisPhase: 3 });
     const input = makeInput({
       state: { current: state },
-      effect: { type: "advance", phase: "negotiate", status: "s", notify: "Advancing." },
-    });
+      effect: { type: "advance", phase: "negotiate", status: "s", notify: "Advancing." }});
     const result = applyAdvanceEffect(input);
     expect(result.applied).toBe(true);
     expect(state.turnsThisPhase).toBe(1);
@@ -595,9 +545,7 @@ describe("applyAdvanceEffect", () => {
         phase: "negotiate",
         status: "s",
         notify: "Advancing.",
-        prompt: ADVANCE_PROMPTS.WRITER_NEGOTIATE,
-      },
-    });
+        prompt: ADVANCE_PROMPTS.WRITER_NEGOTIATE}});
     applyAdvanceEffect(input);
     expect(piOf(input).sentMessages).toHaveLength(1);
     expect(piOf(input).sentMessages[0].content).toBe(GP.promptWriterNegotiate("spec.md", "*_test.go"));
@@ -611,9 +559,7 @@ describe("applyAdvanceEffect", () => {
         phase: "C",
         status: "s",
         notify: "Advancing.",
-        prompt: ADVANCE_PROMPTS.CLEANER_PHASE_C,
-      },
-    });
+        prompt: ADVANCE_PROMPTS.CLEANER_PHASE_C}});
     applyAdvanceEffect(input);
     expect(input.lang.prompts.promptCleanerPhaseC).toHaveBeenCalled();
     expect(piOf(input).sentMessages).toHaveLength(1);
@@ -622,8 +568,7 @@ describe("applyAdvanceEffect", () => {
 
   it("handles advance without prompt (nothing sent)", () => {
     const input = makeInput({
-      effect: { type: "advance", phase: "B", status: "s", notify: "Advancing." },
-    });
+      effect: { type: "advance", phase: "B", status: "s", notify: "Advancing." }});
     applyAdvanceEffect(input);
     expect(piOf(input).sentMessages).toHaveLength(0);
   });
@@ -632,8 +577,7 @@ describe("applyAdvanceEffect", () => {
     const state = makeState({ phase: "B", turnsThisPhase: 3 });
     const input = makeInput({
       state: { current: state },
-      effect: { type: "advance", phase: "C", status: "s", notify: "n" },
-    });
+      effect: { type: "advance", phase: "C", status: "s", notify: "n" }});
     applyAdvanceEffect(input);
     expect(state.phase).toBe("B");
     expect(state.turnsThisPhase).toBe(1);
@@ -649,14 +593,12 @@ describe("applyDoneEffect", () => {
   // disputeCount 0, status "All phases complete." → cleanerFailed false).
   it("returns applied: true and sends the completion prompt", () => {
     const input = makeInput({
-      effect: { type: "done", status: "All phases complete.", notify: "Loop complete." },
-    });
+      effect: { type: "done", status: "All phases complete.", notify: "Loop complete." }});
     const result = applyDoneEffect(input);
     expect(result.applied).toBe(true);
     expect(piOf(input).sentMessages).toHaveLength(1);
     expect(piOf(input).sentMessages[0].content).toBe(
-      "Loop complete — spec spec.md. All phases passed the gate. Disputes raised: 0.",
-    );
+      "Loop complete — spec spec.md. All phases passed the gate. Disputes raised: 0.");
     expect(piOf(input).sentMessages[0].options).toEqual({ triggerTurn: true });
   });
 
@@ -664,8 +606,7 @@ describe("applyDoneEffect", () => {
     const state = makeState({ phase: "C", turnsThisPhase: 5 });
     const input = makeInput({
       state: { current: state },
-      effect: { type: "done", status: "s", notify: "n" },
-    });
+      effect: { type: "done", status: "s", notify: "n" }});
     const result = applyDoneEffect(input);
     expect(result.applied).toBe(true);
     expect(state.turnsThisPhase).toBe(1);
@@ -673,8 +614,7 @@ describe("applyDoneEffect", () => {
 
   it("notifies at 'info' and sets status", () => {
     const input = makeInput({
-      effect: { type: "done", status: "All phases complete.", notify: "Loop complete." },
-    });
+      effect: { type: "done", status: "All phases complete.", notify: "Loop complete." }});
     applyDoneEffect(input);
     expect(input.ctx.ui.notify).toHaveBeenCalledWith("Loop complete.", "info");
     expect(input.ctx.ui.setStatus).toHaveBeenCalledWith("loop", "All phases complete.");
@@ -687,15 +627,12 @@ describe("applyDoneEffect", () => {
       effect: {
         type: "done",
         status: "done (cleaner failed)",
-        notify: "Phase C failed, keeping original code. Loop complete.",
-      },
-    });
+        notify: "Phase C failed, keeping original code. Loop complete."}});
     expect(() => applyDoneEffect(input)).not.toThrow();
     expect(input.ctx.ui.setStatus).toHaveBeenCalledWith("loop", "done (cleaner failed)");
     expect(piOf(input).sentMessages).toHaveLength(1);
     expect(piOf(input).sentMessages[0].content).toBe(
-      "Loop complete — spec spec.md. Phase C failed; the original code is kept. Disputes raised: 0.",
-    );
+      "Loop complete — spec spec.md. Phase C failed; the original code is kept. Disputes raised: 0.");
     expect(piOf(input).sentMessages[0].options).toEqual({ triggerTurn: true });
   });
 
@@ -703,21 +640,18 @@ describe("applyDoneEffect", () => {
   it("sends completion prompt with the state's dispute count", () => {
     const input = makeInput({
       state: { current: makeState({ phase: "C", disputeCount: 3 }) },
-      effect: { type: "done", status: "done", notify: "All phases complete." },
-    });
+      effect: { type: "done", status: "done", notify: "All phases complete." }});
     applyDoneEffect(input);
     expect(piOf(input).sentMessages).toHaveLength(1);
     expect(piOf(input).sentMessages[0].content).toBe(
-      "Loop complete — spec spec.md. All phases passed the gate. Disputes raised: 3.",
-    );
+      "Loop complete — spec spec.md. All phases passed the gate. Disputes raised: 3.");
   });
 
   it("does not change phase", () => {
     const state = makeState({ phase: "C", turnsThisPhase: 5 });
     const input = makeInput({
       state: { current: state },
-      effect: { type: "done", status: "s", notify: "n" },
-    });
+      effect: { type: "done", status: "s", notify: "n" }});
     applyDoneEffect(input);
     expect(state.phase).toBe("C");
   });
@@ -730,8 +664,7 @@ describe("applyDoneEffect", () => {
 describe("applyEscalatedEffect", () => {
   it("returns applied: true and sends no prompt", () => {
     const input = makeInput({
-      effect: { type: "escalated", status: "s", notify: "n" },
-    });
+      effect: { type: "escalated", status: "s", notify: "n" }});
     const result = applyEscalatedEffect(input);
     expect(result.applied).toBe(true);
     expect(piOf(input).sentMessages).toHaveLength(0);
@@ -739,8 +672,7 @@ describe("applyEscalatedEffect", () => {
 
   it("notifies at 'warning' and sets status", () => {
     const input = makeInput({
-      effect: { type: "escalated", status: "escalated (Phase A exhausted)", notify: "Phase A exhausted. Escalating to human." },
-    });
+      effect: { type: "escalated", status: "escalated (Phase A exhausted)", notify: "Phase A exhausted. Escalating to human." }});
     applyEscalatedEffect(input);
     expect(input.ctx.ui.notify).toHaveBeenCalledWith("Phase A exhausted. Escalating to human.", "warning");
     expect(input.ctx.ui.setStatus).toHaveBeenCalledWith("loop", "escalated (Phase A exhausted)");
@@ -749,24 +681,21 @@ describe("applyEscalatedEffect", () => {
   it("handles escalated from Phase A without throwing", () => {
     const input = makeInput({
       state: { current: makeState({ phase: "A" }) },
-      effect: { type: "escalated", status: "escalated (Phase A exhausted)", notify: "Phase A exhausted. Escalating to human." },
-    });
+      effect: { type: "escalated", status: "escalated (Phase A exhausted)", notify: "Phase A exhausted. Escalating to human." }});
     expect(() => applyEscalatedEffect(input)).not.toThrow();
   });
 
   it("handles escalated from Phase B without throwing", () => {
     const input = makeInput({
       state: { current: makeState({ phase: "B" }) },
-      effect: { type: "escalated", status: "escalated (Phase B exhausted)", notify: "Phase B exhausted. Escalating to human." },
-    });
+      effect: { type: "escalated", status: "escalated (Phase B exhausted)", notify: "Phase B exhausted. Escalating to human." }});
     expect(() => applyEscalatedEffect(input)).not.toThrow();
   });
 
   it("handles null pi gracefully (escalated never uses pi)", () => {
     const input = makeInput({
       pi: null as any,
-      effect: { type: "escalated", status: "s", notify: "n" },
-    });
+      effect: { type: "escalated", status: "s", notify: "n" }});
     const result = applyEscalatedEffect(input);
     expect(result.applied).toBe(true);
   });
@@ -775,8 +704,7 @@ describe("applyEscalatedEffect", () => {
     const state = makeState({ phase: "A", round: 3, turnsThisPhase: 5 });
     const input = makeInput({
       state: { current: state },
-      effect: { type: "escalated", status: "s", notify: "n" },
-    });
+      effect: { type: "escalated", status: "s", notify: "n" }});
     applyEscalatedEffect(input);
     expect(state.phase).toBe("A");
     expect(state.turnsThisPhase).toBe(5);
@@ -793,8 +721,7 @@ describe("buildRetryPrompt (G1)", () => {
     const out = buildRetryPrompt(
       RETRY_PROMPTS.TESTER_COMPILE_RETRY,
       lang as any,
-      makeGateResult({ compile: false, compileError: "type mismatch" }),
-    );
+      makeGateResult({ compile: false, compileError: "type mismatch" }));
     expect(lang.prompts.promptTesterCompileRetry).toHaveBeenCalledWith("type mismatch");
     expect(out).toBe("Compile error: type mismatch");
   });
@@ -804,8 +731,7 @@ describe("buildRetryPrompt (G1)", () => {
     const out = buildRetryPrompt(
       RETRY_PROMPTS.TESTER_DISPUTE_FIX_COMPILE_FAIL,
       lang as any,
-      makeGateResult({ compile: false, compileError: "type mismatch" }),
-    );
+      makeGateResult({ compile: false, compileError: "type mismatch" }));
     expect(lang.prompts.promptTesterCompileRetry).toHaveBeenCalledWith("type mismatch");
     expect(lang.prompts.promptWriterPhaseBContinue).not.toHaveBeenCalled();
     expect(lang.prompts.promptCleanerRetry).not.toHaveBeenCalled();
@@ -821,8 +747,7 @@ describe("buildRetryPrompt (G1)", () => {
     const out = buildRetryPrompt(
       RETRY_PROMPTS.WRITER_PHASE_B_RETRY,
       lang as any,
-      makeGateResult({ failures }),
-    );
+      makeGateResult({ failures }));
     expect(lang.prompts.promptWriterPhaseBContinue).toHaveBeenCalledWith(formatFailures(failures), 2);
     expect(out).toBe(`Continue: 2 failures\n${formatFailures(failures)}`);
   });
@@ -833,8 +758,7 @@ describe("buildRetryPrompt (G1)", () => {
     const out = buildRetryPrompt(
       RETRY_PROMPTS.WRITER_DISPUTE_FIX_INCOMPLETE,
       lang as any,
-      makeGateResult({ failures }),
-    );
+      makeGateResult({ failures }));
     expect(lang.prompts.promptWriterPhaseBContinue).toHaveBeenCalledWith(formatFailures(failures), 1);
     expect(out).toBe(`Continue: 1 failures\n${formatFailures(failures)}`);
   });
@@ -845,8 +769,7 @@ describe("buildRetryPrompt (G1)", () => {
     const out = buildRetryPrompt(
       RETRY_PROMPTS.CLEANER_RETRY,
       lang as any,
-      makeGateResult({ failures }),
-    );
+      makeGateResult({ failures }));
     expect(lang.prompts.promptCleanerRetry).toHaveBeenCalledWith(formatFailures(failures), 1);
     expect(out).toBe(`Cleaner retry: 1 failures\n${formatFailures(failures)}`);
   });
@@ -877,8 +800,7 @@ describe("buildAdvancePrompt (G1)", () => {
     const out = buildAdvancePrompt(
       ADVANCE_PROMPTS.WRITER_NEGOTIATE,
       makeState({ specPath: "spec.md" }),
-      makeMockLang() as any,
-    );
+      makeMockLang() as any);
     expect(out).toBe(GP.promptWriterNegotiate("spec.md", "*_test.go"));
   });
 

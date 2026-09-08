@@ -24,8 +24,7 @@ function buildTestAPI(): TestAPI {
 
   api._mockUi = {
     notify: vi.fn(),
-    setStatus: vi.fn(),
-  };
+    setStatus: vi.fn()};
 
   api._mockEntries = [];
 
@@ -33,16 +32,13 @@ function buildTestAPI(): TestAPI {
     ui: api._mockUi,
     cwd: "/tmp/test-project",
     sessionManager: {
-      getEntries: () => api._mockEntries,
-    },
+      getEntries: () => api._mockEntries},
     mode: "tui",
-    hasUI: true,
-  };
+    hasUI: true};
 
   api._mockExecCtx = {
     ui: api._mockUi,
-    cwd: "/tmp/test-project",
-  };
+    cwd: "/tmp/test-project"};
 
   return api;
 }
@@ -92,23 +88,20 @@ const isMainHandler = (h: any) => !isBreakerHandler(h) && !isResetHandler(h);
 function findEventHandler(
   api: TestAPI,
   event: string,
-  predicate?: (h: (...args: any[]) => any) => boolean,
-): (...args: any[]) => any {
+  predicate?: (h: (...args: any[]) => any) => boolean): (...args: any[]) => any {
   const handlers = api.eventHandlers.get(event);
   if (!handlers) throw new Error(`no handler registered for ${event}`);
   if (predicate) {
     const match = handlers.find(predicate);
     if (!match) {
       throw new Error(
-        `no handler for ${event} matched the predicate (of ${handlers.length} registered)`,
-      );
+        `no handler for ${event} matched the predicate (of ${handlers.length} registered)`);
     }
     return match;
   }
   if (handlers.length > 1) {
     throw new Error(
-      `findEventHandler("${event}"): ${handlers.length} handlers registered, pass a predicate to disambiguate`,
-    );
+      `findEventHandler("${event}"): ${handlers.length} handlers registered, pass a predicate to disambiguate`);
   }
   return handlers[0];
 }
@@ -199,8 +192,7 @@ describe("findEventHandler", () => {
   it("row 3: predicate matches nothing → throw with the count", () => {
     const api = fakeAPI(new Map([["ev", [h(), h()]]]));
     expect(() => findEventHandler(api, "ev", () => false)).toThrow(
-      /no handler for ev matched the predicate \(of 2 registered\)/,
-    );
+      /no handler for ev matched the predicate \(of 2 registered\)/);
   });
 
   it("row 4: single handler, no predicate → returns it", () => {
@@ -214,8 +206,7 @@ describe("findEventHandler", () => {
     // that stalled the bug-confirm-approval implementation run.
     const api = fakeAPI(new Map([["ev", [h(), h()]]]));
     expect(() => findEventHandler(api, "ev")).toThrow(
-      /findEventHandler\("ev"\): 2 handlers registered, pass a predicate to disambiguate/,
-    );
+      /findEventHandler\("ev"\): 2 handlers registered, pass a predicate to disambiguate/);
   });
 });
 
@@ -680,8 +671,7 @@ describe("/loop-debug command", () => {
     api._mockEntries = Array.from({ length: 25 }, (_, i) => ({
       type: "custom",
       customType: "loop-debug",
-      data: { ts: T + i * 1000, msg: `entry-${String(i).padStart(2, "0")}` },
-    }));
+      data: { ts: T + i * 1000, msg: `entry-${String(i).padStart(2, "0")}` }}));
 
     const handler = findCommand(api, "loop-debug");
     await handler("", api._mockCtx);
@@ -744,8 +734,7 @@ describe("/spec command", () => {
 
     expect(api._mockUi.notify).toHaveBeenCalledWith(
       "Usage: /spec [--slug <name>] [--out <dir>] <goal...>",
-      "warning",
-    );
+      "warning");
     expect(api.sentMessages.length).toBe(0);
   });
 
@@ -755,8 +744,7 @@ describe("/spec command", () => {
 
     expect(api._mockUi.notify).toHaveBeenCalledWith(
       "Usage: /spec [--slug <name>] [--out <dir>] <goal...>",
-      "warning",
-    );
+      "warning");
     expect(api.sentMessages.length).toBe(0);
   });
 
@@ -766,8 +754,7 @@ describe("/spec command", () => {
 
     expect(api._mockUi.notify).toHaveBeenCalledWith(
       "Goal file not found: @nope.md",
-      "error",
-    );
+      "error");
     expect(api.sentMessages.length).toBe(0);
   });
 
@@ -781,12 +768,10 @@ describe("/spec command", () => {
     expect(api.sentMessages[0].content).toContain("Output file: internal/add.md   ");
     expect(api._mockUi.notify).toHaveBeenCalledWith(
       "Author: writing internal/add.md. Review it, then run /loop internal/add.md",
-      "info",
-    );
+      "info");
     expect(api._mockUi.setStatus).toHaveBeenCalledWith(
       "loop",
-      "spec author (one-shot — no loop state)",
-    );
+      "spec author (one-shot — no loop state)");
     // Statelessness contract: no loop-state entry appended. (The debug entry
     // from cmdSpec's debug() call is expected; the grep criterion in
     // internal/spec-command.md is enforced at the source level.)
@@ -800,8 +785,7 @@ describe("/spec command", () => {
     expect(api.sentMessages[0].content).toContain("Output file: backlog/add.md   ");
     expect(api._mockUi.notify).toHaveBeenCalledWith(
       "Author: writing backlog/add.md. Review it, then run /loop backlog/add.md",
-      "info",
-    );
+      "info");
   });
 
   it("rubric missing in an empty dir → warning fires before the turn, fallback block in prompt", async () => {
@@ -829,8 +813,7 @@ describe("/spec command", () => {
     expect(warnIdx).toBeLessThan(infoIdx);
     expect(api.sentMessages.length).toBe(1);
     expect(api.sentMessages[0].content).toContain(
-      "No template file is available in this repo.",
-    );
+      "No template file is available in this repo.");
     process.chdir(originalProcessCwd);
     api._mockCtx.cwd = originalCwd;
     fs.rmSync(tmp, { recursive: true, force: true });
@@ -936,7 +919,7 @@ describe("negotiate_propose tool", () => {
       (e: any) => e.customType === "loop-state"
     );
     const lastState = stateEntries[stateEntries.length - 1]?.data;
-    expect(lastState?.awaitDisputeReview).toBe(true);
+    expect(lastState?.dispute?.status).toBe("filed");
 
     // Dispute entry should be recorded, with the derived filer (spec 09)
     const disputeEntries = api.appendedEntries.filter(
@@ -944,7 +927,7 @@ describe("negotiate_propose tool", () => {
     );
     expect(disputeEntries).toHaveLength(1);
     expect(disputeEntries[0].data.claim).toContain("Test X/edge_case");
-    expect(disputeEntries[0].data.disputeCount).toBe(1);
+    expect(disputeEntries[0].data.disputeCount).toBe(0); // budget consumed at resolution, not filing
     expect(disputeEntries[0].data.filer).toBe("writer"); // disputeMode false → Writer filed
   });
 });
@@ -1062,6 +1045,10 @@ describe("negotiate_review tool", () => {
     const restartHandler = findCommand(api, "loop-restart");
     await restartHandler("B", api._mockCtx);
 
+    // File a dispute first (writer filed)
+    const proposeTool = findTool(api, "negotiate_propose");
+    await proposeTool.execute("call-0", { plan: "Test X is wrong" }, undefined, undefined, api._mockExecCtx);
+
     const tool = findTool(api, "negotiate_review");
     const result = await tool.execute(
       "call-1",
@@ -1078,10 +1065,10 @@ describe("negotiate_review tool", () => {
       (e: any) => e.customType === "loop-state"
     );
     const lastState = stateEntries[stateEntries.length - 1]?.data;
-    expect(lastState.disputeMode).toBe(true);
-    expect(lastState.awaitDisputeFix).toBe(true);
+    expect(lastState.dispute?.status === "conceded").toBe(true);
+    expect(lastState.dispute?.status === "conceded").toBe(true);
     expect(lastState.justTransitioned).toBe(false);
-    expect(lastState.disputeFiler).toBe("writer"); // recorded at decision (spec 09, Table 2)
+    expect(lastState.dispute?.filer).toBe("writer"); // recorded at decision (spec 09, Table 2)
   });
 
   it("defends test in Phase B dispute (Table 2 row 2: writer filed)", async () => {
@@ -1118,10 +1105,10 @@ describe("negotiate_review tool", () => {
       (e: any) => e.customType === "loop-state"
     );
     const lastState = stateEntries[stateEntries.length - 1]?.data;
-    expect(lastState.disputeDefended).toBe("The test is correct. The spec clearly states this behavior.");
-    expect(lastState.disputeFiler).toBe("writer");
-    expect(lastState.round).toBe(2); // round incremented by the defend cell
-    expect(lastState.disputeMode).toBe(false);
+    expect(lastState.dispute?.decision).toBe("The test is correct. The spec clearly states this behavior.");
+    expect(lastState.dispute?.filer).toBe("writer");
+    expect(lastState.round).toBe(1); // round unchanged by the review tool
+    expect(lastState.dispute?.status === "conceded").toBe(false);
   });
 
   it("tester-filed approve → writer concede fix (Table 2 row 3)", async () => {
@@ -1154,9 +1141,9 @@ describe("negotiate_review tool", () => {
       (e: any) => e.customType === "loop-state"
     );
     const lastState = stateEntries[stateEntries.length - 1]?.data;
-    expect(lastState.disputeFiler).toBe("writer");
-    expect(lastState.disputeMode).toBe(true);
-    expect(lastState.awaitDisputeFix).toBe(true);
+    expect(lastState.dispute?.filer).toBe("writer");
+    expect(lastState.dispute?.status === "conceded").toBe(true);
+    expect(lastState.dispute?.status === "conceded").toBe(true);
   });
 
   it("tester-filed defend → window closes, report-rejected pending (Table 2 row 4)", async () => {
@@ -1206,10 +1193,10 @@ describe("negotiate_review tool", () => {
       (e: any) => e.customType === "loop-state"
     );
     const lastState = stateEntries[stateEntries.length - 1]?.data;
-    expect(lastState.disputeDefended).toBe("Edge case Y is handled; the report misread the spec.");
-    expect(lastState.disputeFiler).toBe("tester"); // recorded pre-mutation (F-B)
-    expect(lastState.disputeMode).toBe(false); // row 4 window-close (load-bearing)
-    expect(lastState.round).toBe(2); // round incremented once by the defend cell (spec 09 Table 2 row 2/4: one round++ per defend decision; restart baseline is round 1)
+    expect(lastState.dispute?.decision).toBe("Edge case Y is handled; the report misread the spec.");
+    expect(lastState.dispute?.filer).toBe("writer"); // original filer preserved
+    expect(lastState.dispute?.status === "conceded").toBe(false); // row 4 window-close (load-bearing)
+    expect(lastState.round).toBe(1); // round unchanged by the review tool
   });
 });
 
@@ -1244,17 +1231,13 @@ describe("session_start event", () => {
           maxDispute: 3,
           maxTurnsPerPhase: 5,
           coverageThreshold: 90,
-          disputeMode: true, // should be cleared
+          dispute: { status: "conceded", filer: "writer" }, // should be cleared
           disputeCount: 1,
           turnsThisPhase: 1,
           lastProposal: "some plan",
           lastPhase: "A",
           justTransitioned: false,
-          negotiateReprompted: false,
-          awaitDisputeFix: false,
-          awaitDisputeReview: false,
-        },
-      },
+          negotiateReprompted: false}},
     ];
 
     const handler = findEventHandler(api, "session_start");
@@ -1485,17 +1468,12 @@ describe("tool_call event (path enforcement)", () => {
           maxDispute: 3,
           maxTurnsPerPhase: 5,
           coverageThreshold: 80,
-          disputeMode: false,
           disputeCount: 3,
           turnsThisPhase: 1,
           lastProposal: "",
           lastPhase: "B",
           justTransitioned: false,
-          negotiateReprompted: false,
-          awaitDisputeFix: false,
-          awaitDisputeReview: false,
-        },
-      },
+          negotiateReprompted: false}},
     ];
 
     const sessionHandler = findEventHandler(api, "session_start");
@@ -1554,16 +1532,11 @@ describe("agent_settled event (phase transitions)", () => {
           maxC: 3,
           maxDispute: 3,
           coverageThreshold: 80,
-          disputeMode: false,
           disputeCount: 0,
           lastProposal: "",
           lastPhase: "C",
           justTransitioned: false,
-          negotiateReprompted: false,
-          awaitDisputeFix: false,
-          awaitDisputeReview: false,
-        },
-      },
+          negotiateReprompted: false}},
     ];
 
     const sessionHandler = findEventHandler(api, "session_start");
@@ -1596,16 +1569,11 @@ describe("agent_settled event (phase transitions)", () => {
           maxC: 3,
           maxDispute: 3,
           coverageThreshold: 80,
-          disputeMode: false,
           disputeCount: 3,
           lastProposal: "",
           lastPhase: "B",
           justTransitioned: false,
-          negotiateReprompted: false,
-          awaitDisputeFix: false,
-          awaitDisputeReview: false,
-        },
-      },
+          negotiateReprompted: false}},
     ];
 
     const sessionHandler = findEventHandler(api, "session_start");
@@ -1640,17 +1608,12 @@ describe("agent_settled event (phase transitions)", () => {
           maxDispute: 3,
           maxTurnsPerPhase: 5,
           coverageThreshold: 80,
-          disputeMode: false,
           disputeCount: 0,
           turnsThisPhase: 1,
           lastProposal: "",
           lastPhase: "A",
           justTransitioned: true,
-          negotiateReprompted: false,
-          awaitDisputeFix: false,
-          awaitDisputeReview: false,
-        },
-      },
+          negotiateReprompted: false}},
     ];
 
     const sessionHandler = findEventHandler(api, "session_start");
@@ -1791,7 +1754,6 @@ describe("spec 08 — dispute flags cleared at phase boundaries", () => {
         maxDispute: 3,
         maxTurnsPerPhase: 5,
         coverageThreshold: 80,
-        disputeMode: false,
         disputeCount: 0,
         turnsThisPhase: 1,
         lastProposal: "plan",
@@ -1800,11 +1762,7 @@ describe("spec 08 — dispute flags cleared at phase boundaries", () => {
         negotiateReprompted: false,
         negotiateProposed: false,
         negotiateFeedback: "",
-        awaitDisputeFix: false,
-        awaitDisputeReview: false,
-        ...overrides,
-      },
-    };
+        ...overrides}};
   }
 
   function makeToolCtx(): any {
@@ -1834,7 +1792,7 @@ describe("spec 08 — dispute flags cleared at phase boundaries", () => {
   }
 
   it("site 6 — negotiate_propose 'agree' in negotiate phase: both flags cleared at the B boundary", async () => {
-    const state = makeToolState({ awaitDisputeFix: true, awaitDisputeReview: true });
+    const state = makeToolState({ dispute: { status: "defended", filer: "writer" } });
     const pi = createMockExtensionAPI();
     const propose = Tool.negotiatePropose(state, pi as any, vi.fn());
 
@@ -1843,25 +1801,25 @@ describe("spec 08 — dispute flags cleared at phase boundaries", () => {
 
     const last = lastStateEntries(pi).pop()?.data;
     expect(last.phase).toBe("B");
-    expect(last.awaitDisputeFix).toBe(false);
-    expect(last.awaitDisputeReview).toBe(false);
+    expect(last.dispute?.status === "conceded").toBe(false);
+    expect(last.dispute?.status === "defended").toBe(false);
 
     // edge: a single live flag (the realistic leak) is cleared too
-    const one = makeToolState({ awaitDisputeReview: true });
+    const one = makeToolState({ dispute: { status: "defended", filer: "writer" } });
     const piOne = createMockExtensionAPI();
     await Tool.negotiatePropose(one, piOne as any, vi.fn()).execute(
       "call-2", { plan: "agree" }, undefined, undefined, makeToolCtx()
     );
     const lastOne = lastStateEntries(piOne).pop()?.data;
     expect(lastOne.phase).toBe("B");
-    expect(lastOne.awaitDisputeFix).toBe(false);
-    expect(lastOne.awaitDisputeReview).toBe(false);
+    expect(lastOne.dispute?.status === "conceded").toBe(false);
+    expect(lastOne.dispute?.status === "defended").toBe(false);
   });
 
   it("site 7 — negotiate_review approve in negotiate phase: both flags cleared at the B boundary", async () => {
     // even round + non-agree proposal → row 2 (re-review round); the second
     // approve (odd round) is what crosses the B boundary and clears the flags.
-    const state = makeToolState({ awaitDisputeFix: true, awaitDisputeReview: true, round: 2, lastProposal: "plan" });
+    const state = makeToolState({ round: 2, lastProposal: "plan" });
     const pi = createMockExtensionAPI();
     const review = Tool.negotiateReview(state, pi as any, vi.fn());
 
@@ -1871,38 +1829,43 @@ describe("spec 08 — dispute flags cleared at phase boundaries", () => {
 
     const last = lastStateEntries(pi).pop()?.data;
     expect(last.phase).toBe("B");
-    expect(last.awaitDisputeFix).toBe(false);
-    expect(last.awaitDisputeReview).toBe(false);
+    expect(last.dispute?.status === "conceded").toBe(false);
+    expect(last.dispute?.status === "defended").toBe(false);
 
     // edge: single live flag
-    const one = makeToolState({ awaitDisputeFix: true, round: 2, lastProposal: "plan" });
+    const one = makeToolState({ round: 2, lastProposal: "plan" });
     const piOne = createMockExtensionAPI();
     const reviewOne = Tool.negotiateReview(one, piOne as any, vi.fn());
     await reviewOne.execute("call-1", { decision: "approve" }, undefined, undefined, makeToolCtx()); // row 2
     await reviewOne.execute("call-2", { decision: "approve" }, undefined, undefined, makeToolCtx());
     const lastOne = lastStateEntries(piOne).pop()?.data;
     expect(lastOne.phase).toBe("B");
-    expect(lastOne.awaitDisputeFix).toBe(false);
-    expect(lastOne.awaitDisputeReview).toBe(false);
+    expect(lastOne.dispute?.status === "conceded").toBe(false);
+    expect(lastOne.dispute?.status === "defended").toBe(false);
   });
 
   it("site 8 — dispute-limit escalation (logEscalation): both flags cleared at the B→escalated boundary", async () => {
     await enterPhaseBWithBothFlagsLive(); // B, disputeCount 1, both flags live
 
     const propose = findTool(api, "negotiate_propose");
-    // second claim → disputeCount = maxDispute - 1, both flags still live
+    // second claim → disputeCount still 1 (budget consumed at resolution, not filing)
     await propose.execute("c-3", { plan: "still wrong" }, undefined, undefined, api._mockExecCtx);
-    expect(lastLoopState().disputeCount).toBe(2);
-    expect(lastLoopState().awaitDisputeFix).toBe(true);
-    expect(lastLoopState().awaitDisputeReview).toBe(true);
+    expect(lastLoopState().disputeCount).toBe(1);
+    expect(lastLoopState().dispute?.status).toBe("filed");
 
-    // third claim hits the limit → logEscalation
-    await propose.execute("c-4", { plan: "final claim" }, undefined, undefined, api._mockExecCtx);
+    // third claim + review → disputeCount = 2
+    await propose.execute("c-4", { plan: "claim 3" }, undefined, undefined, api._mockExecCtx);
+    const review = findTool(api, "negotiate_review");
+    await review.execute("c-5", { decision: "approve" }, undefined, undefined, api._mockExecCtx);
+    
+    // fourth claim + review hits the limit (maxDispute = 3) → logEscalation
+    await propose.execute("c-6", { plan: "final claim" }, undefined, undefined, api._mockExecCtx);
+    await review.execute("c-7", { decision: "approve" }, undefined, undefined, api._mockExecCtx);
 
     const last = lastLoopState();
     expect(last.phase).toBe("escalated");
-    expect(last.awaitDisputeFix).toBe(false);
-    expect(last.awaitDisputeReview).toBe(false);
+    expect(last.dispute?.status === "conceded").toBe(false);
+    expect(last.dispute?.status === "defended").toBe(false);
     expect(api._mockUi.notify).toHaveBeenCalledWith("Dispute limit reached. Escalating to human.", "warning");
     expect(api._mockUi.setStatus).toHaveBeenCalledWith("loop", "escalated (dispute limit)");
   });
@@ -1910,8 +1873,8 @@ describe("spec 08 — dispute flags cleared at phase boundaries", () => {
   it("site 11 — /loop-restart (resetPhaseState): clears awaitDisputeReview, the field it currently misses", async () => {
     await enterPhaseBWithBothFlagsLive();
 
-    expect(lastLoopState().awaitDisputeFix).toBe(true);
-    expect(lastLoopState().awaitDisputeReview).toBe(true);
+    expect(lastLoopState().dispute?.status).toBe("conceded"); // after review, status is conceded
+    // (awaitDisputeFix/awaitDisputeReview no longer exist; dispute.status tracks the state)
 
     const restart = findCommand(api, "loop-restart");
     await restart("B", api._mockCtx);
@@ -1920,8 +1883,8 @@ describe("spec 08 — dispute flags cleared at phase boundaries", () => {
     expect(last.phase).toBe("B");
     expect(last.round).toBe(1);
     expect(last.disputeCount).toBe(0);
-    expect(last.awaitDisputeFix).toBe(false);
-    expect(last.awaitDisputeReview).toBe(false);
+    expect(last.dispute?.status === "conceded").toBe(false);
+    expect(last.dispute?.status === "defended").toBe(false);
   });
 
   it("site 10 — /loop-cancel: both flags cleared at the →idle boundary", async () => {
@@ -1933,9 +1896,9 @@ describe("spec 08 — dispute flags cleared at phase boundaries", () => {
     const last = lastLoopState();
     expect(last.phase).toBe("idle");
     expect(last.round).toBe(0);
-    expect(last.disputeMode).toBe(false);
-    expect(last.awaitDisputeFix).toBe(false);
-    expect(last.awaitDisputeReview).toBe(false);
+    expect(last.dispute?.status === "conceded").toBe(false);
+    expect(last.dispute?.status === "conceded").toBe(false);
+    expect(last.dispute?.status === "defended").toBe(false);
     expect(api._mockUi.notify).toHaveBeenCalledWith("Loop cancelled.", "info");
   });
 });

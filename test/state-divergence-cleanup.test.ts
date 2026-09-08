@@ -132,8 +132,7 @@ describe("/loop usage strings — --skip-review removed", () => {
     const cmd = cmdLoop(
       { current: makeEmptyState() },
       {} as ExtensionAPI,
-      () => {},
-    );
+      () => {});
     expect(cmd.description).not.toContain("--skip-review");
   });
 
@@ -141,8 +140,7 @@ describe("/loop usage strings — --skip-review removed", () => {
     const notifies: Array<[string, string]> = [];
     const ctx = {
       ui: { notify: (m: string, l: string) => notifies.push([m, l]) },
-      cwd: "/tmp/none",
-    } as never;
+      cwd: "/tmp/none"} as never;
     const cmd = cmdLoop({ current: makeEmptyState() }, {} as ExtensionAPI, () => {});
     await cmd.handler("", ctx);
     const usage = notifies.find(([m]) => m.startsWith("Usage: /loop"));
@@ -194,14 +192,10 @@ function makeEmptyState() {
     maxDispute: 3,
     maxTurnsPerPhase: 5,
     coverageThreshold: 80,
-    disputeMode: false,
     disputeCount: 0,
     turnsThisPhase: 0,
     lastProposal: "",
     lastPhase: "idle" as const,
     justTransitioned: false,
-    negotiateReprompted: false,
-    awaitDisputeFix: false,
-    awaitDisputeReview: false,
-  };
+    negotiateReprompted: false};
 }

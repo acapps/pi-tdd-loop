@@ -41,11 +41,8 @@ const FIELD_SPECS: Record<string, FieldSpec> = {
   maxTurnsPerPhase: { type: "number" },
   coverageThreshold: { type: "number" },
   disputeCount: { type: "number" },
-  disputeMode: { type: "boolean" },
   justTransitioned: { type: "boolean" },
   negotiateReprompted: { type: "boolean" },
-  awaitDisputeFix: { type: "boolean" },
-  awaitDisputeReview: { type: "boolean" },
   negotiateProposed: { type: "boolean", optional: true },
   negotiateFeedback: { type: "string", optional: true },
   specPath: { type: "string" },
@@ -136,6 +133,19 @@ export function validationErrors(data: unknown): string[] {
   const gate = data.lastGateResult;
   if (gate !== undefined && gate !== null && typeof gate !== "object") {
     errors.push("field lastGateResult must be an object");
+  }
+
+  // Dispute lifecycle (bug-dispute-reload-evaporation): optional at the
+  // shape level — pre-fix entries carry no `dispute` object (the session-start
+  // migration synthesizes it); when present it must be an object whose status
+  // is one of the 6 lifecycle members.
+  const dispute = data.dispute;
+  if (dispute !== undefined && dispute !== null) {
+    if (typeof dispute !== "object" || Array.isArray(dispute)) {
+      errors.push("field dispute must be an object");
+    } else {
+      checkEnum(errors, "dispute.status", (dispute as Record<string, unknown>).status, ["none", "filed", "in-review", "conceded", "defended", "closed"]);
+    }
   }
 
   return errors;

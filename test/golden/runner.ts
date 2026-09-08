@@ -12,14 +12,12 @@ import type {
   Scorecard,
   TestRunner,
   RunComparisonResult,
-  GateOutcome,
-} from "./types";
+  GateOutcome} from "./types";
 import {
   makeGatePass,
   makeGateCompileFail,
   makeGateTestFail,
-  checkThreshold,
-} from "./fixtures";
+  checkThreshold} from "./fixtures";
 import {
   createMetrics,
   accumulateGate,
@@ -27,8 +25,7 @@ import {
   accumulateTurn,
   accumulateDispute,
   accumulateToolCall,
-  finalize,
-} from "../../src/metrics";
+  finalize} from "../../src/metrics";
 import { computeScore, type ScoreResult, formatScoreReport } from "./score";
 
 // =========================================================================
@@ -74,8 +71,7 @@ class GateInjector {
       return makeGateTestFail([{
         test: "TestDispute",
         subtest: "",
-        output: "Writer disputes: test expectation does not match spec",
-      }]);
+        output: "Writer disputes: test expectation does not match spec"}]);
     }
     return buildGateFromOutcome(outcome);
   }
@@ -92,8 +88,7 @@ function buildGateFromOutcome(outcome: GateOutcome): GateResult {
     case "pass": return makeGatePass(85);
     case "fail": return makeGateTestFail();
     case "dispute": return makeGateTestFail([{
-      test: "TestDispute", subtest: "", output: "dispute",
-    }]);
+      test: "TestDispute", subtest: "", output: "dispute"}]);
     default: return makeGatePass(85);
   }
 }
@@ -109,8 +104,7 @@ function buildGateFromOutcome(outcome: GateOutcome): GateResult {
 export async function runScenario(
   scenario: GateScenario,
   specPath: string,
-  _cwd: string,
-): Promise<LoopMetrics> {
+  _cwd: string): Promise<LoopMetrics> {
   // Initialize extension with mock API
   const mockApi = createMockExtensionAPI();
   const state = initializeState(scenario, specPath);
@@ -124,8 +118,7 @@ export async function runScenario(
     phaseA: scenario.phaseA as GateOutcome[],
     phaseB: scenario.phaseB as GateOutcome[],
     phaseC: scenario.phaseC as GateOutcome[],
-    coverageThreshold: state.coverageThreshold,
-  });
+    coverageThreshold: state.coverageThreshold});
 
   // Run Phase A
   const phaseAResult = await runPhaseA(state, metrics, injector, mockApi);
@@ -175,24 +168,19 @@ function initializeState(scenario: GateScenario, specPath: string): LoopState {
     maxDispute: 3,
     maxTurnsPerPhase: 10,
     coverageThreshold: 80,
-    disputeMode: false,
     disputeCount: 0,
     turnsThisPhase: 0,
     lastProposal: "",
     lastPhase: "idle",
     justTransitioned: false,
-    negotiateReprompted: false,
-    awaitDisputeFix: false,
-    awaitDisputeReview: false,
-  };
+    negotiateReprompted: false};
 }
 
 async function runPhaseA(
   state: LoopState,
   metrics: LoopMetrics,
   injector: GateInjector,
-  _mockApi: MockExtensionAPI,
-): Promise<PhaseResult> {
+  _mockApi: MockExtensionAPI): Promise<PhaseResult> {
   state.phase = "A";
   state.round = 1;
 
@@ -228,8 +216,7 @@ async function runNegotiate(
   state: LoopState,
   metrics: LoopMetrics,
   scenario: GateScenario,
-  _mockApi: MockExtensionAPI,
-): Promise<PhaseResult> {
+  _mockApi: MockExtensionAPI): Promise<PhaseResult> {
   state.phase = "negotiate";
   state.round = 1;
   state.turnsThisPhase = 1;
@@ -274,8 +261,7 @@ async function runPhaseB(
   metrics: LoopMetrics,
   injector: GateInjector,
   scenario: GateScenario,
-  _mockApi: MockExtensionAPI,
-): Promise<PhaseResult> {
+  _mockApi: MockExtensionAPI): Promise<PhaseResult> {
   state.phase = "B";
   state.round = 1;
   state.turnsThisPhase = 1;
@@ -306,7 +292,7 @@ async function runPhaseB(
       if (disputeIndex >= 0 && scenario.phaseB[disputeIndex + 1] === "pass") {
         // Dispute conceded — Tester fixes test
         accumulateDispute(metrics, "conceded");
-        state.disputeMode = true;
+        state.dispute = { status: "conceded", filer: "writer" };
         accumulateTurn(metrics, "B");
         accumulateToolCall(metrics, false); // Test fix
 
@@ -315,7 +301,7 @@ async function runPhaseB(
         accumulateGate(metrics, postDisputeGate);
 
         if (postDisputeGate.allPassed) {
-          state.disputeMode = false;
+          state.dispute = undefined;
           return { passed: true };
         }
       } else {
@@ -343,8 +329,7 @@ async function runPhaseC(
   state: LoopState,
   metrics: LoopMetrics,
   injector: GateInjector,
-  _mockApi: MockExtensionAPI,
-): Promise<PhaseResult> {
+  _mockApi: MockExtensionAPI): Promise<PhaseResult> {
   state.phase = "C";
   state.round = 1;
   state.turnsThisPhase = 1;
@@ -385,8 +370,7 @@ async function runPhaseC(
  */
 export function assertMetrics(
   metrics: LoopMetrics,
-  thresholds: MetricThresholds,
-): AssertionResult {
+  thresholds: MetricThresholds): AssertionResult {
   const failures: AssertionResult["failures"] = [];
 
   // Check finalPhase
@@ -396,8 +380,7 @@ export function assertMetrics(
       failures.push({
         metric: "finalPhase",
         actual: metrics.finalPhase,
-        expected: thresholds.finalPhase,
-      });
+        expected: thresholds.finalPhase});
     }
   }
 
@@ -422,8 +405,7 @@ export function assertMetrics(
       failures.push({
         metric: check.key,
         actual: String(check.value),
-        expected: formatThreshold(check.threshold),
-      });
+        expected: formatThreshold(check.threshold)});
     }
   }
 
@@ -436,22 +418,19 @@ export function assertMetrics(
         failures.push({
           metric: `roundsByPhase.${phase}`,
           actual: String(actual),
-          expected: formatThreshold(threshold),
-        });
+          expected: formatThreshold(threshold)});
       }
     }
   }
 
   return {
     passed: failures.length === 0,
-    failures,
-  };
+    failures};
 }
 
 function checkThresholdPhase(
   actual: string,
-  expected: string,
-): { pass: boolean; message: string } {
+  expected: string): { pass: boolean; message: string } {
   if (actual === expected) return { pass: true, message: "ok" };
   return { pass: false, message: `expected ${expected}, got ${actual}` };
 }
@@ -471,8 +450,7 @@ export function compareRuns(
   a: LoopMetrics,
   b: LoopMetrics,
   scenarioA: string,
-  scenarioB: string,
-): RunComparisonResult {
+  scenarioB: string): RunComparisonResult {
   const diffs: RunComparisonResult["diffs"] = [];
   const numericKeys = [
     "gateRuns", "compileFails", "testFails", "totalFailures", "finalCoverage",
@@ -493,8 +471,7 @@ export function compareRuns(
       metric: key,
       valueA: String(valA),
       valueB: String(valB),
-      changePercent,
-    });
+      changePercent});
   }
 
   // Phase comparison
@@ -502,8 +479,7 @@ export function compareRuns(
     diffs.push({
       metric: "finalPhase",
       valueA: a.finalPhase,
-      valueB: b.finalPhase,
-    });
+      valueB: b.finalPhase});
   }
 
   return { scenarioA, scenarioB, diffs };
@@ -518,15 +494,13 @@ export async function createRunner(_cwd: string): Promise<TestRunner> {
     async run(specPath: string, scenario: GateScenario): Promise<LoopMetrics> {
       return runScenario(scenario, specPath, _cwd);
     },
-    dispose(): void {},
-  };
+    dispose(): void {}};
 }
 
 export async function run(
   cwd: string,
   specPath: string,
-  scenario: GateScenario,
-): Promise<LoopMetrics> {
+  scenario: GateScenario): Promise<LoopMetrics> {
   return runScenario(scenario, specPath, cwd);
 }
 
@@ -534,16 +508,14 @@ export function buildScorecard(
   scenario: string,
   metrics: LoopMetrics,
   thresholds: MetricThresholds,
-  result: AssertionResult,
-): Scorecard {
+  result: AssertionResult): Scorecard {
   const scoreResult = computeScore(metrics, {
     name: scenario,
     phaseA: ["pass"],
     negotiate: "agree",
     phaseB: ["pass"],
     phaseC: ["pass"],
-    expectedPhase: metrics.finalPhase as Phase,
-  });
+    expectedPhase: metrics.finalPhase as Phase});
 
   return {
     scenario,
@@ -553,8 +525,7 @@ export function buildScorecard(
     metrics,
     thresholds,
     passed: result.passed,
-    failures: result.failures,
-  };
+    failures: result.failures};
 }
 
 function getExtensionVersion(): string {
@@ -578,8 +549,7 @@ function getGitCommit(): string {
 
 export function saveScorecard(
   dir: string,
-  scorecard: Scorecard,
-): void {
+  scorecard: Scorecard): void {
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }
@@ -590,8 +560,7 @@ export function saveScorecard(
 
 export function compareAgainstBaseline(
   metrics: LoopMetrics,
-  baseline: LoopMetrics,
-): AssertionResult {
+  baseline: LoopMetrics): AssertionResult {
   const failures: AssertionResult["failures"] = [];
   const tolerances: Record<string, number> = {
     gateRuns: 50,        // ±50%
@@ -612,8 +581,7 @@ export function compareAgainstBaseline(
         failures.push({
           metric,
           actual: String(actual),
-          expected: String(expected),
-        });
+          expected: String(expected)});
       }
     } else {
       // Percentage tolerance
@@ -623,16 +591,14 @@ export function compareAgainstBaseline(
         failures.push({
           metric,
           actual: String(actual),
-          expected: `${expected} ±${tolerance}%`,
-        });
+          expected: `${expected} ±${tolerance}%`});
       }
     }
   }
 
   return {
     passed: failures.length === 0,
-    failures,
-  };
+    failures};
 }
 
 // =========================================================================

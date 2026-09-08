@@ -37,15 +37,13 @@ function makeState(overrides: Partial<LoopState> = {}): LoopState {
     maxDispute: 3,
     maxTurnsPerPhase: 5,
     coverageThreshold: 80,
-    disputeMode: false,
     disputeCount: 0,
     turnsThisPhase: 0,
     lastProposal: "",
     lastPhase: "idle",
     justTransitioned: false,
     negotiateReprompted: false,
-    awaitDisputeFix: false,
-    awaitDisputeReview: false,
+    dispute: { status: "none" },
     ...overrides,
   };
 }
@@ -105,7 +103,7 @@ describe("Rule 1 — escalated phase allows everything", () => {
 
   it("first match wins: rule 1 beats rule 2 (escalated + awaitDisputeReview → allow)", () => {
     const { result, pi, debug } = call({
-      state: { phase: "escalated", awaitDisputeReview: true },
+      state: { phase: "escalated" },
       path: "src/main.go",
     });
     expect(result).toBeUndefined();
@@ -121,7 +119,7 @@ describe("Rule 1 — escalated phase allows everything", () => {
 describe("Rule 2 — awaitDisputeReview blocks all tool calls", () => {
   it("blocks a write with the verbatim reason and emits NO loop-refusal entry (F2)", () => {
     const { result, pi, debug } = call({
-      state: { phase: "B", awaitDisputeReview: true },
+      state: { phase: "B", dispute: { status: "filed", filer: "writer" } },
       path: "src/main.go",
     });
     expect(result).toEqual({ block: true, reason: RULE2_REASON });
@@ -133,7 +131,7 @@ describe("Rule 2 — awaitDisputeReview blocks all tool calls", () => {
 
   it("blocks non-write tools too (tool- and phase-independent)", () => {
     const { result } = call({
-      state: { phase: "review", awaitDisputeReview: true },
+      state: { phase: "review", dispute: { status: "filed", filer: "writer" } },
       toolName: "read",
       path: "src/main_test.go",
     });
@@ -142,7 +140,7 @@ describe("Rule 2 — awaitDisputeReview blocks all tool calls", () => {
 
   it("blocks with a missing path (path-independent)", () => {
     const { result } = call({
-      state: { phase: "C", awaitDisputeReview: true },
+      state: { phase: "C", dispute: { status: "filed", filer: "writer" } },
       path: undefined,
     });
     expect(result).toEqual({ block: true, reason: RULE2_REASON });
@@ -150,7 +148,7 @@ describe("Rule 2 — awaitDisputeReview blocks all tool calls", () => {
 
   it("first match wins: rule 2 beats rule 3 (disputeMode + awaitDisputeReview → rule 2 payload)", () => {
     const { result, pi, debug } = call({
-      state: { phase: "B", disputeMode: true, awaitDisputeReview: true },
+      state: { phase: "B", dispute: { status: "filed", filer: "writer" } },
       path: "src/main.go",
     });
     expect(result).toEqual({ block: true, reason: RULE2_REASON });
@@ -166,7 +164,7 @@ describe("Rule 2 — awaitDisputeReview blocks all tool calls", () => {
 describe("Rule 3 — dispute mode blocks non-test paths", () => {
   it("blocks a non-test write with reason, debug, and B-dispute entry", () => {
     const { result, pi, debug } = call({
-      state: { phase: "B", disputeMode: true },
+      state: { phase: "B", dispute: { status: "conceded", filer: "tester" } },
       path: "src/main.go",
     });
     expect(result).toEqual({ block: true, reason: lang.refusalMessage.phaseC });
@@ -177,7 +175,7 @@ describe("Rule 3 — dispute mode blocks non-test paths", () => {
 
   it("hardcodes tool: 'write' in the entry even for edit (matches monolith)", () => {
     const { result, pi } = call({
-      state: { phase: "B", disputeMode: true },
+      state: { phase: "B", dispute: { status: "conceded", filer: "tester" } },
       toolName: "edit",
       path: "src/main.go",
     });
@@ -187,7 +185,7 @@ describe("Rule 3 — dispute mode blocks non-test paths", () => {
 
   it("fires for non-write tools too (monolith has no write-action guard here)", () => {
     const { result, pi } = call({
-      state: { phase: "B", disputeMode: true },
+      state: { phase: "B", dispute: { status: "conceded", filer: "tester" } },
       toolName: "read",
       path: "src/main.go",
     });
@@ -197,7 +195,7 @@ describe("Rule 3 — dispute mode blocks non-test paths", () => {
 
   it("has no project-path guard: blocks non-test paths outside the project", () => {
     const { result } = call({
-      state: { phase: "B", disputeMode: true },
+      state: { phase: "B", dispute: { status: "conceded", filer: "tester" } },
       path: "/etc/passwd",
     });
     expect(result).toEqual({ block: true, reason: lang.refusalMessage.phaseC });
@@ -205,7 +203,7 @@ describe("Rule 3 — dispute mode blocks non-test paths", () => {
 
   it("cannot fire with a missing path (F3): B + disputeMode + write + undefined → allow", () => {
     const { result, pi, debug } = call({
-      state: { phase: "B", disputeMode: true },
+      state: { phase: "B", dispute: { status: "conceded", filer: "tester" } },
       path: undefined,
     });
     expect(result).toBeUndefined();
@@ -215,7 +213,7 @@ describe("Rule 3 — dispute mode blocks non-test paths", () => {
 
   it("first match wins: rule 3 beats rule 5 (A + disputeMode → B-dispute payload, not phase A)", () => {
     const { result, pi } = call({
-      state: { phase: "A", disputeMode: true },
+      state: { phase: "A", dispute: { status: "conceded", filer: "tester" } },
       path: "README.md",
     });
     expect(result).toEqual({ block: true, reason: lang.refusalMessage.phaseC });
@@ -224,7 +222,7 @@ describe("Rule 3 — dispute mode blocks non-test paths", () => {
 
   it("first match wins: rule 3 beats rule 4 (negotiate + disputeMode → B-dispute payload)", () => {
     const { result, pi } = call({
-      state: { phase: "negotiate", disputeMode: true },
+      state: { phase: "negotiate", dispute: { status: "conceded", filer: "tester" } },
       path: "src/main.go",
     });
     expect(result).toEqual({ block: true, reason: lang.refusalMessage.phaseC });
@@ -432,7 +430,7 @@ describe("Rule 6 — phases B/C block test-file writes", () => {
 describe("F1 — dispute-fix turn (phase B, disputeMode: true)", () => {
   it("Tester MAY fix the test: write of a test file is allowed (rule 6 exclusion)", () => {
     const { result, pi, debug } = call({
-      state: { phase: "B", disputeMode: true },
+      state: { phase: "B", dispute: { status: "conceded", filer: "writer" } },
       path: "src/main_test.go",
     });
     expect(result).toBeUndefined();
@@ -442,7 +440,7 @@ describe("F1 — dispute-fix turn (phase B, disputeMode: true)", () => {
 
   it("Tester MAY fix the test: edit of a test file is allowed too", () => {
     const { result } = call({
-      state: { phase: "B", disputeMode: true },
+      state: { phase: "B", dispute: { status: "conceded", filer: "writer" } },
       toolName: "edit",
       path: "src/main_test.go",
     });
@@ -451,7 +449,7 @@ describe("F1 — dispute-fix turn (phase B, disputeMode: true)", () => {
 
   it("symmetrically: non-test project writes stay blocked (rule 3)", () => {
     const { result, pi } = call({
-      state: { phase: "B", disputeMode: true },
+      state: { phase: "B", dispute: { status: "conceded", filer: "tester" } },
       path: "src/main.go",
     });
     expect(result).toEqual({ block: true, reason: lang.refusalMessage.phaseC });
@@ -480,7 +478,7 @@ describe("F3 — missing path (undefined/null) across phases", () => {
 
   it("only rule 2 (awaitDisputeReview) can block with a missing path", () => {
     expect(
-      call({ state: { phase: "C", awaitDisputeReview: true }, path: undefined }).result?.block,
+      call({ state: { phase: "C", dispute: { status: "filed", filer: "writer" } }, path: undefined }).result?.block,
     ).toBe(true);
   });
 
@@ -520,7 +518,6 @@ describe("Result shape and immutability", () => {
       ctx: makeCtx(),
     });
     expect(state.phase).toBe("B");
-    expect(state.disputeMode).toBe(false);
-    expect(state.awaitDisputeReview).toBe(false);
+    expect(state.dispute?.status).toBe("none");
   });
 });

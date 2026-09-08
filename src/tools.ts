@@ -85,8 +85,7 @@ function transitionToPhaseB(state: StateRef, pi: ExtensionAPI, ctx: ToolCtx, deb
   state.current.round = 1;
   state.current.turnsThisPhase = 1;
   state.current.justTransitioned = true;
-  state.current.awaitDisputeFix = false;
-  state.current.awaitDisputeReview = false;
+  state.current.dispute = { status: "none" };
   state.current.negotiateReprompted = false;
   state.current.negotiateProposed = false;
   state.current.negotiateFeedback = "";
@@ -122,7 +121,9 @@ function logDisputeEntry(state: StateRef, pi: ExtensionAPI, debug: Debug, text: 
     phase: state.current.phase,
     round: state.current.round,
     disputeCount: state.current.disputeCount,
-    filer: state.current.disputeMode ? "tester" : "writer",
+    // S2: the RECORDED filer (set at filing) — the old re-derivation from
+    // disputeMode was wrong for a writer-filed dispute at filing time.
+    filer: state.current.dispute?.filer ?? "writer",
     claim: text.slice(0, 500),
     text: text.slice(0, 500),
   });
@@ -138,8 +139,7 @@ function logDisputeConcession(state: StateRef, pi: ExtensionAPI): void {
 
 function logEscalation(state: StateRef, pi: ExtensionAPI, ctx: ToolCtx, debug: Debug): void {
   state.current.phase = "escalated";
-  state.current.awaitDisputeFix = false;
-  state.current.awaitDisputeReview = false;
+  state.current.dispute = { status: "none" };
   persistState(state, pi, debug);
   ctx.ui.notify("Dispute limit reached. Escalating to human.", "warning");
   ctx.ui.setStatus("loop", "escalated (dispute limit)");
@@ -228,13 +228,16 @@ function handleBDisputePropose(
   ctx: ToolCtx,
   plan: string,
 ): ToolResult {
-  state.current.disputeCount++;
-  debug(`Dispute #${state.current.disputeCount}: ${plan.slice(0, 60)}`);
-
-  if (state.current.disputeCount >= state.current.maxDispute) {
-    logEscalation(state, pi, ctx, debug);
-    return buildProposeResult();
-  }
+  // S1: the budget is consumed at RESOLUTION (handleBDisputeReview), not at
+  // filing — a filed-but-lost dispute no longer burns budget.
+  const filer = state.current.dispute?.filer ?? "writer";
+  state.current.dispute = {
+    status: "filed",
+    filer,
+    claim: plan,
+    filedRound: state.current.round,
+  };
+  debug(`Dispute filed: ${plan.slice(0, 60)}`);
 
   logDisputeEntry(state, pi, debug, plan);
   return triggerDisputeReview(state, pi, debug);
@@ -263,7 +266,9 @@ function executeNegotiateProposal(
 }
 
 function triggerDisputeReview(state: StateRef, pi: ExtensionAPI, debug: Debug): ToolResult {
-  state.current.awaitDisputeReview = true;
+  // The review turn is scheduled at the next settle (status "filed" →
+  // "in-review", dispute.ts). The status survives a reload — the old
+  // awaitDisputeReview flag evaporated with clearTransientFlags.
   persistState(state, pi, debug);
   return {
     content: [{ text: "Dispute filed. STOP producing tool calls. The review is requested when your turn ends." }],
@@ -365,18 +370,33 @@ function handleBDisputeReview(
   debug(`Dispute review: ${isApproval(decision) ? "conceded" : "defended"}`);
   logDisputeEntry(state, pi, debug, decision);
 
-  // Recorded at decision time, before any cell mutates disputeMode (spec 09,
-  // Filer routing; Table 3 row 1 routes by this recorded value).
-  state.current.disputeFiler = state.current.disputeMode ? "tester" : "writer";
+  // S1: the budget is consumed at resolution. The filer is the RECORDED
+  // value from filing — never re-derived (disputeMode no longer exists).
+  state.current.disputeCount++;
+  const filer = state.current.dispute?.filer ?? "writer";
 
   if (isApproval(decision)) {
     // Table 2: row 1 (Writer filed) → Tester fixes the test; row 3 (Tester
     // filed) → Writer fixes the flagged file(s).
-    return state.current.disputeMode
-      ? executeWriterConcede(state, pi, debug)
-      : executeBDisputeConcede(state, pi, debug);
+    if (state.current.disputeCount >= state.current.maxDispute) {
+      logEscalation(state, pi, ctx, debug);
+      return buildReviewResult(state.current.phase as Phase, "approve");
+    }
+    state.current.dispute = { ...state.current.dispute, status: "conceded", decision: "concede" };
+    persistState(state, pi, debug);
+    if (filer === "tester") {
+      logDisputeConcession(state, pi);
+    }
+    return buildReviewResult(state.current.phase as Phase, "approve");
   }
-  return executeBDisputeDefend(state, pi, debug, decision);
+
+  if (state.current.disputeCount >= state.current.maxDispute) {
+    logEscalation(state, pi, ctx, debug);
+    return buildReviewResult(state.current.phase as Phase, decision);
+  }
+  state.current.dispute = { ...state.current.dispute, status: "defended", decision };
+  persistState(state, pi, debug);
+  return buildReviewResult(state.current.phase as Phase, decision);
 }
 
 function executeNegotiateApprove(
@@ -400,46 +420,4 @@ function executeNegotiateFeedback(
   state.current.negotiateFeedback = decision;
   persistState(state, pi, debug);
   return buildReviewResult(state.current.phase as Phase, decision);
-}
-
-function executeBDisputeConcede(
-  state: StateRef,
-  pi: ExtensionAPI,
-  debug: Debug,
-): ToolResult {
-  debug("Tester conceded — will fix test");
-  state.current.disputeMode = true;
-  state.current.awaitDisputeFix = true;
-  persistState(state, pi, debug);
-  logDisputeConcession(state, pi);
-  return buildReviewResult(state.current.phase as Phase, "approve");
-}
-
-function executeBDisputeDefend(
-  state: StateRef,
-  pi: ExtensionAPI,
-  debug: Debug,
-  decision: string,
-): ToolResult {
-  debug("negotiate_review: defend dispute");
-  state.current.round++;
-  // Load-bearing in Table 2 row 4 (Tester filed): closes the fix window this
-  // cell inherited; a no-op in row 2 (already false).
-  state.current.disputeMode = false;
-  state.current.disputeDefended = decision; // delivered at the next settle (Table 3 row 1)
-  persistState(state, pi, debug);
-  return buildReviewResult(state.current.phase as Phase, decision);
-}
-
-function executeWriterConcede(
-  state: StateRef,
-  pi: ExtensionAPI,
-  debug: Debug,
-): ToolResult {
-  debug("Writer conceded — will fix flagged files");
-  // Exit the fix window so rule 3 no longer blocks the Writer's source writes.
-  state.current.disputeMode = false;
-  state.current.awaitWriterConcedeFix = true; // delivered at the next settle (Table 3 row 2)
-  persistState(state, pi, debug);
-  return buildReviewResult(state.current.phase as Phase, "approve");
 }

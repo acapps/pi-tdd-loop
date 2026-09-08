@@ -1,6 +1,10 @@
 // --- dispute handler ---
 // Dispute fix and dispute review handling.
 // Spec: internal/04-implement-agent-settled-handlers.md (R2, flag-preservation).
+// Lifecycle: internal/bug-dispute-reload-evaporation.md — the 4 handlers are
+// status transitions on state.current.dispute; the status moves AT delivery
+// (set before send, persist before send), so a reload can never double-
+// deliver or evaporate a pending leg.
 
 import type { LoopState } from "../../types";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -17,88 +21,91 @@ export interface DisputeHandlerInput {
   ctx: EventCtx;
   lang: LanguageConfig;
   // Optional (R2): the dispatcher omits it for handleDisputeFix, which never
-  // debug-logs; handleDisputeReview still receives it.
+  // debug-logs; the other handlers still receive it.
   debug?: (msg: string) => void;
 }
 
 export interface DisputeHandlerOutput {
   handled: boolean;
-  type?: "fix" | "review" | "defend" | "writer-fix";
+  type?: "fix" | "review" | "defend" | "concede" | "writer-fix";
 }
 
 // --- Public API ---
 
+// Row 5: status "conceded" + writer filed → the Tester fixes the test.
+// The status → "closed" moves BEFORE the send (persist before send): a
+// reload after delivery cannot re-deliver.
 export function handleDisputeFix(
   input: DisputeHandlerInput,
 ): DisputeHandlerOutput {
-  const { state, pi, ctx, lang } = input;
-  if (!state.current.awaitDisputeFix) return { handled: false, type: "fix" };
+  const { state, pi, ctx, lang, debug } = input;
+  const d = state.current.dispute;
+  if (!d || d.status !== "conceded" || d.filer !== "writer") return { handled: false };
 
-  // No state mutation here — the flag is cleared elsewhere (prompt-build, spec 03).
+  debug?.("Dispute fix → Tester fixes the test");
+  state.current.dispute = { ...d, status: "closed" };
+  commit(state.current, pi, debug ?? (() => {}));
   ctx.ui.setStatus("loop", `Phase B — round ${state.current.round} (dispute fix)`);
   pi.sendUserMessage(lang.prompts.promptTesterDisputeFix(), { triggerTurn: true });
-  return { handled: true, type: "fix" };
+  return { handled: true };
 }
 
+// Row 3: status "filed" → "in-review": schedule the reviewer turn.
+// Set-before-send + persist-before-send (S2): the review leg is crash-safe
+// by construction, and a reload re-delivers (the status survived).
 export function handleDisputeReview(
   input: DisputeHandlerInput,
 ): DisputeHandlerOutput {
   const { state, pi, ctx, debug } = input;
-  if (!state.current.awaitDisputeReview) return { handled: false, type: "review" };
+  const d = state.current.dispute;
+  if (!d || (d.status !== "filed" && d.status !== "in-review")) return { handled: false, type: "review" };
 
-  // Spec 09 Table 1 row 1: schedule the reviewer turn. Filer is derived at
-  // scheduling (disputeMode is stable from filing to settle); the prompt is
-  // addressed to the REVIEWER, not the filer.
-  const filer = state.current.disputeMode ? "tester" : "writer";
+  // The RECORDED filer from filing — never re-derived.
+  const filer = d.filer ?? "writer";
   const reviewer = filer === "writer" ? "tester" : "writer";
   const prompt = filer === "writer"
-    ? GP.promptTesterReviewWriterDispute(state.current.lastProposal)
-    : GP.promptWriterDisputeReview(state.current.lastProposal);
+    ? GP.promptTesterReviewWriterDispute(d.claim ?? state.current.lastProposal)
+    : GP.promptWriterDisputeReview(d.claim ?? state.current.lastProposal);
   debug?.(`Dispute review → ${reviewer} review turn`);
+
+  state.current.dispute = { ...d, status: "in-review" };
+  commit(state.current, pi, debug ?? (() => {})); // persist BEFORE the send (S2)
   pi.sendUserMessage(prompt, { triggerTurn: true });
-  state.current.awaitDisputeReview = false; // cleared at scheduling — never survives a settle
-  persistState(state, pi, debug);
   ctx.ui.setStatus("loop", `Phase ${state.current.phase} — round ${state.current.round} (dispute review)`);
   return { handled: true, type: "review" }; // the gate resumes on the next settle
 }
 
-// --- Spec 09: follow-up delivery handlers (Table 3) ---
-
+// Row 7: status "defended" → closed: deliver the defend decision, routed by
+// the RECORDED filer.
 export function handleDisputeDefend(
   input: DisputeHandlerInput,
 ): DisputeHandlerOutput {
   const { state, pi, debug } = input;
-  if (state.current.disputeDefended === undefined) return { handled: false, type: "defend" };
+  const d = state.current.dispute;
+  if (!d || d.status !== "defended") return { handled: false };
 
-  // Routed by the RECORDED filer (never re-derived: disputeMode was cleared by
-  // Table 2 row 4 and is no longer a reliable signal — reviewer F-B).
-  const prompt = state.current.disputeFiler === "tester"
-    ? GP.promptTesterReportRejected(state.current.disputeDefended)
-    : GP.promptWriterDisputeDefended(state.current.disputeDefended);
+  const prompt = d.filer === "tester"
+    ? GP.promptTesterReportRejected(d.decision ?? "")
+    : GP.promptWriterDisputeDefended(d.decision ?? "");
   debug?.("Dispute defend → delivering decision");
+  state.current.dispute = { ...d, status: "closed" };
+  commit(state.current, pi, debug ?? (() => {})); // persist BEFORE the send
   pi.sendUserMessage(prompt, { triggerTurn: true });
-  state.current.disputeDefended = undefined;
-  state.current.disputeFiler = undefined; // cleared per Table 3 row 1
-  persistState(state, pi, debug);
   return { handled: true, type: "defend" };
 }
 
+// Row 4 (tester filed → Writer fixes): status "conceded" + tester filed →
+// closed: deliver the writer concede-fix prompt.
 export function handleWriterConcedeFix(
   input: DisputeHandlerInput,
 ): DisputeHandlerOutput {
   const { state, pi, debug } = input;
-  if (state.current.awaitWriterConcedeFix !== true) return { handled: false, type: "writer-fix" };
+  const d = state.current.dispute;
+  if (!d || d.status !== "conceded" || d.filer !== "tester") return { handled: false };
 
   debug?.("Writer conceded → fix turn");
-  pi.sendUserMessage(GP.promptWriterConcedeFix(state.current.lastProposal), { triggerTurn: true });
-  state.current.awaitWriterConcedeFix = false;
-  state.current.disputeFiler = undefined; // N2: cleared on this row too
-  persistState(state, pi, debug);
+  state.current.dispute = { ...d, status: "closed" };
+  commit(state.current, pi, debug ?? (() => {})); // persist BEFORE the send
+  pi.sendUserMessage(GP.promptWriterConcedeFix(d.claim ?? state.current.lastProposal), { triggerTurn: true });
   return { handled: true, type: "writer-fix" };
-}
-
-// --- Shared helpers ---
-
-function persistState(state: { current: LoopState }, pi: ExtensionAPI, debug?: (msg: string) => void): void {
-  commit(state.current, pi, debug ?? (() => {}));
 }

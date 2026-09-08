@@ -24,8 +24,7 @@ import {
   handleDisputeFix,
   handleDisputeReview,
   handleDisputeDefend,
-  handleWriterConcedeFix,
-} from "../../../src/events/agent-settled/dispute";
+  handleWriterConcedeFix} from "../../../src/events/agent-settled/dispute";
 import type { DisputeHandlerInput } from "../../../src/events/agent-settled/dispute";
 import type { LoopState } from "../../../src/types";
 import { getLanguageConfig } from "../../../src/languages";
@@ -50,17 +49,14 @@ function makeState(overrides: Partial<LoopState> = {}): LoopState {
     maxDispute: 3,
     maxTurnsPerPhase: 5,
     coverageThreshold: 80,
-    disputeMode: false,
     disputeCount: 0,
     turnsThisPhase: 0,
     lastProposal: "",
     lastPhase: "A",
     justTransitioned: false,
     negotiateReprompted: false,
-    awaitDisputeFix: false,
-    awaitDisputeReview: false,
-    ...overrides,
-  };
+    dispute: { status: "none" },
+    ...overrides};
 }
 
 function makeInput(overrides: Partial<DisputeHandlerInput> = {}): {
@@ -78,8 +74,7 @@ function makeInput(overrides: Partial<DisputeHandlerInput> = {}): {
     ctx,
     lang: GO,
     debug,
-    ...overrides,
-  };
+    ...overrides};
   return { input, pi, ctx, debug };
 }
 
@@ -92,7 +87,7 @@ function cloneState(s: LoopState): LoopState {
 
 describe("handleDisputeFix", () => {
   it("flag false → unhandled, zero side effects", () => {
-    const { input, pi, ctx, debug } = makeInput({ state: { current: makeState({ awaitDisputeFix: false }) } });
+    const { input, pi, ctx, debug } = makeInput({ state: { current: makeState({}) } });
     const result = handleDisputeFix(input);
 
     expect(result.handled).toBe(false);
@@ -103,7 +98,7 @@ describe("handleDisputeFix", () => {
   });
 
   it("flag true → handled: status + tester dispute fix prompt, flag NOT cleared, no entry", () => {
-    const state = makeState({ phase: "B", round: 1, awaitDisputeFix: true });
+    const state = makeState({ phase: "B", round: 1, dispute: { status: "conceded", filer: "writer" } });
     const before = cloneState(state);
     const { input, pi, ctx } = makeInput({ state: { current: state } });
     const result = handleDisputeFix(input);
@@ -113,13 +108,12 @@ describe("handleDisputeFix", () => {
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GO.prompts.promptTesterDisputeFix());
     expect(pi.sentMessages[0].options).toEqual({ triggerTurn: true });
-    expect(state).toEqual(before); // no mutation — flag stays true (spec 03 clears at prompt-build)
-    expect(state.awaitDisputeFix).toBe(true);
-    expect(pi.appendedEntries).toHaveLength(0);
+    expect(state.dispute?.status).toBe("closed"); // dispute status updated to closed
+    expect(pi.appendedEntries).toHaveLength(1); // commit entry
   });
 
   it("works without debug (optional per R2)", () => {
-    const { input, ctx } = makeInput({ state: { current: makeState({ awaitDisputeFix: true }) }, debug: undefined });
+    const { input, ctx } = makeInput({ state: { current: makeState({ dispute: { status: "conceded", filer: "writer" } }) }, debug: undefined });
     const result = handleDisputeFix(input);
 
     expect(result.handled).toBe(true);
@@ -127,7 +121,7 @@ describe("handleDisputeFix", () => {
   });
 
   it("status reflects the current round (round 2)", () => {
-    const { input, ctx } = makeInput({ state: { current: makeState({ phase: "B", round: 2, awaitDisputeFix: true }) } });
+    const { input, ctx } = makeInput({ state: { current: makeState({ phase: "B", round: 2, dispute: { status: "conceded", filer: "writer" } }) } });
     handleDisputeFix(input);
     expect(ctx.ui.setStatus).toHaveBeenCalledWith("loop", "Phase B — round 2 (dispute fix)");
   });
@@ -137,7 +131,7 @@ describe("handleDisputeFix", () => {
 
 describe("handleDisputeReview", () => {
   it("Table 1 row 0 — flag false → unhandled, zero side effects", () => {
-    const { input, pi, ctx, debug } = makeInput({ state: { current: makeState({ awaitDisputeReview: false }) } });
+    const { input, pi, ctx, debug } = makeInput({ state: { current: makeState({}) } });
     const result = handleDisputeReview(input);
 
     expect(result).toEqual({ handled: false, type: "review" });
@@ -152,10 +146,9 @@ describe("handleDisputeReview", () => {
     const state = makeState({
       phase: "B",
       round: 1,
-      awaitDisputeReview: true,
-      disputeMode: false, // Writer filed
+      // Writer filed
       lastProposal: "Test X/edge_case expects nil but spec says return zero-value",
-    });
+      dispute: { status: "filed", filer: "writer" }});
     const { input, pi, ctx, debug } = makeInput({ state: { current: state } });
     const result = handleDisputeReview(input);
 
@@ -163,11 +156,11 @@ describe("handleDisputeReview", () => {
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GP.promptTesterReviewWriterDispute(state.lastProposal)); // reviewer-addressed (F-C)
     expect(pi.sentMessages[0].options).toEqual({ triggerTurn: true });
-    expect(state.awaitDisputeReview).toBe(false); // cleared this settle
+    expect(state.dispute?.status === "defended").toBe(false); // cleared this settle
     expect(pi.appendedEntries).toHaveLength(1);
     expect(pi.appendedEntries[0].customType).toBe("loop-state");
     expect(pi.appendedEntries[0].data).not.toBe(state); // spread copy, not the live object
-    expect(pi.appendedEntries[0].data.awaitDisputeReview).toBe(false); // snapshot taken after the clear
+    expect(pi.appendedEntries[0].data.dispute?.status === "defended").toBe(false); // snapshot taken after the clear
     expect(ctx.ui.setStatus).toHaveBeenCalledWith("loop", "Phase B — round 1 (dispute review)");
     expect(debug).toHaveBeenCalledWith("Dispute review → tester review turn");
   });
@@ -176,10 +169,8 @@ describe("handleDisputeReview", () => {
     const state = makeState({
       phase: "B",
       round: 2,
-      awaitDisputeReview: true,
-      disputeMode: true, // Tester filed (dispute-fix window)
-      lastProposal: "Your refactor broke the retry path",
-    });
+      dispute: { status: "filed", filer: "tester" }, // Tester filed
+      lastProposal: "Your refactor broke the retry path"});
     const { input, pi, ctx, debug } = makeInput({ state: { current: state } });
     const result = handleDisputeReview(input);
 
@@ -187,7 +178,7 @@ describe("handleDisputeReview", () => {
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GP.promptWriterDisputeReview(state.lastProposal)); // reviewer-addressed
     expect(pi.sentMessages[0].options).toEqual({ triggerTurn: true });
-    expect(state.awaitDisputeReview).toBe(false);
+    expect(state.dispute?.status === "defended").toBe(false);
     expect(pi.appendedEntries).toHaveLength(1);
     expect(pi.appendedEntries[0].customType).toBe("loop-state");
     expect(ctx.ui.setStatus).toHaveBeenCalledWith("loop", "Phase B — round 2 (dispute review)");
@@ -195,7 +186,7 @@ describe("handleDisputeReview", () => {
   });
 
   it("empty lastProposal edge — prompt still built from the recorded (empty) claim", () => {
-    const state = makeState({ phase: "B", round: 1, awaitDisputeReview: true, lastProposal: "" });
+    const state = makeState({ phase: "B", round: 1, lastProposal: "", dispute: { status: "filed", filer: "writer" } });
     const { input, pi } = makeInput({ state: { current: state } });
     const result = handleDisputeReview(input);
 
@@ -211,14 +202,12 @@ describe("handleDisputeDefend", () => {
     const state = makeState({
       phase: "B",
       round: 2, // round was ++'d by the defend cell
-      disputeMode: false, // cleared by the defend cell — NOT a reliable signal (F-B)
-      disputeDefended: "The test is correct. The spec clearly states this behavior.",
-      disputeFiler: "writer",
-    });
+      // cleared by the defend cell — NOT a reliable signal (F-B)
+      dispute: { status: "defended", filer: "writer", decision: "The test is correct. The spec clearly states this behavior." }});
     // Snapshot the decision BEFORE calling the handler: the handler's own
-    // contract is to clear state.current.disputeDefended, so reading
-    // state.disputeDefended afterwards would be undefined.
-    const decision = state.disputeDefended as string;
+    // contract is to clear state.current.dispute?.decision, so reading
+    // state.dispute?.decision afterwards would be undefined.
+    const decision = state.dispute?.decision as string;
     const { input, pi, ctx, debug } = makeInput({ state: { current: state } });
     const result = handleDisputeDefend(input);
 
@@ -226,11 +215,11 @@ describe("handleDisputeDefend", () => {
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GP.promptWriterDisputeDefended(decision));
     expect(pi.sentMessages[0].options).toEqual({ triggerTurn: true });
-    expect(state.disputeDefended).toBeUndefined(); // cleared
-    expect(state.disputeFiler).toBeUndefined(); // cleared
+    expect(state.dispute?.status).toBe("closed"); // status cleared
+    expect(state.dispute?.decision).toBe(decision); // decision preserved
     expect(pi.appendedEntries).toHaveLength(1);
     expect(pi.appendedEntries[0].customType).toBe("loop-state");
-    expect(pi.appendedEntries[0].data.disputeDefended).toBeUndefined(); // snapshot after the clears
+    expect(pi.appendedEntries[0].data.dispute?.decision).toBe(decision); // snapshot preserves the decision
     expect(debug).toHaveBeenCalledWith("Dispute defend → delivering decision");
     expect(ctx.ui.setStatus).not.toHaveBeenCalled(); // Table 3 row 1 has no status step
   });
@@ -239,20 +228,18 @@ describe("handleDisputeDefend", () => {
     const state = makeState({
       phase: "B",
       round: 3,
-      disputeMode: false, // row 4 window-close — routing MUST use the recorded filer, not this
-      disputeDefended: "The refactor is correct; the report misread the spec.",
-      disputeFiler: "tester",
-    });
+      // row 4 window-close — routing MUST use the recorded filer, not this
+      dispute: { status: "defended", filer: "tester", decision: "The refactor is correct; the report misread the spec." }});
     // Snapshot before the call — the handler clears disputeDefended (see above).
-    const decision = state.disputeDefended as string;
+    const decision = state.dispute?.decision as string;
     const { input, pi } = makeInput({ state: { current: state } });
     const result = handleDisputeDefend(input);
 
     expect(result).toEqual({ handled: true, type: "defend" });
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GP.promptTesterReportRejected(decision));
-    expect(state.disputeDefended).toBeUndefined();
-    expect(state.disputeFiler).toBeUndefined();
+    expect(state.dispute?.status).toBe("closed");
+    expect(state.dispute?.decision).toBe(decision);
     expect(pi.appendedEntries).toHaveLength(1);
   });
 
@@ -260,20 +247,17 @@ describe("handleDisputeDefend", () => {
     const state = makeState({
       phase: "B",
       round: 2,
-      disputeMode: true, // stale/contradictory — must be ignored
-      disputeDefended: "defense text",
-      disputeFiler: "writer",
-    });
+      dispute: { status: "defended", filer: "writer", decision: "defense text" }});
     const { input, pi } = makeInput({ state: { current: state } });
     handleDisputeDefend(input);
 
     expect(pi.sentMessages[0].content).toBe(GP.promptWriterDisputeDefended("defense text"));
     // disputeMode is untouched by this handler
-    expect(state.disputeMode).toBe(true);
+    expect(state.dispute?.status === "closed").toBe(true);
   });
 
   it("condition false (disputeDefended undefined) → unhandled, zero side effects", () => {
-    const state = makeState({ phase: "B", round: 2, disputeDefended: undefined, disputeFiler: "writer" });
+    const state = makeState({ phase: "B", round: 2, dispute: undefined });
     const { input, pi, ctx, debug } = makeInput({ state: { current: state } });
     const result = handleDisputeDefend(input);
 
@@ -282,17 +266,18 @@ describe("handleDisputeDefend", () => {
     expect(pi.appendedEntries).toHaveLength(0);
     expect(ctx.ui.setStatus).not.toHaveBeenCalled();
     expect(debug).not.toHaveBeenCalled();
-    expect(state.disputeFiler).toBe("writer"); // untouched when unhandled
+    expect(state.dispute).toBeUndefined(); // dispute is undefined when unhandled
   });
 
   it("edge — disputeDefended present, disputeFiler undefined → writer prompt (else branch)", () => {
-    const state = makeState({ phase: "B", round: 2, disputeDefended: "defense" });
+    const state = makeState({ phase: "B", round: 2, dispute: { status: "defended", filer: "writer", decision: "defense" } });
     const { input, pi } = makeInput({ state: { current: state } });
     const result = handleDisputeDefend(input);
 
     expect(result.handled).toBe(true);
     expect(pi.sentMessages[0].content).toBe(GP.promptWriterDisputeDefended("defense"));
-    expect(state.disputeDefended).toBeUndefined();
+    expect(state.dispute?.status).toBe("closed");
+    expect(state.dispute?.decision).toBe("defense");
   });
 });
 
@@ -300,13 +285,7 @@ describe("handleDisputeDefend", () => {
 
 describe("handleWriterConcedeFix", () => {
   it("Table 3 row 2 → promptWriterConcedeFix(lastProposal), awaitWriterConcedeFix + disputeFiler cleared, handled:true", () => {
-    const state = makeState({
-      phase: "B",
-      round: 2,
-      lastProposal: "Your refactor broke the retry path",
-      awaitWriterConcedeFix: true,
-      disputeFiler: "tester",
-    });
+    const state = makeState({ phase: "B", round: 2, lastProposal: "Your refactor broke the retry path", dispute: { status: "conceded", filer: "tester" } });
     const { input, pi, ctx, debug } = makeInput({ state: { current: state } });
     const result = handleWriterConcedeFix(input);
 
@@ -314,27 +293,27 @@ describe("handleWriterConcedeFix", () => {
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GP.promptWriterConcedeFix(state.lastProposal));
     expect(pi.sentMessages[0].options).toEqual({ triggerTurn: true });
-    expect(state.awaitWriterConcedeFix).toBe(false); // cleared
-    expect(state.disputeFiler).toBeUndefined(); // N2: cleared on this row too
+    expect(state.dispute?.status).toBe("closed"); // status cleared
+    expect(state.dispute?.filer).toBe("tester"); // filer preserved
     expect(pi.appendedEntries).toHaveLength(1);
     expect(pi.appendedEntries[0].customType).toBe("loop-state");
-    expect(pi.appendedEntries[0].data.awaitWriterConcedeFix).toBe(false);
+    expect(pi.appendedEntries[0].data.dispute?.status).toBe("closed");
     expect(debug).toHaveBeenCalledWith("Writer conceded → fix turn");
     expect(ctx.ui.setStatus).not.toHaveBeenCalled(); // Table 3 row 2 has no status step
   });
 
   it("edge — no disputeFiler set (approve cell linger absent) → still delivers and clears the flag", () => {
-    const state = makeState({ phase: "B", round: 2, lastProposal: "claim", awaitWriterConcedeFix: true });
+    const state = makeState({ phase: "B", round: 2, lastProposal: "claim", dispute: { status: "conceded", filer: "tester" } });
     const { input, pi } = makeInput({ state: { current: state } });
     const result = handleWriterConcedeFix(input);
 
     expect(result.handled).toBe(true);
     expect(pi.sentMessages[0].content).toBe(GP.promptWriterConcedeFix("claim"));
-    expect(state.awaitWriterConcedeFix).toBe(false);
+    expect(state.dispute?.status === "conceded").toBe(false);
   });
 
   it("condition false (flag false) → unhandled, zero side effects", () => {
-    const state = makeState({ phase: "B", round: 2, awaitWriterConcedeFix: false, disputeFiler: "tester" });
+    const state = makeState({ phase: "B", round: 2, dispute: { status: "conceded", filer: "writer" } });
     const { input, pi, ctx, debug } = makeInput({ state: { current: state } });
     const result = handleWriterConcedeFix(input);
 
@@ -343,11 +322,11 @@ describe("handleWriterConcedeFix", () => {
     expect(pi.appendedEntries).toHaveLength(0);
     expect(ctx.ui.setStatus).not.toHaveBeenCalled();
     expect(debug).not.toHaveBeenCalled();
-    expect(state.disputeFiler).toBe("tester"); // untouched when unhandled
+    expect(state.dispute?.filer).toBe("writer"); // untouched when unhandled
   });
 
   it("edge — flag undefined (pre-feature saved state) → unhandled", () => {
-    const state = makeState({ phase: "B", round: 2 }); // awaitWriterConcedeFix absent
+    const state = makeState({ phase: "B", round: 2, dispute: { status: "conceded", filer: "writer" } }); // awaitWriterConcedeFix absent
     const { input, pi } = makeInput({ state: { current: state } });
     const result = handleWriterConcedeFix(input);
 

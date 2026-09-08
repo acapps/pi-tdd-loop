@@ -1,4 +1,20 @@
-# bug-dispute-reload-evaporation
+# bug-dispute-reload-evaporation (DONE)
+
+## Resolution Notes (2026-09-06)
+
+Implemented and verified. Key decisions:
+- `dispute` field made optional in `LoopState` to minimize test fixture changes; source uses `?.` and early returns for `undefined`.
+- 6 flat fields removed from `LoopState`; `DisputeState` object added with `status`, `filer`, `claim`, `decision`, `filedRound`.
+- `migrateDispute` in `session-start.ts` converts legacy flat-field entries to the new shape.
+- `clearTransientFlags` no longer touches `dispute` — filed/in-review/conceded/defended disputes survive reloads.
+- Budget consumed at resolution (`handleBDisputeReview`), not filing.
+- 4 dispute handlers in `src/events/agent-settled/dispute.ts` rewritten to status transitions.
+- `tool-call.ts` rules 2-3 re-keyed to `dispute.status`.
+- `before-agent.ts` dispute-fix prompt key re-keyed.
+- `transitions.ts` `advanceToPhaseC`/`escalateTo`/`clearDisputeMode` updated.
+- `commands.ts` `resetPhaseState`/`cmdCancel` updated.
+- 19+ test flips across 8 test files; all 1170 tests passing.
+- `npx tsc --noEmit` clean.
 
 ## Problem
 
