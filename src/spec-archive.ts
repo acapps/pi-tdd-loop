@@ -33,7 +33,11 @@ export function doneSpecPath(specPath: string, cwd: string): string | null {
  * (already archived, source missing, or target already exists — never
  * overwrites an existing file). Never throws.
  */
-export function archiveSpecFile(specPath: string, cwd: string): string | null {
+export function archiveSpecFile(
+  specPath: string,
+  cwd: string,
+  rename: (from: string, to: string) => void = (from, to) => syncFs().renameSync(from, to),
+): string | null {
   const fs = syncFs();
   const target = doneSpecPath(specPath, cwd);
   if (target === null) return null;
@@ -41,7 +45,7 @@ export function archiveSpecFile(specPath: string, cwd: string): string | null {
   if (!fs.existsSync(abs)) return null;
   if (fs.existsSync(target)) return null;
   try {
-    fs.renameSync(abs, target);
+    rename(abs, target);
   } catch {
     return null;
   }

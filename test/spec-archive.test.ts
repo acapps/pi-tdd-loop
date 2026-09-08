@@ -8,10 +8,9 @@
 //    missing source, existing target, and rename failures all return null
 //    and leave the filesystem untouched.
 //
-// No vi.mock: the fs tests use real node:fs in a temp dir. The one failure
-// path not covered here (renameSync throwing) is documented in
-// internal/spec-archive-rename-failure-test.md — a proper regression test
-// needs a real OS-level failure scenario, not a module mock.
+// No vi.mock: the fs tests use real node:fs in a temp dir. The rename-failure
+// path is tested via an injectable rename parameter (spec-archive-rename-failure-test.md
+// resolved — Option B: no mock, no platform-dependent scenario).
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { doneSpecPath, archiveSpecFile } from "../src/spec-archive";
@@ -120,10 +119,21 @@ describe("archiveSpecFile", () => {
     expect(fs.readFileSync(path.join(dir, "done-spec.md"), "utf-8")).toBe("other\n");
   });
 
-});
+  it("returns null when rename throws (injectable rename, no mock)", () => {
+    write("spec.md", "content\n");
+    const boom = () => { throw new Error("EXDEV: cross-device link not permitted"); };
+    const result = archiveSpecFile("spec.md", dir, boom);
+    expect(result).toBeNull();
+    // source still exists, target was not created
+    expect(fs.existsSync(path.join(dir, "spec.md"))).toBe(true);
+    expect(fs.existsSync(path.join(dir, "done-spec.md"))).toBe(false);
+  });
 
-// NOTE: The rename-failure path (renameSync throwing → null) is not unit
-// tested here. A vi.mock("node:fs") approach was removed because the
-// importOriginal factory made the suite take ~10 minutes. See
-// internal/spec-archive-rename-failure-test.md for the proper regression
-// test to backfill.
+  it("default rename parameter uses fs.renameSync", () => {
+    write("spec.md", "content\n");
+    const result = archiveSpecFile("spec.md", dir);
+    expect(result).toBe(path.join(dir, "done-spec.md"));
+    expect(fs.existsSync(path.join(dir, "done-spec.md"))).toBe(true);
+  });
+
+});

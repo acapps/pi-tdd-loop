@@ -113,3 +113,12 @@ closes the gap permanently without platform-dependent flakiness.
 Until then, the 13 existing tests in `test/spec-archive.test.ts` cover all
 the meaningful paths (rename, content, missing source, idempotency,
 no-overwrite, nested paths, pure path math) and run in <500ms.
+
+## Resolution (2026-09-06)
+
+**Option B implemented:** `archiveSpecFile` now accepts an optional `rename` parameter (defaults to `fs.renameSync`). The regression test injects a throwing function and asserts `null` return + source intact + target absent. Zero mocking, hermetic, <10ms.
+
+- Source: `src/spec-archive.ts` — 2-line change (default parameter + `rename(abs, target)` instead of `fs.renameSync(abs, target)`)
+- Test: `test/spec-archive.test.ts` — 2 new tests (rename-throws → null; default param uses `fs.renameSync`)
+- Red-verified: test fails against pre-fix code (3-arg call doesn't exist)
+- Full suite: 1197 passed / 0 failed

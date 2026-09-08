@@ -24,7 +24,7 @@ Conventions for specs in this directory: [docs/spec-authoring.md](../docs/spec-a
 | [ts-gate-coverage-provider.md](ts-gate-coverage-provider.md) | feature | **done** (file not renamed) | `hasVitestCoverageProvider` probe (`src/gates.ts:126`) + conditional `getTestCommand` (`:133`); `test/gates-provider-wiring.test.ts`. Java/jacoco named-reason row stays open (out of scope here). |
 | [golden-workspace-fix.md](golden-workspace-fix.md) | feature | **open** | derive workspace root from `specPath` + enforce it in gates/tool enforcement. No `workspaceRoot`/`getWorkspaceRoot`/`isWorkspacePath` in `src/` (verified 2026-09-06). |
 | [writer-dispute-concede.md](done-writer-dispute-concede.md) | feature | **done** (merged 2026-09-06) — `isConcession` + `executeWriterConcedeDispute` in `src/tools.ts`; Phase B `negotiate_propose("agree")` is a concession (closes dispute, no count, no entry); 6 prompt lines added (3 languages × 2 prompts); 7 new tests in `test/extension.test.ts` + 6 prompt pins in `test/prompts.test.ts`. |
-| [spec-archive-rename-failure-test.md](spec-archive-rename-failure-test.md) | test | **open** | backfill regression: `archiveSpecFile` rename-failure → `null`. `test/spec-archive.test.ts:125` documents the gap; no unit test exercises the throwing-rename path. |
+| [done-spec-archive-rename-failure-test.md](done-spec-archive-rename-failure-test.md) | test | **done** (2026-09-06) | Option B: injectable `rename` param in `archiveSpecFile`; 2 new tests (throw → null; default uses `fs.renameSync`); red-verified; 1197 passed. |
 
 ## Reference / non-implementable
 
@@ -59,7 +59,7 @@ Conventions for specs in this directory: [docs/spec-authoring.md](../docs/spec-a
 1. **bug-baseline-flake** — `runBaseline` runs a real `go test` from a mock cwd (shared fixture + toolchain contention → transient red at loop start); daily friction, independent.
 2. **bug-phase-0-approval-dead-end** — done (Phase × Tool policy matrix; Phase 0 approve/feedback handlers).
 3. **golden-workspace-fix** — feature: derive + enforce a workspace root from `specPath`; larger blast radius (gates + tool enforcement + prompts).
-4. **spec-archive-rename-failure-test** — test-only backfill; small, independent.
+4. **spec-archive-rename-failure-test** — done (Option B: injectable rename param; 2 new tests; red-verified).
 
 **Deliberately NOT in the batch:** the `--skip-review` flag (dead end — removed from docs, not implemented), metrics (dead — deleted), the `done`-phase display polish, and the Vitest 5 upgrade (reference doc only; installed vitest is 4.1.11).
 
