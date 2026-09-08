@@ -12,7 +12,7 @@ Conventions for specs in this directory: [docs/spec-authoring.md](../docs/spec-a
 | [bug-gate-green-stays-green.md](done-bug-gate-green-stays-green.md) | bug | **done** (merged 2026-09-06) — `makeGoCwd` fixture now writes `main.go` (buildable Go module); Writer prompt mandates `negotiate_propose` exit path for unpassable tests; "green stays green" live-toolchain regression added to `test/gate-signal-integrity.test.ts`. |
 | [bug-gate-slow-settle-duplicate.md](done-bug-gate-slow-settle-duplicate.md) | bug | **done** (merged 2026-09-06) — module-local `gateInFlight` lock in `handleGateTransition` (check + `try/finally` clear); duplicate settle returns the now-live `NO_GATE` sentinel; 3 regression tests (concurrent drop / no-wedge / wedge-on-throw) in `test/events/agent-settled/gate-transition.test.ts`, red-verified. |
 | [bug-gate-verdict-field.md](done-bug-gate-verdict-field.md) | bug | **done** (merged 2026-09-06) — `GateResult.tests` deleted; `allPassed` is the single verdict field; 11 src files + 28 test files updated; T4 regression red-verified. |
-| [bug-baseline-flake.md](bug-baseline-flake.md) | bug | **open** | — `runBaseline` → `runBaselineTests` (`src/baseline.ts:53`) runs a **real** `execSync(go test …)` from a mock cwd (shared fixture + toolchain contention → transient red at loop start). Independent. |
+| [done-bug-baseline-flake.md](done-bug-baseline-flake.md) | bug | **done** (2026-09-06) | `vi.mock("node:child_process")` in `test/extension.test.ts` (no real `go test`/`go version`); shared `/tmp/test-project` → `mkdtemp` per test; `git-workflow.test.ts` default cwd → `os.tmpdir()`. TEST SPEED RULE compliance. |
 | [done-bug-phase-0-approval-dead-end.md](done-bug-phase-0-approval-dead-end.md) | bug | **done** | Phase × Tool policy matrix; Phase 0 approve/feedback handlers; `/loop-restart` extended. |
 
 ## Feature specs (not bug-specs)
@@ -56,7 +56,7 @@ Conventions for specs in this directory: [docs/spec-authoring.md](../docs/spec-a
 
 ## Recommended order of operation
 
-1. **bug-baseline-flake** — `runBaseline` runs a real `go test` from a mock cwd (shared fixture + toolchain contention → transient red at loop start); daily friction, independent.
+1. **bug-baseline-flake** — done (`vi.mock("node:child_process")` in `test/extension.test.ts`; `mkdtemp` per test; `git-workflow.test.ts` cwd → `os.tmpdir()`).
 2. **bug-phase-0-approval-dead-end** — done (Phase × Tool policy matrix; Phase 0 approve/feedback handlers).
 3. **golden-workspace-fix** — feature: derive + enforce a workspace root from `specPath`; larger blast radius (gates + tool enforcement + prompts).
 4. **spec-archive-rename-failure-test** — done (Option B: injectable rename param; 2 new tests; red-verified).

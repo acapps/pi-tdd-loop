@@ -42,3 +42,18 @@ run (1117 passed). The failure is **transient**, not a real red test.
 
 2026-09-03: diagnosed; not yet fixed. Workaround: re-run `/loop` (suite is
 green; the baseline flake is transient).
+
+## Resolution (2026-09-06)
+
+**Fix applied:**
+1. `test/extension.test.ts`: Added file-level `vi.mock("node:child_process")` — `execSync` returns `""` (green baseline), `execFile` fails with ENOENT (gates red). No real `go test`, no real `go version`, no real `mvn`/`npx` in the unit suite.
+2. `test/extension.test.ts`: Replaced shared `/tmp/test-project` fixture with `mkdtemp` per test (per-test temp dir, cleaned up in `afterEach`).
+3. `test/git-workflow.test.ts`: Changed default `makeMockCtx` cwd from `/tmp/test-project` to `os.tmpdir()` (no real file I/O in this file — `execFile` is already mocked; the shared path was a latent cross-file race).
+
+**Why no red-test regression:** The flake is environmental (toolchain contention, cold build cache), not a deterministic failure. The pre-fix tests pass in a clean run but violate the TEST SPEED RULE (real `execSync` in unit tests). The fix is a rule-compliance change, not a bug fix with a red/green cycle.
+
+**Verification:**
+- `npx tsc --noEmit`: clean
+- `npx vitest run`: 1197 passed / 0 failed (16s)
+- Mock verified: `execSync` is intercepted (no real process spawn)
+- No cross-file `/tmp/test-project` references remain in `test/extension.test.ts` or `test/git-workflow.test.ts`

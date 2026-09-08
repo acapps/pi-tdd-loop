@@ -7,6 +7,7 @@
 // Real end-to-end git verification lives in test/e2e/ (out of scope here).
 
 import { describe, it, expect, vi } from "vitest";
+import * as os from "node:os";
 
 // vi.mock replaces execFile with a controllable fake for this file only.
 // (ESM module namespaces are frozen — vi.spyOn on node:child_process is
@@ -66,7 +67,7 @@ function makeState(overrides: Partial<LoopState> = {}): LoopState {
     ...overrides};
 }
 
-function makeMockCtx(cwd = "/tmp/test-project"): any {
+function makeMockCtx(cwd: string = os.tmpdir()): any {
   return {
     ui: { notify: vi.fn(), setStatus: vi.fn() },
     sessionManager: { getEntries: () => [] },

@@ -1,8 +1,49 @@
 // Characterization tests for loop-go extension public API
 // These test the registered commands, tools, and event handlers
 // without inspecting internals — only what's observable through the ExtensionAPI surface.
+//
+// Per CLAUDE.md TEST SPEED RULE: no real toolchain in unit tests.
+// The /loop command calls runBaseline() which spawns real processes
+// (execSync in src/baseline.ts + src/reviewer.ts). We mock the process
+// boundary at file level so no real go/mvn/npx runs.
+// One vi.mock per file applies to the whole file — this is safe here
+// because no test in this file needs a real toolchain.
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import * as os from "node:os";
+import * as path from "node:path";
+import * as fs from "node:fs";
+
+// --- Mock the process boundary (no real toolchain) ------------------------
+// runBaseline → validateTestRunner (execSync) + runBaselineTests (execSync)
+// Both are in src/baseline.ts / src/reviewer.ts, both use execSync.
+// runGates → execCommand (execFile) in src/gates.ts.
+//
+// execSync: returns "" by default (green baseline). Tests that need a
+// specific output can override via execSyncMock.mockReturnValueOnce().
+//
+// execFile: fails (ENOENT) by default — gates are red unless a test
+// explicitly sets up a success scenario. This matches the pre-mock behavior
+// where a non-toolchain cwd (e.g. /tmp) caused compile failures.
+const execSyncMock = vi.fn((..._args: any[]) => "");
+const execFileMock = vi.fn();
+vi.mock("node:child_process", () => ({
+  execSync: (...args: any[]) => execSyncMock(...args),
+  execFile: (...args: unknown[]) => {
+    const cb = args[args.length - 1];
+    if (typeof cb === "function") {
+      const err = new Error("spawn ENOENT");
+      (err as any).code = "ENOENT";
+      cb(err, "", "");
+    }
+  },
+  spawn: (...args: unknown[]) => {
+    const cb = args[args.length - 1];
+    if (typeof cb === "function") cb(null, "", "");
+    return { on: () => {}, kill: () => {} };
+  },
+}));
+
 import { createMockExtensionAPI, type MockExtensionAPI } from "./__mocks__/@earendil-works/pi-coding-agent";
 
 // Type for a mock Extended API that carries the captured registrations
@@ -19,6 +60,19 @@ import extensionFactory from "../index";
 import * as Tool from "../src/tools";
 import type { LoopState } from "../src/types";
 
+// Per-test temp dir (replaces shared /tmp/test-project)
+let testCwd: string;
+
+beforeEach(() => {
+  testCwd = fs.mkdtempSync(path.join(os.tmpdir(), "ext-test-"));
+  // Default execSync behavior: return empty output, exit 0 (green baseline)
+  execSyncMock.mockReturnValue("");
+});
+
+afterEach(() => {
+  fs.rmSync(testCwd, { recursive: true, force: true });
+});
+
 function buildTestAPI(): TestAPI {
   const api = createMockExtensionAPI() as TestAPI;
 
@@ -30,7 +84,7 @@ function buildTestAPI(): TestAPI {
 
   api._mockCtx = {
     ui: api._mockUi,
-    cwd: "/tmp/test-project",
+    cwd: testCwd,
     sessionManager: {
       getEntries: () => api._mockEntries},
     mode: "tui",
@@ -38,20 +92,19 @@ function buildTestAPI(): TestAPI {
 
   api._mockExecCtx = {
     ui: api._mockUi,
-    cwd: "/tmp/test-project"};
+    cwd: testCwd};
 
   return api;
 }
 
 // Helper: ensure fixture files (spec + Go project) exist in the mock cwd
 function setupSpecFiles(): void {
-  const fs = require("node:fs");
-  fs.mkdirSync("/tmp/test-project/path/to", { recursive: true });
-  fs.writeFileSync("/tmp/test-project/spec.md", `# Test Spec\n\n- Func1() — does something.\n- Func2() — does another thing.\n`);
-  fs.writeFileSync("/tmp/test-project/path/to/spec.md", `# Test Spec\n\n- Func1() — does something.\n- Func2() — does another thing.\n`);
-  fs.writeFileSync("/tmp/test-project/main.go", "package main\n\nfunc main() {}\n");
-  fs.writeFileSync("/tmp/test-project/main_test.go", "package main\n\nimport \"testing\"\n\nfunc TestMain(t *testing.T) { if false { t.Error(\"fail\") } }\n");
-  fs.writeFileSync("/tmp/test-project/go.mod", "module testproject\n\ngo 1.22\n");
+  fs.mkdirSync(path.join(testCwd, "path/to"), { recursive: true });
+  fs.writeFileSync(path.join(testCwd, "spec.md"), `# Test Spec\n\n- Func1() — does something.\n- Func2() — does another thing.\n`);
+  fs.writeFileSync(path.join(testCwd, "path/to/spec.md"), `# Test Spec\n\n- Func1() — does something.\n- Func2() — does another thing.\n`);
+  fs.writeFileSync(path.join(testCwd, "main.go"), "package main\n\nfunc main() {}\n");
+  fs.writeFileSync(path.join(testCwd, "main_test.go"), "package main\n\nimport \"testing\"\n\nfunc TestMain(t *testing.T) { if false { t.Error(\"fail\") } }\n");
+  fs.writeFileSync(path.join(testCwd, "go.mod"), "module testproject\n\ngo 1.22\n");
 }
 
 // Helper to find a registered command by name
