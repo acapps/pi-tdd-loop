@@ -6,6 +6,8 @@
 //    never on error (a gate that could not run is not a gate result).
 
 import type { LoopState, GateResult } from "../../types";
+import { getWorkspaceRoot } from "../../types";
+import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { EventCtx } from "../index";
 import type { LanguageConfig } from "../../languages";
@@ -61,7 +63,12 @@ export async function handleGateTransition(
   }
   gateInFlight = true;
   try {
-    const outcome = await runGates(ctx.cwd, coverageThreshold, language, buildTool, phase);
+    // Golden project: gates run in the workspace root (test/golden/...),
+    // not the extension cwd. Self-refactor: gates run in cwd.
+    const workspaceRoot = getWorkspaceRoot(state.specPath);
+    const gateCwd = workspaceRoot === "." ? ctx.cwd : join(ctx.cwd, workspaceRoot);
+
+    const outcome = await runGates(gateCwd, coverageThreshold, language, buildTool, phase);
 
     const gate = outcome.kind === "result" ? outcome.result! : null;
     const transition = gate

@@ -142,3 +142,17 @@ describe("tool call enforcement", () => {
 4. Update `handleGateTransition` to compute gateCwd from mode
 5. Update language prompts to accept optional workspaceRoot parameter
 6. Add tests for mode detection and workspace constraints
+
+## Resolution (2026-09-06)
+
+Implemented and merged.
+
+- `src/types.ts`: Added `isGoldenProject(specPath)`, `getWorkspaceRoot(specPath)`, `isWorkspacePath(path, workspaceRoot)`.
+- `src/events/tool-call.ts`: Added `blockWorkspaceWrite` (Rule 1) — blocks writes outside workspace in golden mode; no-op in self-refactor mode.
+- `src/events/agent-settled/gate-transition.ts`: Gates run in `join(ctx.cwd, workspaceRoot)` for golden projects; `ctx.cwd` for self-refactors.
+- `src/languages/index.ts`: `LanguagePrompts` interface updated — all prompts accept optional `workspaceRoot` param.
+- `src/languages/go.ts`, `java.ts`, `typescript.ts`: All prompts include workspace hint via `ws(workspaceRoot)` helper when in golden mode.
+- `src/commands.ts`: `buildContinuePrompt` and `buildRestartPrompt` pass `getWorkspaceRoot(state.specPath)`.
+- `src/tools.ts`: `promptTesterPhaseA` call passes workspace root.
+- `src/events/agent-settled/effect-applicator.ts`: `buildRetryPrompt` and `buildAdvancePrompt` pass workspace root to prompts.
+- `test/golden-workspace.test.ts`: 14 regression tests (unit + integration).

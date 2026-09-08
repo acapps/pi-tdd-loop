@@ -22,7 +22,7 @@ Conventions for specs in this directory: [docs/spec-authoring.md](../docs/spec-a
 | [spec-command.md](spec-command.md) | feature | **done** (file not renamed) | `/spec` Author command — `src/spec-command.ts` (`cmdSpec`) registered at `index.ts:57`; `test/spec-command.test.ts` present. |
 | [log-bug-spec.md](log-bug-spec.md) | feature | **done** (file not renamed) | `/loop-debug --log-bug <name>` — arg parsing + `writeBugSpec` in `src/commands.ts:354-420`; `test/bug-spec.test.ts` + `test/extension.test.ts`. |
 | [ts-gate-coverage-provider.md](ts-gate-coverage-provider.md) | feature | **done** (file not renamed) | `hasVitestCoverageProvider` probe (`src/gates.ts:126`) + conditional `getTestCommand` (`:133`); `test/gates-provider-wiring.test.ts`. Java/jacoco named-reason row stays open (out of scope here). |
-| [golden-workspace-fix.md](golden-workspace-fix.md) | feature | **open** | derive workspace root from `specPath` + enforce it in gates/tool enforcement. No `workspaceRoot`/`getWorkspaceRoot`/`isWorkspacePath` in `src/` (verified 2026-09-06). |
+| [done-golden-workspace-fix.md](done-golden-workspace-fix.md) | feature | **done** | `isGoldenProject`/`getWorkspaceRoot`/`isWorkspacePath` in `src/types.ts`; `blockWorkspaceWrite` Rule 1 in `src/events/tool-call.ts`; gates run in workspace root in `gate-transition.ts`; all prompts accept `workspaceRoot` param. 14 regression tests. |
 | [writer-dispute-concede.md](done-writer-dispute-concede.md) | feature | **done** (merged 2026-09-06) — `isConcession` + `executeWriterConcedeDispute` in `src/tools.ts`; Phase B `negotiate_propose("agree")` is a concession (closes dispute, no count, no entry); 6 prompt lines added (3 languages × 2 prompts); 7 new tests in `test/extension.test.ts` + 6 prompt pins in `test/prompts.test.ts`. |
 | [done-spec-archive-rename-failure-test.md](done-spec-archive-rename-failure-test.md) | test | **done** (2026-09-06) | Option B: injectable `rename` param in `archiveSpecFile`; 2 new tests (throw → null; default uses `fs.renameSync`); red-verified; 1197 passed. |
 
@@ -58,7 +58,7 @@ Conventions for specs in this directory: [docs/spec-authoring.md](../docs/spec-a
 
 1. **bug-baseline-flake** — done (`vi.mock("node:child_process")` in `test/extension.test.ts`; `mkdtemp` per test; `git-workflow.test.ts` cwd → `os.tmpdir()`).
 2. **bug-phase-0-approval-dead-end** — done (Phase × Tool policy matrix; Phase 0 approve/feedback handlers).
-3. **golden-workspace-fix** — feature: derive + enforce a workspace root from `specPath`; larger blast radius (gates + tool enforcement + prompts).
+3. **golden-workspace-fix** — **done** (2026-09-06).
 4. **spec-archive-rename-failure-test** — done (Option B: injectable rename param; 2 new tests; red-verified).
 
 **Deliberately NOT in the batch:** the `--skip-review` flag (dead end — removed from docs, not implemented), metrics (dead — deleted), the `done`-phase display polish, and the Vitest 5 upgrade (reference doc only; installed vitest is 4.1.11).
@@ -71,7 +71,7 @@ Conventions for specs in this directory: [docs/spec-authoring.md](../docs/spec-a
 - `bug-negotiate-drift`, `bug-loop-breaker-repetition-with-mutation`, `bug-fragile-event-handler-selection` were listed **open** but are **done** (files not renamed).
 
 **Added to the index (were untracked):**
-- `golden-workspace-fix` (open), `writer-dispute-concede` (open), `spec-archive-rename-failure-test` (open), `vitest5-upgrade` (reference doc, not a loop spec).
+- `golden-workspace-fix` (done), `writer-dispute-concede` (done), `spec-archive-rename-failure-test` (done), `vitest5-upgrade` (reference doc, not a loop spec).
 
 **Confirmed still open (re-verified against the live tree):**
 - `bug-baseline-flake` — `runBaselineTests` runs a real `execSync(go test …)`.

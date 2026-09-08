@@ -2,6 +2,7 @@
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { LoopState, Phase } from "./types";
+import { getWorkspaceRoot } from "./types";
 import * as T from "./transitions";
 import * as GP from "./generic-prompts";
 import { getLanguageConfig } from "./languages";
@@ -202,7 +203,7 @@ function executePhase0Approve(
   persistState(state, pi, debug);
 
   pi.sendUserMessage(
-    lang.prompts.promptTesterPhaseA(state.current.specPath, state.current.buildTool),
+    lang.prompts.promptTesterPhaseA(state.current.specPath, state.current.buildTool, getWorkspaceRoot(state.current.specPath)),
     { triggerTurn: true },
   );
   return { content: [{ text: "Proposal recorded. Moving to Phase A." }] };

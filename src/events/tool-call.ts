@@ -9,6 +9,7 @@
 //   F3: missing path (undefined/null) never throws; only rules 2 and 4 can block
 
 import type { LoopState } from "../types";
+import { isGoldenProject, getWorkspaceRoot, isWorkspacePath } from "../types";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { DebugFn, EventCtx } from "./index";
 import { getLanguageConfig, type LanguageConfig } from "../languages";
@@ -62,6 +63,21 @@ function isProjectPath(path: string | null | undefined, cwd: string): boolean {
 }
 
 // --- Rule checks (each returns a block decision, or undefined to continue) ---
+
+// Rule 1 — golden project workspace: block writes outside the workspace.
+// Only active in golden project mode (specPath starts with "test/golden/").
+// Self-refactor mode (workspaceRoot === ".") allows writes anywhere.
+function blockWorkspaceWrite(input: EnforcementInput): ToolCallBlockResult | undefined {
+  const { state, debug, toolName, path, cwd } = input;
+  if (!isGoldenProject(state.specPath)) return undefined;
+  if (!isWriteAction(toolName) || path == null) return undefined;
+  const workspaceRoot = getWorkspaceRoot(state.specPath);
+  // Resolve the path against cwd for the workspace check
+  const fullPath = path.startsWith("/") ? path : cwd + "/" + path;
+  if (isWorkspacePath(fullPath, cwd + "/" + workspaceRoot)) return undefined;
+  debug(`Blocked: ${toolName} ${path} (outside workspace ${workspaceRoot})`);
+  return { block: true, reason: `Write blocked: outside project workspace (${workspaceRoot})` };
+}
 
 // Rule 2 — awaiting dispute review: block every tool call.
 // F2: debug only — no loop-refusal entry.
@@ -150,8 +166,9 @@ export function handleToolCall(
     cwd: input.ctx.cwd,
   };
 
-  // Rules 2-6 in evaluation order; first match wins. Rule 7: otherwise allow.
+  // Rules 1-6 in evaluation order; first match wins. Rule 7: otherwise allow.
   return (
+    blockWorkspaceWrite(ctx) ??
     blockDisputeReview(ctx) ??
     blockDisputeWrite(ctx) ??
     blockNegotiateWrite(ctx) ??

@@ -24,17 +24,17 @@ interface RefusalMessages {
 }
 
 interface LanguagePrompts {
-  promptTesterPhaseA: (specPath: string, buildTool: string) => string;
-  promptTesterPhaseARestart: (specPath: string, buildTool: string) => string;
+  promptTesterPhaseA: (specPath: string, buildTool: string, workspaceRoot?: string) => string;
+  promptTesterPhaseARestart: (specPath: string, buildTool: string, workspaceRoot?: string) => string;
   promptTesterCompileRetry: (compileError: string) => string;
-  promptNegotiateApproved: () => string;
-  promptNegotiateAutoAdvance: () => string;
-  promptWriterPhaseB: () => string;
-  promptWriterPhaseBContinue: (failureSummary: string, failureCount: number) => string;
-  promptCleanerPhaseC: () => string;
-  promptCleanerRetry: (failureSummary: string, failureCount: number) => string;
-  promptCleanerRestart: () => string;
-  promptTesterDisputeFix: () => string;
+  promptNegotiateApproved: (workspaceRoot?: string) => string;
+  promptNegotiateAutoAdvance: (workspaceRoot?: string) => string;
+  promptWriterPhaseB: (workspaceRoot?: string) => string;
+  promptWriterPhaseBContinue: (failureSummary: string, failureCount: number, workspaceRoot?: string) => string;
+  promptCleanerPhaseC: (workspaceRoot?: string) => string;
+  promptCleanerRetry: (failureSummary: string, failureCount: number, workspaceRoot?: string) => string;
+  promptCleanerRestart: (workspaceRoot?: string) => string;
+  promptTesterDisputeFix: (workspaceRoot?: string) => string;
 }
 
 // --- Registry ---

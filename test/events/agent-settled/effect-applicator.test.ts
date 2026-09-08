@@ -281,7 +281,7 @@ describe("applyRetryEffect", () => {
         prompt: RETRY_PROMPTS.WRITER_PHASE_B_RETRY},
       gateResult: makeGateResult({ compile: true, allPassed: false, failures })});
     applyRetryEffect(input);
-    expect(input.lang.prompts.promptWriterPhaseBContinue).toHaveBeenCalledWith(formatFailures(failures), 1);
+    expect(input.lang.prompts.promptWriterPhaseBContinue).toHaveBeenCalledWith(formatFailures(failures), 1, ".");
     expect(piOf(input).sentMessages).toHaveLength(1);
   });
 
@@ -748,7 +748,7 @@ describe("buildRetryPrompt (G1)", () => {
       RETRY_PROMPTS.WRITER_PHASE_B_RETRY,
       lang as any,
       makeGateResult({ failures }));
-    expect(lang.prompts.promptWriterPhaseBContinue).toHaveBeenCalledWith(formatFailures(failures), 2);
+    expect(lang.prompts.promptWriterPhaseBContinue).toHaveBeenCalledWith(formatFailures(failures), 2, undefined);
     expect(out).toBe(`Continue: 2 failures\n${formatFailures(failures)}`);
   });
 
@@ -759,7 +759,7 @@ describe("buildRetryPrompt (G1)", () => {
       RETRY_PROMPTS.WRITER_DISPUTE_FIX_INCOMPLETE,
       lang as any,
       makeGateResult({ failures }));
-    expect(lang.prompts.promptWriterPhaseBContinue).toHaveBeenCalledWith(formatFailures(failures), 1);
+    expect(lang.prompts.promptWriterPhaseBContinue).toHaveBeenCalledWith(formatFailures(failures), 1, undefined);
     expect(out).toBe(`Continue: 1 failures\n${formatFailures(failures)}`);
   });
 
@@ -770,7 +770,7 @@ describe("buildRetryPrompt (G1)", () => {
       RETRY_PROMPTS.CLEANER_RETRY,
       lang as any,
       makeGateResult({ failures }));
-    expect(lang.prompts.promptCleanerRetry).toHaveBeenCalledWith(formatFailures(failures), 1);
+    expect(lang.prompts.promptCleanerRetry).toHaveBeenCalledWith(formatFailures(failures), 1, undefined);
     expect(out).toBe(`Cleaner retry: 1 failures\n${formatFailures(failures)}`);
   });
 
@@ -786,7 +786,7 @@ describe("buildRetryPrompt (G1)", () => {
   it("empty failures → count 0, summary formatFailures([]) = '(unknown failures)'", () => {
     const lang = makeMockLang();
     const out = buildRetryPrompt(RETRY_PROMPTS.CLEANER_RETRY, lang as any, makeGateResult({ failures: [] }));
-    expect(lang.prompts.promptCleanerRetry).toHaveBeenCalledWith("(unknown failures)", 0);
+    expect(lang.prompts.promptCleanerRetry).toHaveBeenCalledWith("(unknown failures)", 0, undefined);
     expect(out).toBe("Cleaner retry: 0 failures\n(unknown failures)");
   });
 });

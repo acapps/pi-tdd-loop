@@ -2,6 +2,7 @@
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { Phase, LoopState, LanguageKey, BuildTool, SpecAnalysis } from "./types";
+import { getWorkspaceRoot } from "./types";
 import type { DebugFn } from "./events";
 import { formatStatus, parseLoopArgs } from "./selectors";
 import { formatFailures } from "./gates";
@@ -31,9 +32,10 @@ interface CommandContext {
 function buildContinuePrompt(state: LoopState): string {
   const lang = getLanguageConfig(state.language);
   const gate = state.lastGateResult;
+  const ws = getWorkspaceRoot(state.specPath);
 
   switch (state.phase) {
-    case "A": return lang.prompts.promptTesterPhaseA(state.specPath, state.buildTool);
+    case "A": return lang.prompts.promptTesterPhaseA(state.specPath, state.buildTool, ws);
     case "negotiate":
       return state.round % 2 === 1
         ? GP.promptWriterNegotiate(state.specPath, lang.testFilePattern)
@@ -43,17 +45,19 @@ function buildContinuePrompt(state: LoopState): string {
         return lang.prompts.promptWriterPhaseBContinue(
           formatFailures(gate.failures),
           gate.failures.length,
+          ws,
         );
       }
-      return lang.prompts.promptWriterPhaseB();
+      return lang.prompts.promptWriterPhaseB(ws);
     case "C":
       if (gate && !gate.allPassed) {
         return lang.prompts.promptCleanerRetry(
           formatFailures(gate.failures),
           gate.failures.length,
+          ws,
         );
       }
-      return lang.prompts.promptCleanerPhaseC();
+      return lang.prompts.promptCleanerPhaseC(ws);
     default:
       return "Continue.";
   }
@@ -61,11 +65,12 @@ function buildContinuePrompt(state: LoopState): string {
 
 function buildRestartPrompt(state: LoopState, specPath: string): string {
   const lang = getLanguageConfig(state.language);
+  const ws = getWorkspaceRoot(specPath);
   switch (state.phase) {
-    case "A": return lang.prompts.promptTesterPhaseARestart(specPath, state.buildTool);
+    case "A": return lang.prompts.promptTesterPhaseARestart(specPath, state.buildTool, ws);
     case "negotiate": return GP.promptWriterNegotiate(specPath, lang.testFilePattern);
-    case "B": return lang.prompts.promptWriterPhaseB();
-    case "C": return lang.prompts.promptCleanerRestart();
+    case "B": return lang.prompts.promptWriterPhaseB(ws);
+    case "C": return lang.prompts.promptCleanerRestart(ws);
     case "review": return `Phase 0: Spec review. Use negotiate_propose to approve or provide feedback.`;
     case "done": return `Phase done. Loop complete.`;
     case "escalated": return `Phase escalated. Awaiting human intervention.`;
