@@ -66,7 +66,7 @@ export function computeScore(
     convergence,
     enforcement,
     dispute,
-    coverage,
+  coverage,
     efficiency,
   };
 
@@ -74,7 +74,7 @@ export function computeScore(
     convergence * WEIGHT_CONVERGENCE +
     enforcement * WEIGHT_ENFORCEMENT +
     dispute * WEIGHT_DISPUTE +
-    coverage * WEIGHT_COVERAGE +
+  coverage * WEIGHT_COVERAGE +
     efficiency * WEIGHT_EFFICIENCY,
   );
 

@@ -17,7 +17,7 @@ function makeState(phase: Phase = "idle", overrides = {}): LoopState {
     maxC: 3,
     maxDispute: 3,
     maxTurnsPerPhase: 5,
-    coverageThreshold: 80,
+  coverageThreshold: 80,
     disputeCount: 0,
     turnsThisPhase: 0,
     lastProposal: "",
@@ -41,7 +41,7 @@ describe("formatStatus", () => {
       lastGateResult: {
         compile: true,
         compileError: "",
-        tests: false,
+        
         coverage: 0,
         failures: [
           { test: "TestAdd", subtest: "", output: "expected 3, got 2\n" },
@@ -50,7 +50,7 @@ describe("formatStatus", () => {
     const result = formatStatus(state);
     expect(result).toContain("Phase: A, round 2");
     expect(result).toContain("compile: ✓");
-    expect(result).toContain("tests: ✗ (1 failures)");
+    expect(result).toContain("allPassed: ✗ (1 failures)");
     expect(result).toContain("TestAdd");
   });
 
@@ -64,7 +64,7 @@ describe("formatStatus", () => {
       lastGateResult: {
         compile: true,
         compileError: "",
-        tests: false,
+        
         coverage: 0,
         failures,
         allPassed: false}});
@@ -79,7 +79,7 @@ describe("formatStatus", () => {
       lastGateResult: {
         compile: true,
         compileError: "",
-        tests: true,
+        
         coverage: 92.5,
         failures: [],
         allPassed: true}});

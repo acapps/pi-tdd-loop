@@ -34,7 +34,7 @@ function formatGateLines(
 ): string[] {
   const lines: string[] = [];
   lines.push(`  compile: ${g.compile ? "✓" : "✗"}`);
-  lines.push(`  tests: ${g.tests ? "✓" : `✗ (${g.failures.length} failures)`}`);
+  lines.push(`  allPassed: ${g.allPassed ? "✓" : `✗ (${g.failures.length} failures)`}`);
 
   if (g.failures.length > 0) {
     const maxShow = 5;

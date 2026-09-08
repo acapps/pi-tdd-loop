@@ -49,7 +49,7 @@ function makeState(overrides: Partial<LoopState> = {}): LoopState {
     maxC: 3,
     maxDispute: 3,
     maxTurnsPerPhase: 5,
-    coverageThreshold: 80,
+  coverageThreshold: 80,
     disputeCount: 0,
     turnsThisPhase: 0,
     lastProposal: "",
@@ -75,10 +75,10 @@ function gate(
     result: {
       compile: true,
       compileError: "",
-      tests: true,
+      
       allPassed: true,
       coverage: 85,
-      failures: [],
+  failures: [],
       ...overrides}};
 }
 
@@ -155,7 +155,7 @@ describe("step 3 — loop escalation", () => {
 
   it("boundary: turnsThisPhase+1 == maxTurnsPerPhase → no escalation, gate runs", async () => {
     const state = makeState({ phase: "A", round: 1, turnsThisPhase: 4, maxTurnsPerPhase: 5 });
-    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "boom", tests: false, allPassed: false, coverage: 0 })));
+    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "boom", allPassed: false, coverage: 0 })));
     const { input } = makeInput({ state: { current: state } });
 
     expect(await handleAgentSettled(input)).toBe(true); // retry effect applied
@@ -169,7 +169,7 @@ describe("step 3 — loop escalation", () => {
 
   it("maxTurnsPerPhase 0 → falls back to 5 (|| 5), no escalation", async () => {
     const state = makeState({ phase: "A", round: 1, turnsThisPhase: 4, maxTurnsPerPhase: 0 });
-    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "boom", tests: false, allPassed: false, coverage: 0 })));
+    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "boom", allPassed: false, coverage: 0 })));
     const { input } = makeInput({ state: { current: state } });
 
     expect(await handleAgentSettled(input)).toBe(true); // 5 <= 5 → gate, not escalation
@@ -308,7 +308,7 @@ describe("step 6 — disputeReview (dead guard: falls through to the gate)", () 
 
   it("spec 09 — flag true + gate would retry → Table 1 fires first: reviewer prompt, flag cleared, gate SKIPPED, undefined", async () => {
     const state = makeState({ phase: "B", round: 1, dispute: { status: "filed", filer: "writer" }, lastProposal: "writer claim" });
-    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "boom", tests: false, allPassed: false, coverage: 0 })));
+    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "boom", allPassed: false, coverage: 0 })));
     const { input, pi } = makeInput({ state: { current: state } });
 
     expect(await handleAgentSettled(input)).toBeUndefined(); // handled:true → dispatcher short-circuits
@@ -321,7 +321,7 @@ describe("step 6 — disputeReview (dead guard: falls through to the gate)", () 
 
   it("flag false → no snapshot, gate runs, returns the applied boolean", async () => {
     const state = makeState({ phase: "A", round: 1 });
-    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "boom", tests: false, allPassed: false, coverage: 0 })));
+    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "boom", allPassed: false, coverage: 0 })));
     const { input, pi } = makeInput({ state: { current: state } });
 
     expect(await handleAgentSettled(input)).toBe(true); // retry applied
@@ -346,7 +346,7 @@ describe("step 6 — disputeReview (dead guard: falls through to the gate)", () 
 
   it("spec 09 — flag true takes priority over the gate even when the gate would fail", async () => {
     const state = makeState({ phase: "B", round: 1, dispute: { status: "filed", filer: "tester" }, lastProposal: "tester report" });
-    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "boom", tests: false, allPassed: false, coverage: 0 })));
+    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "boom", allPassed: false, coverage: 0 })));
     const { input, pi } = makeInput({ state: { current: state } });
 
     expect(await handleAgentSettled(input)).toBeUndefined();
@@ -384,7 +384,7 @@ describe("step 6b — disputeDefend delivery", () => {
 
   it("takes priority over the gate: both pending → only the delivery, no gate", async () => {
     const state = makeState({ phase: "B", round: 2, dispute: { status: "defended", filer: "writer", decision: "defense" } });
-    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "boom", tests: false, allPassed: false, coverage: 0 })));
+    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "boom", allPassed: false, coverage: 0 })));
     const { input } = makeInput({ state: { current: state } });
 
     expect(await handleAgentSettled(input)).toBeUndefined();
@@ -411,7 +411,7 @@ describe("step 6c — writerConcedeFix delivery", () => {
 
   it("takes priority over the gate: both pending → only the delivery, no gate", async () => {
     const state = makeState({ phase: "B", round: 2, dispute: { status: "conceded", filer: "tester" }, lastProposal: "claim" });
-    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "boom", tests: false, allPassed: false, coverage: 0 })));
+    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "boom", allPassed: false, coverage: 0 })));
     const { input } = makeInput({ state: { current: state } });
 
     expect(await handleAgentSettled(input)).toBeUndefined();
@@ -519,7 +519,7 @@ describe("step 9 — gate (replaces state.current, sets lastGateResult, G2/G3)",
 
   it("A compile fail → retry: round increments on the new state, compile retry prompt, lastGateResult set", async () => {
     const state = makeState({ phase: "A", round: 1 });
-    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "boom", tests: false, allPassed: false, coverage: 0 })));
+    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "boom", allPassed: false, coverage: 0 })));
     const { input, pi } = makeInput({ state: { current: state } });
 
     expect(await handleAgentSettled(input)).toBe(true);

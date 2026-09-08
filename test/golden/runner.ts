@@ -118,7 +118,7 @@ export async function runScenario(
     phaseA: scenario.phaseA as GateOutcome[],
     phaseB: scenario.phaseB as GateOutcome[],
     phaseC: scenario.phaseC as GateOutcome[],
-    coverageThreshold: state.coverageThreshold});
+  coverageThreshold: state.coverageThreshold});
 
   // Run Phase A
   const phaseAResult = await runPhaseA(state, metrics, injector, mockApi);
@@ -167,7 +167,7 @@ function initializeState(scenario: GateScenario, specPath: string): LoopState {
     maxC: 3,
     maxDispute: 3,
     maxTurnsPerPhase: 10,
-    coverageThreshold: 80,
+  coverageThreshold: 80,
     disputeCount: 0,
     turnsThisPhase: 0,
     lastProposal: "",
@@ -345,7 +345,7 @@ async function runPhaseC(
     const gateResult = injector.next("C");
     accumulateGate(metrics, gateResult);
 
-    if (gateResult.tests) {
+    if (gateResult.allPassed) {
       // Phase C passed — done
       state.phase = "done";
       return { passed: true };
@@ -377,7 +377,7 @@ export function assertMetrics(
   if (thresholds.finalPhase !== undefined) {
     const result = checkThresholdPhase(metrics.finalPhase, thresholds.finalPhase);
     if (!result.pass) {
-      failures.push({
+  failures.push({
         metric: "finalPhase",
         actual: metrics.finalPhase,
         expected: thresholds.finalPhase});
@@ -402,7 +402,7 @@ export function assertMetrics(
     if (check.threshold === undefined) continue;
     const result = checkThreshold(check.value, check.threshold);
     if (!result.pass) {
-      failures.push({
+  failures.push({
         metric: check.key,
         actual: String(check.value),
         expected: formatThreshold(check.threshold)});
@@ -425,7 +425,7 @@ export function assertMetrics(
 
   return {
     passed: failures.length === 0,
-    failures};
+  failures};
 }
 
 function checkThresholdPhase(
@@ -525,7 +525,7 @@ export function buildScorecard(
     metrics,
     thresholds,
     passed: result.passed,
-    failures: result.failures};
+  failures: result.failures};
 }
 
 function getExtensionVersion(): string {
@@ -598,7 +598,7 @@ export function compareAgainstBaseline(
 
   return {
     passed: failures.length === 0,
-    failures};
+  failures};
 }
 
 // =========================================================================

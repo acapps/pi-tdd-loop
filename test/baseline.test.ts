@@ -134,7 +134,7 @@ describe("formatBaselineFailure", () => {
     const r: BaselineResult = {
       ok: false,
       noTests: false,
-      failures: [{ test: "TestX", subtest: "", output: "boom\n" }],
+  failures: [{ test: "TestX", subtest: "", output: "boom\n" }],
       output: "raw",
     };
     const text = formatBaselineFailure(r);
@@ -146,7 +146,7 @@ describe("formatBaselineFailure", () => {
     const r: BaselineResult = {
       ok: false,
       noTests: false,
-      failures: [],
+  failures: [],
       output: "build error: undefined: X\n",
     };
     expect(formatBaselineFailure(r)).toContain("build error");
@@ -161,7 +161,7 @@ describe("formatBaselineFailure", () => {
     const r: BaselineResult = {
       ok: false,
       noTests: false,
-      failures: [],
+  failures: [],
       output: "x".repeat(5000) + "\nfinal error line",
     };
     const text = formatBaselineFailure(r);

@@ -47,7 +47,7 @@ function makeState(overrides: Partial<LoopState> = {}): LoopState {
     maxC: 3,
     maxDispute: 3,
     maxTurnsPerPhase: 5,
-    coverageThreshold: 80,
+  coverageThreshold: 80,
     disputeCount: 0,
     turnsThisPhase: 0,
     lastProposal: "",
@@ -75,10 +75,10 @@ function gate(
     result: {
       compile: true,
       compileError: "",
-      tests: true,
+      
       allPassed: true,
       coverage: 85,
-      failures: [],
+  failures: [],
       ...overrides}};
 }
 
@@ -87,10 +87,10 @@ function gateResult(
   return {
     compile: true,
     compileError: "",
-    tests: true,
-    allPassed: true,
-    coverage: 85,
-    failures: [],
+    
+  allPassed: true,
+  coverage: 85,
+  failures: [],
     ...overrides};
 }
 
@@ -161,7 +161,7 @@ describe("handleGateTransition — contract basics", () => {
   it("never mutates the input state", async () => {
     const state = makeState({ phase: "A", round: 1 });
     const before = cloneState(state);
-    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "boom", tests: false, allPassed: false, coverage: 0 })));
+    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "boom", allPassed: false, coverage: 0 })));
     const { input } = makeInput({ state });
     await handleGateTransition(input);
     expect(state).toEqual(before);
@@ -178,7 +178,7 @@ describe("handleGateTransition — contract basics", () => {
 
 describe("Phase A", () => {
   it("compile fail, round < maxA → retry: new state round+1, turnsThisPhase 1, compile retry prompt", async () => {
-    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "boom", tests: false, allPassed: false, coverage: 0, failures: [] })));
+    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "boom", allPassed: false, coverage: 0, failures: [] })));
     const { input, pi, ctx } = makeInput({ state: makeState({ phase: "A", round: 1 }) });
     const result = await handleGateTransition(input);
 
@@ -196,18 +196,18 @@ describe("Phase A", () => {
   });
 
   it("retry debug trace — verbatim sequence: gate log, arrow, retry", async () => {
-    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "boom", tests: false, allPassed: false, coverage: 0 })));
+    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "boom", allPassed: false, coverage: 0 })));
     const { input, debug } = makeInput({ state: makeState({ phase: "A", round: 1 }) });
     await handleGateTransition(input);
     expect(debug.mock.calls.map((c) => c[0])).toEqual([
-      "Gate fail (0 failures) [compile=false tests=false cov=0%]",
+      "Gate fail (0 failures) [compile=false allPassed=false cov=0%]",
       "→ retry (Phase A round 2)",
       "Retry A round 2",
     ]);
   });
 
   it("compile fail, round >= maxA → escalated: no prompt, warning notify", async () => {
-    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "boom", tests: false, allPassed: false, coverage: 0 })));
+    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "boom", allPassed: false, coverage: 0 })));
     const { input, pi, ctx } = makeInput({ state: makeState({ phase: "A", round: 3, maxA: 3 }) });
     const result = await handleGateTransition(input);
 
@@ -242,7 +242,7 @@ describe("Phase A", () => {
 describe("Phase B", () => {
   it("compile fail, round < maxB → retry with writer continue prompt (single failing test)", async () => {
     const failures = [{ test: "TestFoo", subtest: "bar", output: "want X got Y" }];
-    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "boom", tests: false, allPassed: false, coverage: 0, failures })));
+    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "boom", allPassed: false, coverage: 0, failures })));
     const { input, pi, ctx } = makeInput({ state: makeState({ phase: "B", round: 1 }) });
     const result = await handleGateTransition(input);
 
@@ -257,7 +257,7 @@ describe("Phase B", () => {
   });
 
   it("compile fail, round >= maxB → escalated, no prompt", async () => {
-    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "boom", tests: false, allPassed: false, coverage: 0 })));
+    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "boom", allPassed: false, coverage: 0 })));
     const { input, pi, ctx } = makeInput({ state: makeState({ phase: "B", round: 5, maxB: 5 }) });
     const result = await handleGateTransition(input);
 
@@ -297,7 +297,7 @@ describe("Phase B", () => {
   });
 
   it("spec 09 — retired dispute branch: stale flag no longer special-cased; normal writer retry path runs", async () => {
-    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "boom", tests: false, allPassed: false, coverage: 0, failures: [{ test: "TestAdd", subtest: "", output: "x" }] })));
+    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "boom", allPassed: false, coverage: 0, failures: [{ test: "TestAdd", subtest: "", output: "x" }] })));
     const { input, pi, ctx, debug } = makeInput({
       state: makeState({ phase: "B", round: 1, lastProposal: "writer claim" })});
     const result = await handleGateTransition(input);
@@ -316,7 +316,7 @@ describe("Phase B", () => {
 
   it("dispute fix incomplete (disputeMode, compile pass, tests fail) → disputeMode cleared, round+1, writer continue prompt", async () => {
     const failures = [{ test: "TestFoo", subtest: "", output: "fail" }];
-    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: true, tests: false, allPassed: false, coverage: 50, failures })));
+    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: true, allPassed: false, coverage: 50, failures })));
     const { input, pi, ctx } = makeInput({ state: makeState({ phase: "B", round: 1, dispute: { status: "conceded", filer: "writer" } }) });
     const result = await handleGateTransition(input);
 
@@ -330,7 +330,7 @@ describe("Phase B", () => {
   });
 
   it("dispute fix compile fail (disputeMode) → disputeMode cleared, round+1, compile retry prompt", async () => {
-    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "still broken", tests: false, allPassed: false, coverage: 0 })));
+    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "still broken", allPassed: false, coverage: 0 })));
     const { input, pi, ctx } = makeInput({ state: makeState({ phase: "B", round: 1, dispute: { status: "conceded", filer: "writer" } }) });
     const result = await handleGateTransition(input);
 
@@ -380,7 +380,7 @@ describe("Phase B", () => {
 describe("Phase C", () => {
   it("tests fail, round < maxC → retry with cleaner prompt", async () => {
     const failures = [{ test: "TestA", subtest: "x", output: "boom" }];
-    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: true, tests: false, allPassed: false, coverage: 60, failures })));
+    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: true, allPassed: false, coverage: 60, failures })));
     const { input, pi, ctx } = makeInput({ state: makeState({ phase: "C", round: 1 }) });
     const result = await handleGateTransition(input);
 
@@ -399,7 +399,7 @@ describe("Phase C", () => {
   // Fixture: specPath "spec.md", disputeCount 0, cleanerFailed true derived
   // from the producer status "done (cleaner failed)".
   it("tests fail, round >= maxC → done (cleaner failed): completion message sent", async () => {
-    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: true, tests: false, allPassed: false, coverage: 40 })));
+    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: true, allPassed: false, coverage: 40 })));
     const { input, pi, ctx } = makeInput({ state: makeState({ phase: "C", round: 3, maxC: 3 }) });
     const result = await handleGateTransition(input);
 
@@ -453,29 +453,29 @@ describe("debug strings (verbatim)", () => {
     const { input, debug } = makeInput({ state: makeState({ phase: "C", round: 1 }) }); // all-pass → done
     await handleGateTransition(input);
     expect(debug.mock.calls.map((c) => c[0])).toEqual([
-      "Gate pass [compile=true tests=true cov=85%]",
+      "Gate pass [compile=true allPassed=true cov=85%]",
       "→ done (Phase done round 1)",
       "Done",
     ]);
   });
 
-  it("tests ran, some failed → 'Gate pass (N failures) [...]'", async () => {
+  it("tests ran, some failed → 'Gate fail (N failures) [...]'", async () => {
     const failures = [
       { test: "TestA", subtest: "", output: "a" },
       { test: "TestB", subtest: "", output: "b" },
     ];
-    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: true, tests: true, allPassed: false, coverage: 75, failures })));
+    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: true, allPassed: false, coverage: 75, failures })));
     const { input, debug } = makeInput({ state: makeState({ phase: "B", round: 1 }) });
     await handleGateTransition(input);
-    expect(debug).toHaveBeenCalledWith("Gate pass (2 failures) [compile=true tests=true cov=75%]");
+    expect(debug).toHaveBeenCalledWith("Gate fail (2 failures) [compile=true allPassed=false cov=75%]");
   });
 
   it("tests failed → 'Gate fail (N failures) [...]' (singular '1 failures' preserved)", async () => {
     const failures = [{ test: "TestA", subtest: "", output: "a" }];
-    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, tests: false, allPassed: false, coverage: 0, failures })));
+    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, allPassed: false, coverage: 0, failures })));
     const { input, debug } = makeInput({ state: makeState({ phase: "A", round: 1 }) });
     await handleGateTransition(input);
-    expect(debug).toHaveBeenCalledWith("Gate fail (1 failures) [compile=false tests=false cov=0%]");
+    expect(debug).toHaveBeenCalledWith("Gate fail (1 failures) [compile=false allPassed=false cov=0%]");
   });
 });
 
@@ -531,7 +531,7 @@ describe("duplicate settle while gate in flight", () => {
   });
 
   it("after a settled gate, the next settle runs normally (lock cleared — no wedge)", async () => {
-    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "boom", tests: false, allPassed: false, coverage: 0 })));
+    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: false, compileError: "boom", allPassed: false, coverage: 0 })));
     const { input: first } = makeInput({ state: makeState({ phase: "A", round: 1 }) });
     await handleGateTransition(first);
 

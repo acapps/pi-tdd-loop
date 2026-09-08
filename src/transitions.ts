@@ -211,7 +211,7 @@ function handleDisputeFixIncomplete(
       },
     };
   }
-  if (!gate.tests) {
+  if (!gate.allPassed) {
     return {
       state: clearDisputeMode(state),
       effect: retryEffect(state, RETRY_PROMPTS.WRITER_DISPUTE_FIX_INCOMPLETE),
@@ -258,7 +258,7 @@ function handlePhaseCTransition(
   state: LoopState,
   gate: GateResult,
 ): { state: LoopState; effect: TransitionEffect } {
-  if (!gate.tests) {
+  if (!gate.allPassed) {
     if (state.round < state.maxC) {
       return { state: incrementRound(state), effect: retryEffect(state, RETRY_PROMPTS.CLEANER_RETRY) };
     }

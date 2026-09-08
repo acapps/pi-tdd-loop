@@ -47,7 +47,7 @@ function buildContinuePrompt(state: LoopState): string {
       }
       return lang.prompts.promptWriterPhaseB();
     case "C":
-      if (gate && !gate.tests) {
+      if (gate && !gate.allPassed) {
         return lang.prompts.promptCleanerRetry(
           formatFailures(gate.failures),
           gate.failures.length,

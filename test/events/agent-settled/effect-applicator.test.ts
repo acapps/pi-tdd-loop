@@ -52,7 +52,7 @@ function makeState(overrides = {}): LoopState {
     maxC: 3,
     maxDispute: 3,
     maxTurnsPerPhase: 5,
-    coverageThreshold: 80,
+  coverageThreshold: 80,
     disputeCount: 0,
     turnsThisPhase: 0,
     lastProposal: "",
@@ -67,10 +67,10 @@ function makeGateResult(overrides = {}): GateResult {
   return {
     compile: false,
     compileError: "",
-    tests: false,
-    allPassed: false,
-    coverage: 0,
-    failures: [],
+    
+  allPassed: false,
+  coverage: 0,
+  failures: [],
     ...overrides};
 }
 
@@ -279,7 +279,7 @@ describe("applyRetryEffect", () => {
         notify: "Tests failed.",
         level: "warning",
         prompt: RETRY_PROMPTS.WRITER_PHASE_B_RETRY},
-      gateResult: makeGateResult({ compile: true, tests: false, allPassed: false, failures })});
+      gateResult: makeGateResult({ compile: true, allPassed: false, failures })});
     applyRetryEffect(input);
     expect(input.lang.prompts.promptWriterPhaseBContinue).toHaveBeenCalledWith(formatFailures(failures), 1);
     expect(piOf(input).sentMessages).toHaveLength(1);

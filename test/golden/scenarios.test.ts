@@ -278,7 +278,7 @@ describe("fixtures — makeGatePass", () => {
     const gate = makeGatePass();
     expect(gate.compile).toBe(true);
     expect(gate.compileError).toBe("");
-    expect(gate.tests).toBe(true);
+    expect(gate.allPassed).toBe(true);
     expect(gate.allPassed).toBe(true);
     expect(gate.failures.length).toBe(0);
   });
@@ -298,7 +298,7 @@ describe("fixtures — makeGateCompileFail", () => {
   it("returns compile=false gate result", () => {
     const gate = makeGateCompileFail();
     expect(gate.compile).toBe(false);
-    expect(gate.tests).toBe(false);
+    expect(gate.allPassed).toBe(false);
     expect(gate.allPassed).toBe(false);
     expect(gate.coverage).toBe(0);
   });
@@ -323,7 +323,7 @@ describe("fixtures — makeGateTestFail", () => {
   it("returns compile=true, tests=false gate result", () => {
     const gate = makeGateTestFail();
     expect(gate.compile).toBe(true);
-    expect(gate.tests).toBe(false);
+    expect(gate.allPassed).toBe(false);
     expect(gate.allPassed).toBe(false);
   });
 
@@ -365,12 +365,12 @@ describe("fixtures — makeGateSequence", () => {
 
   it("maps 'fail' to failing gate", () => {
     const seq = makeGateSequence(["fail"]);
-    expect(seq[0].tests).toBe(false);
+    expect(seq[0].allPassed).toBe(false);
   });
 
   it("maps 'dispute' to failing gate with dispute output", () => {
     const seq = makeGateSequence(["dispute"]);
-    expect(seq[0].tests).toBe(false);
+    expect(seq[0].allPassed).toBe(false);
     expect(seq[0].failures[0].output).toContain("disputes");
   });
 

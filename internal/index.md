@@ -9,9 +9,9 @@ Conventions for specs in this directory: [docs/spec-authoring.md](../docs/spec-a
 | Spec | Type | Status | Dependencies (hard → soft) |
 |---|---|---|---|
 | [bug-dispute-reload-evaporation.md](done-bug-dispute-reload-evaporation.md) | bug | **done** (merged 2026-09-06) — 6 dispute flags → 1 `DisputeState` status object; `migrateDispute` in session-start; `clearTransientFlags` no longer touches dispute; budget at resolution not filing; 4 handlers rewritten; 19+ test flips across 8 files; 1170 tests passing. |
-| [bug-gate-green-stays-green.md](bug-gate-green-stays-green.md) | bug | **open** | soft: bug-negotiate-drift (**done**). `makeGoCwd` still writes no `main.go` (verified 2026-09-06) → the live-toolchain `green stays green` regression is unpassable by construction; fixture fix + mandatory dispute prompt outstanding. |
+| [bug-gate-green-stays-green.md](done-bug-gate-green-stays-green.md) | bug | **done** (merged 2026-09-06) — `makeGoCwd` fixture now writes `main.go` (buildable Go module); Writer prompt mandates `negotiate_propose` exit path for unpassable tests; "green stays green" live-toolchain regression added to `test/gate-signal-integrity.test.ts`. |
 | [bug-gate-slow-settle-duplicate.md](done-bug-gate-slow-settle-duplicate.md) | bug | **done** (merged 2026-09-06) — module-local `gateInFlight` lock in `handleGateTransition` (check + `try/finally` clear); duplicate settle returns the now-live `NO_GATE` sentinel; 3 regression tests (concurrent drop / no-wedge / wedge-on-throw) in `test/events/agent-settled/gate-transition.test.ts`, red-verified. |
-| [bug-gate-verdict-field.md](bug-gate-verdict-field.md) | bug | **open** | hard: bug-gate-signal-integrity (**done** — `allPassed` semantics in place). `fillTestResults` (`src/gates.ts:69-70`) still sets `tests` and `allPassed` to the same `green` value; two-field verdict cleanup pending. Sequence after bug-gate-green-stays-green (shares its fixture). |
+| [bug-gate-verdict-field.md](done-bug-gate-verdict-field.md) | bug | **done** (merged 2026-09-06) — `GateResult.tests` deleted; `allPassed` is the single verdict field; 11 src files + 28 test files updated; T4 regression red-verified. |
 | [bug-baseline-flake.md](bug-baseline-flake.md) | bug | **open** | — `runBaseline` → `runBaselineTests` (`src/baseline.ts:53`) runs a **real** `execSync(go test …)` from a mock cwd (shared fixture + toolchain contention → transient red at loop start). Independent. |
 | [bug-phase-0-approval-dead-end.md](bug-phase-0-approval-dead-end.md) | bug | **open** | soft: refactor-single-commit-point (**done**). `cmdApprove` (`src/commands.ts:480`) dead-end; least dangerous (a human `/loop-approve` already works around it). |
 
@@ -50,16 +50,16 @@ Conventions for specs in this directory: [docs/spec-authoring.md](../docs/spec-a
 | [done-bug-slow-gate-signal-tests.md](done-bug-slow-gate-signal-tests.md) | bug | **done** (resolved 2026-09-06 — hang gone under vitest 4.1.11; 85.71 fixture was a 2-column trap; 13 skips → 0). |
 | [done-bug-gate-slow-settle-duplicate.md](done-bug-gate-slow-settle-duplicate.md) | bug | **done** (2026-09-06) — `gateInFlight` module lock in `handleGateTransition`; duplicate settle → `NO_GATE` (no double gate run / double prompt); `finally` clear prevents wedges on a throwing gate; 3 regression tests, red-verified. |
 | [done-bug-dispute-reload-evaporation.md](done-bug-dispute-reload-evaporation.md) | bug | **done** (2026-09-06) — 6 dispute flags → 1 `DisputeState` status object; `migrateDispute` in session-start; `clearTransientFlags` no longer touches dispute; budget at resolution not filing; 4 handlers rewritten; 19+ test flips across 8 files; 1170 tests passing. |
+| [done-bug-gate-green-stays-green.md](done-bug-gate-green-stays-green.md) | bug | **done** (2026-09-06) — `makeGoCwd` fixture now writes `main.go` (buildable Go module); Writer prompt mandates `negotiate_propose` exit path for unpassable tests; "green stays green" live-toolchain regression added to `test/gate-signal-integrity.test.ts`. |
+| [done-bug-gate-verdict-field.md](done-bug-gate-verdict-field.md) | bug | **done** (2026-09-06) — `GateResult.tests` deleted; `allPassed` is the single verdict field; 11 src files + 28 test files updated; T4 regression red-verified. |
 
 ## Recommended order of operation
 
-1. **bug-gate-green-stays-green** — fixture fix (`main.go` in `makeGoCwd`) + mandatory dispute prompt; lands the live-toolchain regression `bug-slow-gate-signal-tests` moved out of the default suite.
-2. **bug-gate-verdict-field** — cleanup of the two-field verdict (`tests` + `allPassed`, same value, `src/gates.ts:69-70`); sequence after #1 (shares its fixture).
-3. **bug-baseline-flake** — `runBaseline` runs a real `go test` from a mock cwd (shared fixture + toolchain contention → transient red at loop start); daily friction, independent.
-4. **bug-phase-0-approval-dead-end** — fully independent; least dangerous (a confusing dead-end a human `/loop-approve` already works around).
-5. **writer-dispute-concede** — feature: Writer-accepts-test branch in `handleBDisputePropose` (distinct from the Tester-concede path spec 09 already wired).
-6. **golden-workspace-fix** — feature: derive + enforce a workspace root from `specPath`; larger blast radius (gates + tool enforcement + prompts).
-7. **spec-archive-rename-failure-test** — test-only backfill; small, independent.
+1. **bug-baseline-flake** — `runBaseline` runs a real `go test` from a mock cwd (shared fixture + toolchain contention → transient red at loop start); daily friction, independent.
+2. **bug-phase-0-approval-dead-end** — fully independent; least dangerous (a confusing dead-end a human `/loop-approve` already works around).
+3. **writer-dispute-concede** — feature: Writer-accepts-test branch in `handleBDisputePropose` (distinct from the Tester-concede path spec 09 already wired).
+4. **golden-workspace-fix** — feature: derive + enforce a workspace root from `specPath`; larger blast radius (gates + tool enforcement + prompts).
+5. **spec-archive-rename-failure-test** — test-only backfill; small, independent.
 
 **Deliberately NOT in the batch:** the `--skip-review` flag (dead end — removed from docs, not implemented), metrics (dead — deleted), the `done`-phase display polish, and the Vitest 5 upgrade (reference doc only; installed vitest is 4.1.11).
 
@@ -74,9 +74,10 @@ Conventions for specs in this directory: [docs/spec-authoring.md](../docs/spec-a
 - `golden-workspace-fix` (open), `writer-dispute-concede` (open), `spec-archive-rename-failure-test` (open), `vitest5-upgrade` (reference doc, not a loop spec).
 
 **Confirmed still open (re-verified against the live tree):**
-- `bug-gate-green-stays-green` — `makeGoCwd` writes no `main.go` (still unpassable by construction).
-- `bug-gate-verdict-field` — `tests` and `allPassed` both set to the same `green` (`src/gates.ts:69-70`).
 - `bug-baseline-flake` — `runBaselineTests` runs a real `execSync(go test …)`.
-- `bug-dispute-reload-evaporation` — hard dependency satisfied (`90e6f24`); now the top priority.
+
+**Resolved in the same session:**
+- `bug-gate-green-stays-green` — `makeGoCwd` fixture now writes `main.go`; Writer prompt mandates dispute exit path; "green stays green" regression added.
+- `bug-gate-verdict-field` — `GateResult.tests` deleted; `allPassed` is the single verdict field; 11 src + 28 test files updated; T4 regression red-verified.
 
 **Prior corrections (kept):** `bug-gate-signal-integrity` done (`fc51a53`); `refactor-state-model-divergence` done (`f987e0f`); `bug-slow-gate-signal-tests` resolved (13 skips → 0); `bug-gate-slow-settle-duplicate` filed 2026-09-06, **resolved the same day** (module-local `gateInFlight` lock + `NO_GATE` live + 3 red-verified regression tests; full suite 1173 passed).

@@ -162,7 +162,7 @@ function buildWriterPrompt(
   return {
     message: buildContextMessage(
       `WRITER. Write ${lang.sourceFilePattern} to pass ${lang.testFilePattern}.\n` +
-      `Preserve stub signatures. Dispute wrong tests via negotiate_propose.\n` +
+      `Preserve stub signatures. If a test is wrong or unpassable by construction, stop and call negotiate_propose with the dispute — do not keep editing source to satisfy it.\n` +
       "When done, stop producing tool calls.",
     ),
     systemPrompt: `${systemPrompt}\n\nPhase B (Writer), round ${state.round}. Write ${lang.sourceFilePattern} only. Do not modify ${lang.testFilePattern}.`,

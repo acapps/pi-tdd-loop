@@ -25,7 +25,7 @@ function makeState(overrides: Partial<LoopState> & NegotiateMarkers = {}): LoopS
     maxC: 3,
     maxDispute: 3,
     maxTurnsPerPhase: 5,
-    coverageThreshold: 80,
+  coverageThreshold: 80,
     disputeCount: 0,
     turnsThisPhase: 0,
     lastProposal: "",
@@ -39,10 +39,10 @@ function makeGateResult(overrides = {}): GateResult {
   return {
     compile: false,
     compileError: "",
-    tests: false,
-    coverage: 0,
-    failures: [],
-    allPassed: false,
+    
+  coverage: 0,
+  failures: [],
+  allPassed: false,
     ...overrides};
 }
 
@@ -158,7 +158,7 @@ describe("computeNegotiateTransition", () => {
 describe("Phase A transitions (via computeTransition)", () => {
   it("compile pass: advances to negotiate", () => {
     const state = makeState({ phase: "A", round: 1 });
-    const gateResult = makeGateResult({ compile: true, tests: true, coverage: 85, allPassed: true });
+    const gateResult = makeGateResult({ compile: true, coverage: 85, allPassed: true });
     const result = T.computeTransition(state, gateResult);
 
     expect(result.effect.type).toBe("advance");
@@ -193,7 +193,7 @@ describe("Phase A transitions (via computeTransition)", () => {
 describe("Phase B transitions (via computeTransition)", () => {
   it("allPassed: advances to Phase C", () => {
     const state = makeState({ phase: "B", round: 1 });
-    const gateResult = makeGateResult({ compile: true, tests: true, coverage: 85, allPassed: true });
+    const gateResult = makeGateResult({ compile: true, coverage: 85, allPassed: true });
     const result = T.computeTransition(state, gateResult);
 
     expect(result.effect.type).toBe("advance");
@@ -203,7 +203,7 @@ describe("Phase B transitions (via computeTransition)", () => {
 
   it("failure: retries within maxB", () => {
     const state = makeState({ phase: "B", round: 1, maxB: 5 });
-    const gateResult = makeGateResult({ compile: true, tests: false, coverage: 0, failures: [{ test: "T", subtest: "", output: "" }] });
+    const gateResult = makeGateResult({ compile: true, coverage: 0, failures: [{ test: "T", subtest: "", output: "" }] });
     const result = T.computeTransition(state, gateResult);
 
     expect(result.effect.type).toBe("retry");
@@ -213,7 +213,7 @@ describe("Phase B transitions (via computeTransition)", () => {
 
   it("failure: escalates at maxB", () => {
     const state = makeState({ phase: "B", round: 5, maxB: 5 });
-    const gateResult = makeGateResult({ compile: true, tests: false, coverage: 0, failures: [{ test: "T", subtest: "", output: "" }] });
+    const gateResult = makeGateResult({ compile: true, coverage: 0, failures: [{ test: "T", subtest: "", output: "" }] });
     const result = T.computeTransition(state, gateResult);
 
     expect(result.effect.type).toBe("escalated");
@@ -226,7 +226,7 @@ describe("Phase B transitions (via computeTransition)", () => {
 describe("Phase C transitions (via computeTransition)", () => {
   it("tests pass: done", () => {
     const state = makeState({ phase: "C", round: 1 });
-    const gateResult = makeGateResult({ compile: true, tests: true, coverage: 85, allPassed: true });
+    const gateResult = makeGateResult({ compile: true, coverage: 85, allPassed: true });
     const result = T.computeTransition(state, gateResult);
 
     expect(result.effect.type).toBe("done");
@@ -235,7 +235,7 @@ describe("Phase C transitions (via computeTransition)", () => {
 
   it("tests fail: retries within maxC", () => {
     const state = makeState({ phase: "C", round: 1, maxC: 3 });
-    const gateResult = makeGateResult({ compile: true, tests: false, coverage: 0, failures: [{ test: "T", subtest: "", output: "" }] });
+    const gateResult = makeGateResult({ compile: true, coverage: 0, failures: [{ test: "T", subtest: "", output: "" }] });
     const result = T.computeTransition(state, gateResult);
 
     expect(result.effect.type).toBe("retry");
@@ -245,7 +245,7 @@ describe("Phase C transitions (via computeTransition)", () => {
 
   it("tests fail: done (cleaner failed) at maxC", () => {
     const state = makeState({ phase: "C", round: 3, maxC: 3 });
-    const gateResult = makeGateResult({ compile: true, tests: false, coverage: 0, failures: [{ test: "T", subtest: "", output: "" }] });
+    const gateResult = makeGateResult({ compile: true, coverage: 0, failures: [{ test: "T", subtest: "", output: "" }] });
     const result = T.computeTransition(state, gateResult);
 
     expect(result.effect.type).toBe("done");
@@ -261,7 +261,7 @@ describe("Phase C transitions (via computeTransition)", () => {
 describe("Dispute fix transitions (via computeTransition)", () => {
   it("allPassed: advances to Phase C", () => {
     const state = makeState({ phase: "B", round: 1, dispute: { status: "conceded", filer: "writer" } });
-    const gateResult = makeGateResult({ compile: true, tests: true, coverage: 85, allPassed: true });
+    const gateResult = makeGateResult({ compile: true, coverage: 85, allPassed: true });
     const result = T.computeTransition(state, gateResult);
 
     expect(result.effect.type).toBe("advance");
@@ -271,7 +271,7 @@ describe("Dispute fix transitions (via computeTransition)", () => {
 
   it("tests fail: Writer retries", () => {
     const state = makeState({ phase: "B", round: 1, dispute: { status: "conceded", filer: "writer" } });
-    const gateResult = makeGateResult({ compile: true, tests: false, coverage: 0, failures: [{ test: "T", subtest: "", output: "" }] });
+    const gateResult = makeGateResult({ compile: true, coverage: 0, failures: [{ test: "T", subtest: "", output: "" }] });
     const result = T.computeTransition(state, gateResult);
 
     expect(result.effect.type).toBe("retry");
@@ -300,7 +300,7 @@ describe("Dispute fix transitions (via computeTransition)", () => {
 describe("computeTransition (dispatcher)", () => {
   it("dispatches to Phase A", () => {
     const state = makeState({ phase: "A", round: 1 });
-    const gateResult = makeGateResult({ compile: true, tests: true, coverage: 85, allPassed: true });
+    const gateResult = makeGateResult({ compile: true, coverage: 85, allPassed: true });
     const result = T.computeTransition(state, gateResult);
 
     expect(result.effect.type).toBe("advance");
@@ -322,7 +322,7 @@ describe("computeTransition (dispatcher)", () => {
 
   it("dispatches to dispute fix", () => {
     const state = makeState({ phase: "B", round: 1, dispute: { status: "conceded", filer: "writer" } });
-    const gateResult = makeGateResult({ compile: true, tests: true, coverage: 85, allPassed: true });
+    const gateResult = makeGateResult({ compile: true, coverage: 85, allPassed: true });
     const result = T.computeTransition(state, gateResult);
 
     expect(result.effect.type).toBe("advance");
@@ -342,7 +342,7 @@ describe("computeTransition (dispatcher)", () => {
 describe("immutability", () => {
   it("does not mutate original state", () => {
     const state = makeState({ phase: "A", round: 1 });
-    const gateResult = makeGateResult({ compile: true, tests: true, coverage: 85, allPassed: true });
+    const gateResult = makeGateResult({ compile: true, coverage: 85, allPassed: true });
     const originalPhase = state.phase;
     const originalRound = state.round;
 
@@ -361,8 +361,8 @@ describe("immutability", () => {
 // flag must not depend on its sibling being set).
 
 describe("phase-boundary dispute-flag clearing (spec 08)", () => {
-  const allPass = () => makeGateResult({ compile: true, tests: true, coverage: 85, allPassed: true });
-  const failB = () => makeGateResult({ compile: true, tests: false, coverage: 0, failures: [{ test: "T", subtest: "", output: "" }] });
+  const allPass = () => makeGateResult({ compile: true, coverage: 85, allPassed: true });
+  const failB = () => makeGateResult({ compile: true, coverage: 0, failures: [{ test: "T", subtest: "", output: "" }] });
 
   it("site 1 — advanceToNegotiate: both flags cleared at the A→negotiate boundary", () => {
     const state = makeState({ phase: "A", round: 1 });

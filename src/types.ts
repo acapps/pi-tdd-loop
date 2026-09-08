@@ -69,10 +69,9 @@ export interface DisputeState {
 export interface GateResult {
   compile: boolean;
   compileError: string;
-  tests: boolean;
-  allPassed: boolean;
+  allPassed: boolean;   // THE verdict: test process exited 0 (spec: bug-gate-signal-integrity)
   coverage: number;
-  failures: FailingTest[];
+  failures: FailingTest[]; // display-only
 }
 
 // --- Phase 0: Spec Review Types ---

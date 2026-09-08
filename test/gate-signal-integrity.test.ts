@@ -77,7 +77,7 @@ function makeState(overrides: Partial<LoopState> = {}): LoopState {
     maxC: 3,
     maxDispute: 3,
     maxTurnsPerPhase: 5,
-    coverageThreshold: 80,
+  coverageThreshold: 80,
     disputeCount: 0,
     turnsThisPhase: 0,
     lastProposal: "",
@@ -91,10 +91,10 @@ function makeGate(overrides: Partial<GateResult> = {}): GateResult {
   return {
     compile: true,
     compileError: "",
-    tests: true,
-    allPassed: true,
-    coverage: 85,
-    failures: [],
+    
+  allPassed: true,
+  coverage: 85,
+  failures: [],
     ...overrides};
 }
 
@@ -289,7 +289,7 @@ func TestPanic(t *testing.T) { panic("boom") }
     try {
       const outcome = await runGates(cwd, 0, "go", "go", "B");
       if (outcome.kind === "result" && outcome.result) {
-        expect(outcome.result.tests).toBe(false);
+        expect(outcome.result.allPassed).toBe(false);
         expect(outcome.result.allPassed).toBe(false);
         // A red run never reports a coverage number (row-ordering pin).
         expect(outcome.result.coverage).toBe(0);
@@ -308,7 +308,7 @@ func TestPanic(t *testing.T) { panic("boom") }
     try {
       const outcome = await runGates(cwd, 0, "typescript", "maven", "B");
       if (outcome.kind === "result" && outcome.result) {
-        expect(outcome.result.tests).toBe(false);
+        expect(outcome.result.allPassed).toBe(false);
         expect(outcome.result.allPassed).toBe(false);
       } else {
         expect(outcome.kind).toBe("error");
@@ -318,12 +318,34 @@ func TestPanic(t *testing.T) { panic("boom") }
     }
   }, 120_000);
 
-  // "green stays green" (exit 0 → allPassed true) is NOT a pure-parser case:
-// it needs a *buildable* Go module (the old test-only fixture made `go build`
-// fail → early return → the test could never pass). Owned by
-// internal/bug-gate-green-stays-green.md, which lands the fixture fix
-// (main.go) + the S1 skipIf agreement; the live-toolchain variant then lives
-// in that spec's contract, not here (CLAUDE.md test-speed rule).
+  // "green stays green" — exit 0 → allPassed true (bug-gate-green-stays-green).
+  // The fixture is a buildable Go module (main.go + main_test.go) so `go build`
+  // ./... succeeds and the test step actually runs.
+  it("green stays green: passing tests → allPassed true", async () => {
+    const cwd = makeGoCwd(`package main
+
+import "testing"
+
+func TestPass(t *testing.T) {
+  if 1 + 1 != 2 {
+    t.Fatal("math is broken")
+  }
+}
+`);
+    try {
+      const outcome = await runGates(cwd, 0, "go", "go", "B");
+      if (outcome.kind === "result" && outcome.result) {
+        expect(outcome.result.allPassed).toBe(true);
+        expect(outcome.result.compile).toBe(true);
+      } else {
+        // A spawn error is also acceptable (environment without go) — but it
+        // must NOT be reported as a pass.
+        expect(outcome.kind).toBe("error");
+      }
+    } finally {
+      removeDir(cwd);
+    }
+  }, 120_000);
 it("spawn error (command cannot start) → kind 'error', never a GateResult", async () => {
     // A cwd that does not exist makes the child process fail to start.
     const outcome = await runGates("/nonexistent-cwd-gate-test-xyz", 0, "go", "go", "A");
@@ -348,6 +370,10 @@ import { join } from "node:path";
 function makeGoCwd(testSrc: string): string {
   const dir = mkdtempSync(join(tmpdir(), "gate-go-"));
   writeFileSync(join(dir, "go.mod"), "module example.com/gate\n\ngo 1.21\n");
+  // A non-test file so `go build ./...` succeeds — without it the compile
+  // check exits 1 ("no packages to build") and the test step never runs,
+  // making the exit-code signal untestable (bug-gate-green-stays-green).
+  writeFileSync(join(dir, "main.go"), "package main\n\nfunc main() {}\n");
   writeFileSync(join(dir, "main_test.go"), testSrc);
   return dir;
 }
@@ -453,7 +479,7 @@ describe("transitions — Phase B coverage rows (T1/T2)", () => {
     const state = makeState({ phase: "B", round: 1, coverageThreshold: 80 });
     const result = T.computeTransition(
       state,
-      makeGate({ tests: false, allPassed: false, coverage: 0, failures: [{ test: "T", subtest: "", output: "x" }] }));
+      makeGate({ allPassed: false, coverage: 0, failures: [{ test: "T", subtest: "", output: "x" }] }));
     expect(result.effect.type).toBe("retry");
     if (result.effect.type === "retry") {
       // The existing writer retry, NOT the coverage retry.
@@ -463,7 +489,7 @@ describe("transitions — Phase B coverage rows (T1/T2)", () => {
 
   it("Phase C ignores coverage (T4 pinned): allPassed → done even below threshold", () => {
     const state = makeState({ phase: "C", round: 1, coverageThreshold: 80 });
-    const result = T.computeTransition(state, makeGate({ coverage: 10, allPassed: true, tests: true }));
+    const result = T.computeTransition(state, makeGate({ coverage: 10, allPassed: true }));
     expect(result.effect.type).toBe("done");
   });
 });

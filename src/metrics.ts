@@ -93,7 +93,7 @@ export function createMetrics(seed: MetricsSeed): LoopMetrics {
 
 export interface GateLike {
   compile: boolean;
-  tests: boolean;
+  allPassed: boolean;
   coverage: number;
   failures: FailingTest[];
 }
@@ -102,7 +102,7 @@ export function accumulateGate(metrics: LoopMetrics, gate: GateLike): void {
   metrics.gateRuns++;
 
   if (!gate.compile) metrics.compileFails++;
-  if (!gate.tests) {
+  if (!gate.allPassed) {
     metrics.testFails++;
     metrics.totalFailures += gate.failures.length;
     metrics.failureDetails.push(...gate.failures);

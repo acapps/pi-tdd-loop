@@ -161,7 +161,7 @@ describe("runGates wiring — provider present (row 1)", () => {
     const outcome: GateOutcome = await runGates("/fake/ts-project", 80, "typescript", "maven", "B");
 
     expect(outcome.kind).toBe("result");
-    expect(outcome.result?.tests).toBe(true);
+    expect(outcome.result?.allPassed).toBe(true);
     expect(outcome.result?.allPassed).toBe(true);
     expect(outcome.result?.coverage).toBe(85.71);
 
@@ -208,7 +208,7 @@ describe("runGates wiring — provider absent (row 2)", () => {
 
     expect(outcome.kind).toBe("result");
     expect(outcome.result?.compile).toBe(true);
-    expect(outcome.result?.tests).toBe(true);
+    expect(outcome.result?.allPassed).toBe(true);
     expect(outcome.result?.allPassed).toBe(true);
     expect(outcome.result?.coverage).toBe(0);
     expect(outcome.result?.failures).toEqual([]);
@@ -224,7 +224,7 @@ describe("runGates wiring — provider absent (row 2)", () => {
     const outcome = await runGates("/fake/ts-project", 80, "typescript", "maven", "B");
 
     expect(outcome.kind).toBe("result");
-    expect(outcome.result?.tests).toBe(false);
+    expect(outcome.result?.allPassed).toBe(false);
     expect(outcome.result?.allPassed).toBe(false);
     expect(outcome.result?.coverage).toBe(0);
     // The FAIL line is parsed for display — but the verdict came from the exit code.
@@ -272,7 +272,7 @@ describe("runGates wiring — provider absent (row 2)", () => {
     expect(outcome?.kind).toBe("result");
     const testCall = calls.find((c) => c.args[0] === "vitest");
     expect(testCall?.args).toEqual(["vitest", "run"]); // degraded: no --coverage
-    expect(outcome?.result?.tests).toBe(true);
+    expect(outcome?.result?.allPassed).toBe(true);
   });
 });
 

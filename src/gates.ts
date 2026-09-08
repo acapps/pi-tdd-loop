@@ -27,7 +27,6 @@ export async function runGates(
   const result: GateResult = {
     compile: false,
     compileError: "",
-    tests: false,
     allPassed: false,
     coverage: 0,
     failures: [],
@@ -52,7 +51,7 @@ export async function runGates(
 
   // 3. Coverage sub-check (B/C only, and only on an exit-0 run — row-ordering pin:
   // a red run never reports a coverage number).
-  if (result.tests && (phase === "B" || phase === "C")) {
+  if (result.allPassed && (phase === "B" || phase === "C")) {
     const coverage = parseCoverage(output, language);
     if (coverage !== null) result.coverage = coverage;
   }
@@ -66,7 +65,6 @@ function fillTestResults(
   green: boolean,
   language: LanguageKey,
 ): void {
-  result.tests = green;
   result.allPassed = green;
   result.failures = parseTestOutput(output, language).failures;
 }

@@ -102,8 +102,8 @@ export async function handleGateTransition(
 }
 
 function formatGateLog(gate: GateResult): string {
-  const failures = gate.failures.length > 0 || !gate.tests ? ` (${gate.failures.length} failures)` : "";
-  return `Gate ${gate.tests ? "pass" : "fail"}${failures} [compile=${gate.compile} tests=${gate.tests} cov=${gate.coverage}%]`;
+  const failures = gate.failures.length > 0 || !gate.allPassed ? ` (${gate.failures.length} failures)` : "";
+  return `Gate ${gate.allPassed ? "pass" : "fail"}${failures} [compile=${gate.compile} allPassed=${gate.allPassed} cov=${gate.coverage}%]`;
 }
 
 // A gate that could not run (tool spawn error) is not a gate result — but the
@@ -112,7 +112,6 @@ function errorGateResult(error?: string): GateResult {
   return {
     compile: false,
     compileError: error ?? "",
-    tests: false,
     allPassed: false,
     coverage: 0,
     failures: [],

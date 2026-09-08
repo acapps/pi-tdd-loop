@@ -30,7 +30,7 @@ export interface QualityScore {
   subScores: {
     compiles: number; // 20
     testsPass: number; // 25
-    coverage: number; // 20
+  coverage: number; // 20
     testThoroughness: number; // 15
     edgeCases: number; // 10
     complexity: number; // 10
@@ -80,7 +80,7 @@ function gatherMetrics(
   const metrics: QualityMetrics = {
     compiles: false,
     testsPass: false,
-    coverage: 0,
+  coverage: 0,
     testThoroughness: 0,
     edgeCaseCoverage: 0,
     codeComplexity: 0,
@@ -330,7 +330,7 @@ function computeSubScores(metrics: QualityMetrics, coverageThreshold: number) {
   return {
     compiles: metrics.compiles ? 20 : 0,
     testsPass: metrics.testsPass ? 25 : 0,
-    coverage: Math.min(20, (metrics.coverage / coverageThreshold) * 20),
+  coverage: Math.min(20, (metrics.coverage / coverageThreshold) * 20),
     testThoroughness: Math.min(15, metrics.testThoroughness / 100 * 15),
     edgeCases: metrics.edgeCaseCoverage / 100 * 10,
     complexity: Math.min(10, Math.max(0, 10 - (metrics.codeComplexity - 5))), // Penalty for complexity > 5

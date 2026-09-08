@@ -43,7 +43,7 @@ const NEGOTIATE_TESTER_SP = `${BASE}\n\nNegotiation. Use negotiate_review tool. 
 
 const WRITER_CONTENT =
   `WRITER. Write ${GO_SOURCE} to pass ${GO_TEST}.\n` +
-  "Preserve stub signatures. Dispute wrong tests via negotiate_propose.\n" +
+  "Preserve stub signatures. If a test is wrong or unpassable by construction, stop and call negotiate_propose with the dispute — do not keep editing source to satisfy it.\n" +
   "When done, stop producing tool calls.";
 const WRITER_SP_ROUND = (round: number) =>
   `${BASE}\n\nPhase B (Writer), round ${round}. Write ${GO_SOURCE} only. Do not modify ${GO_TEST}.`;
@@ -76,7 +76,7 @@ function makeState(overrides: Partial<LoopState> = {}): LoopState {
     maxC: 3,
     maxDispute: 3,
     maxTurnsPerPhase: 5,
-    coverageThreshold: 80,
+  coverageThreshold: 80,
     disputeCount: 0,
     turnsThisPhase: 0,
     lastProposal: "",

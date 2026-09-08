@@ -15,7 +15,7 @@ const ALL_PHASES = [
 
 export function makeGatePass(coverage: number = 85): GateResult {
   return {
-    compile: true, compileError: "", tests: true,
+    compile: true, compileError: "",
     coverage, failures: [], allPassed: true,
   };
 }
@@ -24,7 +24,7 @@ export function makeGateCompileFail(
   error: string = "syntax error: expected '}', found 'EOF'",
 ): GateResult {
   return {
-    compile: false, compileError: error, tests: false,
+    compile: false, compileError: error,
     coverage: 0, failures: [], allPassed: false,
   };
 }
@@ -36,7 +36,7 @@ export function makeGateTestFail(
   coverage: number = 60,
 ): GateResult {
   return {
-    compile: true, compileError: "", tests: false,
+    compile: true, compileError: "",
     coverage, failures, allPassed: false,
   };
 }
@@ -46,7 +46,7 @@ export function makeGateCoverageFail(
   threshold: number = 80,
 ): GateResult {
   return {
-    compile: true, compileError: "", tests: true,
+    compile: true, compileError: "",
     coverage, failures: [], allPassed: coverage >= threshold,
   };
 }

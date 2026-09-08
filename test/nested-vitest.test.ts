@@ -56,7 +56,7 @@ describe("nested vitest spawn (S2 simulation)", () => {
 
     const outcome = await runGates("/tmp/fake-ts-cwd", 0, "typescript", "maven", "B");
     expect(outcome.kind).toBe("result");
-    expect(outcome.result?.tests).toBe(true);
+    expect(outcome.result?.allPassed).toBe(true);
     expect(outcome.result?.allPassed).toBe(true);
     expect(outcome.result?.coverage).toBe(85.71);
     expect(execFileMock).toHaveBeenCalledTimes(2);
@@ -77,7 +77,7 @@ describe("nested vitest spawn (S2 simulation)", () => {
 
     const outcome = await runGates("/tmp/fake-ts-cwd", 0, "typescript", "maven", "B");
     expect(outcome.kind).toBe("result");
-    expect(outcome.result?.tests).toBe(false);
+    expect(outcome.result?.allPassed).toBe(false);
     expect(outcome.result?.allPassed).toBe(false);
   });
 });
