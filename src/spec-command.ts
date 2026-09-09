@@ -231,7 +231,7 @@ function startAuthorTurn(
   );
   pi.sendUserMessage(
     renderAuthorPrompt({ ...input, now: new Date() }),
-    { triggerTurn: true },
+    { deliverAs: "followUp" },
   );
   ctx.ui.notify(
     `Author: writing ${input.outDir}/${input.slug}.md. Review it, then run /loop ${input.outDir}/${input.slug}.md`,

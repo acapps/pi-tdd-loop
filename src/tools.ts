@@ -204,7 +204,7 @@ function executePhase0Approve(
 
   pi.sendUserMessage(
     lang.prompts.promptTesterPhaseA(state.current.specPath, state.current.buildTool, getWorkspaceRoot(state.current.specPath)),
-    { triggerTurn: true },
+    { deliverAs: "followUp" },
   );
   return { content: [{ text: "Proposal recorded. Moving to Phase A." }] };
 }
@@ -488,7 +488,7 @@ function executeNegotiateReReview(
   state.current.negotiateFeedback = "";
   state.current.justTransitioned = true;
   persistState(state, pi, debug);
-  pi.sendUserMessage(GP.promptNegotiateContractReReview(lang.testFilePattern), { triggerTurn: true });
+  pi.sendUserMessage(GP.promptNegotiateContractReReview(lang.testFilePattern), { deliverAs: "followUp" });
   return { content: [{ text: "Proposal accepted. Re-reviewing the contract file before Phase B." }] };
 }
 

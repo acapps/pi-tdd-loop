@@ -156,14 +156,18 @@ export function cmdLoop(
         return;
       }
 
-      const detected = detectProject(ctx.cwd);
+      // Golden projects: detect and run baseline in the workspace root,
+      // not ctx.cwd. Self-refactor: workspaceRoot is "." → same as ctx.cwd.
+      const projectCwd = getWorkspaceRoot(specPath);
+      const detected = detectProject(projectCwd === "." ? ctx.cwd : projectCwd);
       const language = (argLanguage || detected?.language || "go") as LanguageKey;
       const buildTool = (detected?.buildTool || "maven") as BuildTool;
 
       // Phase 0 baseline: the existing test suite must be green (or absent)
       // before the loop starts. On failure, state stays idle — the loop
       // does not start.
-      const baseline = runBaseline(ctx.cwd, language, buildTool);
+      const baselineCwd = projectCwd === "." ? ctx.cwd : projectCwd;
+      const baseline = runBaseline(baselineCwd, language, buildTool);
       if (!baseline.ok) {
         rejectLoopStart(ctx, debug, baseline);
         return;
@@ -207,7 +211,7 @@ export function cmdLoop(
       );
       ctx.ui.setStatus("loop", "Phase 0 — review pending");
       commit(state.current, pi, debug);
-      pi.sendUserMessage(reviewPrompt, { triggerTurn: true });
+      pi.sendUserMessage(reviewPrompt, { deliverAs: "followUp" });
       return;
     },
   };
@@ -300,7 +304,7 @@ export function cmdContinue(
       ctx.ui.notify(`Continued from Phase ${state.current.phase}, round 1.`, "info");
       ctx.ui.setStatus("loop", `Phase ${state.current.phase} — round 1`);
       commit(state.current, pi, debug);
-      pi.sendUserMessage(buildContinuePrompt(state.current), { triggerTurn: true });
+      pi.sendUserMessage(buildContinuePrompt(state.current), { deliverAs: "followUp" });
     },
   };
 }
@@ -347,7 +351,7 @@ function handlePhaseRestart(
   ctx.ui.notify(`Restarted from Phase ${phase}, round 1.`, "info");
   ctx.ui.setStatus("loop", `Phase ${phase} — round 1`);
   commit(state.current, pi, debug);
-  pi.sendUserMessage(buildRestartPrompt(state.current, state.current.specPath), { triggerTurn: true });
+  pi.sendUserMessage(buildRestartPrompt(state.current, state.current.specPath), { deliverAs: "followUp" });
 }
 
 export function cmdDebug(
@@ -507,7 +511,7 @@ export function cmdApprove(
 
       pi.sendUserMessage(
         lang.prompts.promptTesterPhaseA(state.current.specPath, state.current.buildTool),
-        { triggerTurn: true },
+        { deliverAs: "followUp" },
       );
     },
   };

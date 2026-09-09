@@ -46,7 +46,7 @@ export function handleDisputeFix(
   state.current.dispute = { ...d, status: "closed" };
   commit(state.current, pi, debug ?? (() => {}));
   ctx.ui.setStatus("loop", `Phase B — round ${state.current.round} (dispute fix)`);
-  pi.sendUserMessage(lang.prompts.promptTesterDisputeFix(), { triggerTurn: true });
+  pi.sendUserMessage(lang.prompts.promptTesterDisputeFix(), { deliverAs: "followUp" });
   return { handled: true };
 }
 
@@ -70,7 +70,7 @@ export function handleDisputeReview(
 
   state.current.dispute = { ...d, status: "in-review" };
   commit(state.current, pi, debug ?? (() => {})); // persist BEFORE the send (S2)
-  pi.sendUserMessage(prompt, { triggerTurn: true });
+  pi.sendUserMessage(prompt, { deliverAs: "followUp" });
   ctx.ui.setStatus("loop", `Phase ${state.current.phase} — round ${state.current.round} (dispute review)`);
   return { handled: true, type: "review" }; // the gate resumes on the next settle
 }
@@ -90,7 +90,7 @@ export function handleDisputeDefend(
   debug?.("Dispute defend → delivering decision");
   state.current.dispute = { ...d, status: "closed" };
   commit(state.current, pi, debug ?? (() => {})); // persist BEFORE the send
-  pi.sendUserMessage(prompt, { triggerTurn: true });
+  pi.sendUserMessage(prompt, { deliverAs: "followUp" });
   return { handled: true, type: "defend" };
 }
 
@@ -106,6 +106,6 @@ export function handleWriterConcedeFix(
   debug?.("Writer conceded → fix turn");
   state.current.dispute = { ...d, status: "closed" };
   commit(state.current, pi, debug ?? (() => {})); // persist BEFORE the send
-  pi.sendUserMessage(GP.promptWriterConcedeFix(d.claim ?? state.current.lastProposal), { triggerTurn: true });
+  pi.sendUserMessage(GP.promptWriterConcedeFix(d.claim ?? state.current.lastProposal), { deliverAs: "followUp" });
   return { handled: true, type: "writer-fix" };
 }

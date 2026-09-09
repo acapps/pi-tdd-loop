@@ -192,7 +192,7 @@ describe("Phase A", () => {
     expect(ctx.ui.notify).toHaveBeenCalledWith("Gate failed. Retry 2/3.", "warning");
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GO.prompts.promptTesterCompileRetry("boom"));
-    expect(pi.sentMessages[0].options).toEqual({ triggerTurn: true });
+    expect(pi.sentMessages[0].options).toEqual({ deliverAs: "followUp" });
   });
 
   it("retry debug trace — verbatim sequence: gate log, arrow, retry", async () => {
@@ -233,7 +233,7 @@ describe("Phase A", () => {
     expect(ctx.ui.setStatus).toHaveBeenCalledWith("loop", "Phase negotiate — round 1");
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GP.promptWriterNegotiate("spec.md", GO.testFilePattern));
-    expect(pi.sentMessages[0].options).toEqual({ triggerTurn: true });
+    expect(pi.sentMessages[0].options).toEqual({ deliverAs: "followUp" });
   });
 });
 
@@ -251,7 +251,7 @@ describe("Phase B", () => {
     expect(result.state.turnsThisPhase).toBe(1);
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GO.prompts.promptWriterPhaseBContinue(formatFailures(failures), 1));
-    expect(pi.sentMessages[0].options).toEqual({ triggerTurn: true });
+    expect(pi.sentMessages[0].options).toEqual({ deliverAs: "followUp" });
     expect(ctx.ui.setStatus).toHaveBeenCalledWith("loop", "Phase B — round 2");
     expect(ctx.ui.notify).toHaveBeenCalledWith("Gate failed. Retry 2/5.", "warning");
   });
@@ -291,7 +291,7 @@ describe("Phase B", () => {
     expect(result.state.dispute?.status === "conceded").toBe(false);
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GO.prompts.promptCleanerPhaseC());
-    expect(pi.sentMessages[0].options).toEqual({ triggerTurn: true });
+    expect(pi.sentMessages[0].options).toEqual({ deliverAs: "followUp" });
     expect(ctx.ui.notify).toHaveBeenCalledWith("Phase passed. Advancing to Phase C.", "info");
     expect(ctx.ui.setStatus).toHaveBeenCalledWith("loop", "Phase C — round 1");
   });
@@ -308,7 +308,7 @@ describe("Phase B", () => {
     expect(result.state.dispute?.status).toBe("none"); // dispute cleared by handleDisputeFixIncomplete
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GO.prompts.promptWriterPhaseBContinue("  - TestAdd\nx", 1));
-    expect(pi.sentMessages[0].options).toEqual({ triggerTurn: true });
+    expect(pi.sentMessages[0].options).toEqual({ deliverAs: "followUp" });
     expect(ctx.ui.setStatus).toHaveBeenCalledWith("loop", "Phase B — round 2");
     expect(ctx.ui.notify).toHaveBeenCalledWith("Gate failed. Retry 2/5.", "warning");
     expect(debug).not.toHaveBeenCalledWith("Dispute review → retry with prompt"); // retired debug line
@@ -389,7 +389,7 @@ describe("Phase C", () => {
     expect(result.state.turnsThisPhase).toBe(1);
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GO.prompts.promptCleanerRetry(formatFailures(failures), 1));
-    expect(pi.sentMessages[0].options).toEqual({ triggerTurn: true });
+    expect(pi.sentMessages[0].options).toEqual({ deliverAs: "followUp" });
     expect(ctx.ui.setStatus).toHaveBeenCalledWith("loop", "Phase C — round 2");
     expect(ctx.ui.notify).toHaveBeenCalledWith("Gate failed. Retry 2/3.", "warning");
   });
@@ -409,7 +409,7 @@ describe("Phase C", () => {
     expect(ctx.ui.setStatus).toHaveBeenCalledWith("loop", "done (cleaner failed)");
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GP.promptLoopComplete("spec.md", 0, true));
-    expect(pi.sentMessages[0].options).toEqual({ triggerTurn: true });
+    expect(pi.sentMessages[0].options).toEqual({ deliverAs: "followUp" });
   });
 
   // Spec 10 (rewrite 5): clean-finish variant — status "done" (not the
@@ -425,7 +425,7 @@ describe("Phase C", () => {
     expect(ctx.ui.setStatus).toHaveBeenCalledWith("loop", "done");
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GP.promptLoopComplete("spec.md", 0, false));
-    expect(pi.sentMessages[0].options).toEqual({ triggerTurn: true });
+    expect(pi.sentMessages[0].options).toEqual({ deliverAs: "followUp" });
   });
 });
 

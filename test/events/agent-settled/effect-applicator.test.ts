@@ -172,7 +172,7 @@ describe("applyEffect (dispatcher)", () => {
     expect(result.applied).toBe(true);
     expect(piOf(input).sentMessages).toHaveLength(1);
     expect(piOf(input).sentMessages[0].content).toBe(GP.promptLoopComplete("spec.md", 0, false));
-    expect(piOf(input).sentMessages[0].options).toEqual({ triggerTurn: true });
+    expect(piOf(input).sentMessages[0].options).toEqual({ deliverAs: "followUp" });
     expect(input.ctx.ui.notify).toHaveBeenCalledTimes(1);
     expect(input.ctx.ui.setStatus).toHaveBeenCalledTimes(1);
   });
@@ -249,7 +249,7 @@ describe("applyRetryEffect", () => {
     expect(state.turnsThisPhase).toBe(1);
   });
 
-  it("sends the compile retry prompt on compile fail (triggerTurn)", () => {
+  it("sends the compile retry prompt on compile fail (deliverAs)", () => {
     const input = makeInput({
       effect: {
         type: "retry",
@@ -264,7 +264,7 @@ describe("applyRetryEffect", () => {
     expect(input.lang.prompts.promptTesterCompileRetry).toHaveBeenCalledWith("type mismatch");
     expect(piOf(input).sentMessages).toHaveLength(1);
     expect(piOf(input).sentMessages[0].content).toBe("Compile error: type mismatch");
-    expect(piOf(input).sentMessages[0].options).toEqual({ triggerTurn: true });
+    expect(piOf(input).sentMessages[0].options).toEqual({ deliverAs: "followUp" });
   });
 
   it("sends the writer phase B prompt on test fail (summary + count)", () => {
@@ -354,7 +354,7 @@ describe("retired dispute branch (spec 09)", () => {
     // The retired branch's signature (flag clear + dispute prompt) is gone.
     expect(input.state.current.dispute?.status === "defended").toBe(true); // flag untouched here (settle clears it)
     expect(piOf(input).sentMessages).toHaveLength(1);
-    expect(piOf(input).sentMessages[0].options).toEqual({ triggerTurn: true });
+    expect(piOf(input).sentMessages[0].options).toEqual({ deliverAs: "followUp" });
     expect(piOf(input).sentMessages[0].content).not.toContain("negotiate_review");
   });
 });
@@ -549,7 +549,7 @@ describe("applyAdvanceEffect", () => {
     applyAdvanceEffect(input);
     expect(piOf(input).sentMessages).toHaveLength(1);
     expect(piOf(input).sentMessages[0].content).toBe(GP.promptWriterNegotiate("spec.md", "*_test.go"));
-    expect(piOf(input).sentMessages[0].options).toEqual({ triggerTurn: true });
+    expect(piOf(input).sentMessages[0].options).toEqual({ deliverAs: "followUp" });
   });
 
   it("sends cleaner_phase_c prompt via lang.prompts.promptCleanerPhaseC()", () => {
@@ -599,7 +599,7 @@ describe("applyDoneEffect", () => {
     expect(piOf(input).sentMessages).toHaveLength(1);
     expect(piOf(input).sentMessages[0].content).toBe(
       "Loop complete — spec spec.md. All phases passed the gate. Disputes raised: 0.");
-    expect(piOf(input).sentMessages[0].options).toEqual({ triggerTurn: true });
+    expect(piOf(input).sentMessages[0].options).toEqual({ deliverAs: "followUp" });
   });
 
   it("resets turnsThisPhase to 1", () => {
@@ -633,7 +633,7 @@ describe("applyDoneEffect", () => {
     expect(piOf(input).sentMessages).toHaveLength(1);
     expect(piOf(input).sentMessages[0].content).toBe(
       "Loop complete — spec spec.md. Phase C failed; the original code is kept. Disputes raised: 0.");
-    expect(piOf(input).sentMessages[0].options).toEqual({ triggerTurn: true });
+    expect(piOf(input).sentMessages[0].options).toEqual({ deliverAs: "followUp" });
   });
 
   // Spec 10 (new test 3): the state's disputeCount flows into the prompt.

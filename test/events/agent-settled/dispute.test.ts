@@ -107,7 +107,7 @@ describe("handleDisputeFix", () => {
     expect(ctx.ui.setStatus).toHaveBeenCalledWith("loop", "Phase B — round 1 (dispute fix)");
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GO.prompts.promptTesterDisputeFix());
-    expect(pi.sentMessages[0].options).toEqual({ triggerTurn: true });
+    expect(pi.sentMessages[0].options).toEqual({ deliverAs: "followUp" });
     expect(state.dispute?.status).toBe("closed"); // dispute status updated to closed
     expect(pi.appendedEntries).toHaveLength(1); // commit entry
   });
@@ -155,7 +155,7 @@ describe("handleDisputeReview", () => {
     expect(result).toEqual({ handled: true, type: "review" }); // gate does NOT run this settle
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GP.promptTesterReviewWriterDispute(state.lastProposal)); // reviewer-addressed (F-C)
-    expect(pi.sentMessages[0].options).toEqual({ triggerTurn: true });
+    expect(pi.sentMessages[0].options).toEqual({ deliverAs: "followUp" });
     expect(state.dispute?.status === "defended").toBe(false); // cleared this settle
     expect(pi.appendedEntries).toHaveLength(1);
     expect(pi.appendedEntries[0].customType).toBe("loop-state");
@@ -177,7 +177,7 @@ describe("handleDisputeReview", () => {
     expect(result).toEqual({ handled: true, type: "review" });
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GP.promptWriterDisputeReview(state.lastProposal)); // reviewer-addressed
-    expect(pi.sentMessages[0].options).toEqual({ triggerTurn: true });
+    expect(pi.sentMessages[0].options).toEqual({ deliverAs: "followUp" });
     expect(state.dispute?.status === "defended").toBe(false);
     expect(pi.appendedEntries).toHaveLength(1);
     expect(pi.appendedEntries[0].customType).toBe("loop-state");
@@ -214,7 +214,7 @@ describe("handleDisputeDefend", () => {
     expect(result).toEqual({ handled: true, type: "defend" }); // gate skipped this settle
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GP.promptWriterDisputeDefended(decision));
-    expect(pi.sentMessages[0].options).toEqual({ triggerTurn: true });
+    expect(pi.sentMessages[0].options).toEqual({ deliverAs: "followUp" });
     expect(state.dispute?.status).toBe("closed"); // status cleared
     expect(state.dispute?.decision).toBe(decision); // decision preserved
     expect(pi.appendedEntries).toHaveLength(1);
@@ -292,7 +292,7 @@ describe("handleWriterConcedeFix", () => {
     expect(result).toEqual({ handled: true, type: "writer-fix" }); // gate skipped this settle
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GP.promptWriterConcedeFix(state.lastProposal));
-    expect(pi.sentMessages[0].options).toEqual({ triggerTurn: true });
+    expect(pi.sentMessages[0].options).toEqual({ deliverAs: "followUp" });
     expect(state.dispute?.status).toBe("closed"); // status cleared
     expect(state.dispute?.filer).toBe("tester"); // filer preserved
     expect(pi.appendedEntries).toHaveLength(1);

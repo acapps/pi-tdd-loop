@@ -189,6 +189,6 @@ function blockRepeatedCall(
   const msg = `Loop breaker: ${count}x ${event.toolName} with identical args — blocking call`;
   debug(msg);
   pi.appendEntry("loop-debug", { ts: Date.now(), msg });
-  pi.sendUserMessage(BREAKER_NOTICE, { triggerTurn: false });
+  pi.sendUserMessage(BREAKER_NOTICE, {});
   return { block: true, terminate: true, reason: BREAKER_NOTICE };
 }

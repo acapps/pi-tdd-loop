@@ -262,7 +262,7 @@ describe("step 5 — disputeFix", () => {
     expect(await handleAgentSettled(input)).toBeUndefined();
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GO.prompts.promptTesterDisputeFix());
-    expect(pi.sentMessages[0].options).toEqual({ triggerTurn: true });
+    expect(pi.sentMessages[0].options).toEqual({ deliverAs: "followUp" });
     expect(ctx.ui.setStatus).toHaveBeenCalledWith("loop", "Phase B — round 1 (dispute fix)");
     expect(state.dispute?.status).toBe("closed"); // status changed to closed after handling
     expect(runGatesMock).not.toHaveBeenCalled();
@@ -467,7 +467,7 @@ describe("step 8 — negotiate (always true; replaces state.current, G2)", () =>
     expect(pi.sentMessages).toHaveLength(1);
     // fix-negotiate-confirm-approval-loop §3: reprompt carries round + last proposal.
     expect(pi.sentMessages[0].content).toBe(GP.promptNegotiateRepromptWriter(1, ""));
-    expect(pi.sentMessages[0].options).toEqual({ triggerTurn: true });
+    expect(pi.sentMessages[0].options).toEqual({ deliverAs: "followUp" });
     expect(runGatesMock).not.toHaveBeenCalled();
   });
 
@@ -514,7 +514,7 @@ describe("step 9 — gate (replaces state.current, sets lastGateResult, G2/G3)",
     expect(input.state.current.lastGateResult).toBe(g.result); // G3 — same reference
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GP.promptWriterNegotiate("spec.md", GO.testFilePattern));
-    expect(pi.sentMessages[0].options).toEqual({ triggerTurn: true });
+    expect(pi.sentMessages[0].options).toEqual({ deliverAs: "followUp" });
   });
 
   it("A compile fail → retry: round increments on the new state, compile retry prompt, lastGateResult set", async () => {
@@ -541,7 +541,7 @@ describe("step 9 — gate (replaces state.current, sets lastGateResult, G2/G3)",
     expect(input.state.current.lastGateResult).toBeDefined();
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GP.promptLoopComplete("spec.md", 0, false));
-    expect(pi.sentMessages[0].options).toEqual({ triggerTurn: true });
+    expect(pi.sentMessages[0].options).toEqual({ deliverAs: "followUp" });
   });
 
   it("runGates receives state values (coverageThreshold, language, buildTool, phase)", async () => {

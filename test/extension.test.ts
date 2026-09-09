@@ -295,7 +295,7 @@ describe("/loop command", () => {
     const lastMsg = api.sentMessages[api.sentMessages.length - 1];
     expect(lastMsg.content).toContain("Phase 0: Spec Review");
     expect(lastMsg.content).toContain("Spec content");
-    expect(lastMsg.options?.triggerTurn).toBe(true);
+    expect(lastMsg.options?.deliverAs).toBe("followUp");
 
     // Should notify and set status
     expect(api._mockUi.notify).toHaveBeenCalledWith(
@@ -318,12 +318,12 @@ describe("/loop command", () => {
     expect(lastMsg.content).toContain("Phase 0: Spec Review");
   });
 
-  it("sets triggerTurn on the Phase 0 review prompt", async () => {
+  it("sets deliverAs on the Phase 0 review prompt", async () => {
     const handler = findCommand(api, "loop");
     await handler("spec.md", api._mockCtx);
 
     const lastMsg = api.sentMessages[api.sentMessages.length - 1];
-    expect(lastMsg.options?.triggerTurn).toBe(true);
+    expect(lastMsg.options?.deliverAs).toBe("followUp");
   });
 });
 

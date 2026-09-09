@@ -74,7 +74,7 @@ function deliverReviewRequest(
 ): void {
   debug(`Negotiate: proposal → Tester review (round ${state.round + 1})`);
   ctx.ui.notify(effect.notify, "info");
-  pi.sendUserMessage(GP.promptNegotiateProposalForReview(state.lastProposal), { triggerTurn: true });
+  pi.sendUserMessage(GP.promptNegotiateProposalForReview(state.lastProposal), { deliverAs: "followUp" });
 }
 
 function deliverFeedback(
@@ -86,7 +86,7 @@ function deliverFeedback(
 ): void {
   debug(`Negotiate: feedback → Writer revision (round ${state.round + 1})`);
   ctx.ui.notify(effect.notify, "info");
-  pi.sendUserMessage(GP.promptNegotiateFeedback(state.negotiateFeedback ?? ""), { triggerTurn: true });
+  pi.sendUserMessage(GP.promptNegotiateFeedback(state.negotiateFeedback ?? ""), { deliverAs: "followUp" });
 }
 
 function deliverEscalated(
@@ -105,7 +105,7 @@ function deliverReprompt(
   ctx: EventCtx,
 ): void {
   ctx.ui.notify(effect.notify, effect.level);
-  pi.sendUserMessage(buildRepromptPrompt(effect), { triggerTurn: true });
+  pi.sendUserMessage(buildRepromptPrompt(effect), { deliverAs: "followUp" });
 }
 
 // fix-negotiate-confirm-approval-loop §3: the reprompt carries the round and
@@ -126,5 +126,5 @@ function deliverAdvance(
   debug("Negotiate: auto-advancing to Phase B");
   ctx.ui.notify(effect.notify, "info");
   ctx.ui.setStatus("loop", effect.status);
-  pi.sendUserMessage(lang.prompts.promptNegotiateAutoAdvance(), { triggerTurn: true });
+  pi.sendUserMessage(lang.prompts.promptNegotiateAutoAdvance(), { deliverAs: "followUp" });
 }

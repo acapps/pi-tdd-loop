@@ -456,10 +456,10 @@ describe("mergeBranchBack", () => {
     const result = await mergeBranchBack(state, pi as any, ctx, vi.fn());
     expect(result).toBe("conflict");
     expect(state.current.branch?.merged).toBe(false);
-    // The Writer prompt was sent with triggerTurn.
+    // The Writer prompt was sent with deliverAs.
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toContain("exactly ONE turn");
-    expect(pi.sentMessages[0].options.triggerTurn).toBe(true);
+    expect(pi.sentMessages[0].options.deliverAs).toBe("followUp");
     // A warning was raised.
     expect(ctx.ui.notify).toHaveBeenCalledWith(
       expect.stringContaining("Merge conflict"),

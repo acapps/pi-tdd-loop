@@ -186,7 +186,7 @@ describe("createRepeatedToolCallHandler", () => {
     // The user-visible notice (Acceptance Criteria — verbatim pin).
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(NOTICE);
-    expect(pi.sentMessages[0].options).toEqual({ triggerTurn: false });
+    expect(pi.sentMessages[0].options).toEqual({});
 
     // The loop-debug entry.
     const debugEntries = pi.appendedEntries.filter((e: any) => e.customType === "loop-debug");

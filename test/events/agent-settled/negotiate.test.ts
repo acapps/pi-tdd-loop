@@ -92,7 +92,7 @@ describe("handleNegotiateSettled — reprompt", () => {
     // fix-negotiate-confirm-approval-loop §3: the reprompt now carries the
     // round and the last proposal (effect.round / effect.lastProposal).
     expect(pi.sentMessages[0].content).toBe(GP.promptNegotiateRepromptWriter(1, ""));
-    expect(pi.sentMessages[0].options).toEqual({ triggerTurn: true });
+    expect(pi.sentMessages[0].options).toEqual({ deliverAs: "followUp" });
     expect(ctx.ui.notify).toHaveBeenCalledWith("Writer must use negotiate_propose tool.", "warning");
     expect(ctx.ui.setStatus).not.toHaveBeenCalled();
     expect(debug).toHaveBeenCalledWith("Negotiate: settle (round 1, proposed=false, feedback=false, reprompted=false)");
@@ -109,7 +109,7 @@ describe("handleNegotiateSettled — reprompt", () => {
     expect(result.newState.negotiateReprompted).toBe(true);
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GP.promptNegotiateRepromptTester());
-    expect(pi.sentMessages[0].options).toEqual({ triggerTurn: true });
+    expect(pi.sentMessages[0].options).toEqual({ deliverAs: "followUp" });
     expect(ctx.ui.notify).toHaveBeenCalledWith("Tester must use negotiate_review tool.", "warning");
     expect(debug).toHaveBeenCalledWith("Negotiate: settle (round 2, proposed=false, feedback=false, reprompted=false)");
   });
@@ -151,7 +151,7 @@ describe("handleNegotiateSettled — auto-advance", () => {
 
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GO.prompts.promptNegotiateAutoAdvance());
-    expect(pi.sentMessages[0].options).toEqual({ triggerTurn: true });
+    expect(pi.sentMessages[0].options).toEqual({ deliverAs: "followUp" });
     expect(ctx.ui.notify).toHaveBeenCalledWith("Advancing to Phase B without explicit proposal.", "info");
     expect(ctx.ui.setStatus).toHaveBeenCalledWith("loop", "Phase B — round 1");
     expect(debug.mock.calls.map((c) => c[0])).toEqual([
@@ -174,7 +174,7 @@ describe("handleNegotiateSettled — auto-advance", () => {
 // --- Review round (rows 1–2 + newly-producible escalated) ---
 
 describe("handleNegotiateSettled — review round", () => {
-  it("review-request: one message = proposal-for-review, triggerTurn, notify, branch debug; input unmutated", () => {
+  it("review-request: one message = proposal-for-review, deliverAs, notify, branch debug; input unmutated", () => {
     const state = makeState({ round: 1, lastProposal: "plan X", negotiateProposed: true });
     const before = cloneState(state);
     const { input, pi, ctx, debug } = makeInput({ state });
@@ -188,7 +188,7 @@ describe("handleNegotiateSettled — review round", () => {
 
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GP.promptNegotiateProposalForReview("plan X"));
-    expect(pi.sentMessages[0].options).toEqual({ triggerTurn: true });
+    expect(pi.sentMessages[0].options).toEqual({ deliverAs: "followUp" });
     expect(ctx.ui.notify).toHaveBeenCalledWith("Writer proposed — Tester reviewing.", "info");
     expect(ctx.ui.setStatus).not.toHaveBeenCalled();
     expect(debug.mock.calls.map((c) => c[0])).toEqual([
@@ -197,7 +197,7 @@ describe("handleNegotiateSettled — review round", () => {
     ]);
   });
 
-  it("feedback: one message = feedback prompt, triggerTurn, notify, branch debug; input unmutated", () => {
+  it("feedback: one message = feedback prompt, deliverAs, notify, branch debug; input unmutated", () => {
     const state = makeState({ round: 4, negotiateFeedback: "make it faster" });
     const before = cloneState(state);
     const { input, pi, ctx, debug } = makeInput({ state });
@@ -210,7 +210,7 @@ describe("handleNegotiateSettled — review round", () => {
 
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GP.promptNegotiateFeedback("make it faster"));
-    expect(pi.sentMessages[0].options).toEqual({ triggerTurn: true });
+    expect(pi.sentMessages[0].options).toEqual({ deliverAs: "followUp" });
     expect(ctx.ui.notify).toHaveBeenCalledWith("Tester feedback recorded — Writer revising.", "info");
     expect(ctx.ui.setStatus).not.toHaveBeenCalled();
     expect(debug.mock.calls.map((c) => c[0])).toEqual([

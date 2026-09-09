@@ -46,7 +46,7 @@ export interface ExtensionAPI {
   registerMarkdownTransformer(_transformer: any): void;
   registerEntryRenderer<T>(_customType: string, _renderer: any): void;
   sendMessage<T>(_message: any, _options?: any): void;
-  sendUserMessage(content: string, options?: { deliverAs?: string; triggerTurn?: boolean }): void;
+  sendUserMessage(content: string, options?: { deliverAs?: "steer" | "followUp" }): void;
   appendEntry<T>(customType: string, data?: T): void;
   setSessionName(_name: string): void;
   getSessionName(): string | undefined;
@@ -87,7 +87,7 @@ export interface MockEventHandlerRegistration {
 
 export interface MockMessage {
   content: string;
-  options?: { deliverAs?: string; triggerTurn?: boolean };
+  options?: { deliverAs?: "steer" | "followUp" };
 }
 
 export interface MockEntry {

@@ -53,7 +53,7 @@ export interface EffectResult {
 // Every effect prompt triggers the agent's turn (pi convention for
 // messages that must start a new turn).
 const sendPrompt = (pi: ExtensionAPI, prompt: string): void => {
-  pi.sendUserMessage(prompt, { triggerTurn: true });
+  pi.sendUserMessage(prompt, { deliverAs: "followUp" });
 };
 
 // --- Public API ---
@@ -185,7 +185,7 @@ export async function mergeBranchBack(
       "warning",
     );
     ctx.ui.setStatus("loop", `merge conflict — Writer resolving (${branch.name})`);
-    pi.sendUserMessage(promptMergeConflict(outcome.files), { triggerTurn: true });
+    pi.sendUserMessage(promptMergeConflict(outcome.files), { deliverAs: "followUp" });
     return "conflict";
   }
   debug(`--branch merge: ERROR (${outcome.error})`);
