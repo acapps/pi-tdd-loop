@@ -14,6 +14,7 @@ import { RETRY_PROMPTS, ADVANCE_PROMPTS } from "../../constants";
 import { formatFailures } from "../../gates";
 import { archiveSpecFile } from "../../spec-archive";
 import { commitAndMerge, verifyMergeComplete, promptMergeConflict } from "../../git-workflow";
+import { sendPrompt as sendPromptImpl } from "../../prompt";
 
 // --- Types ---
 
@@ -52,8 +53,8 @@ export interface EffectResult {
 
 // Every effect prompt triggers the agent's turn (pi convention for
 // messages that must start a new turn).
-const sendPrompt = (pi: ExtensionAPI, prompt: string): void => {
-  pi.sendUserMessage(prompt, { deliverAs: "followUp" });
+const sendPrompt = (pi: ExtensionAPI, prompt: string, state: LoopState, debug: (msg: string) => void): void => {
+  sendPromptImpl(pi, prompt, state, debug);
 };
 
 // --- Public API ---
@@ -91,7 +92,7 @@ export function applyRetryEffect(input: EffectInput): EffectResult {
     ctx.ui.notify(effect.notify, effect.level || "info");
   }
   if (effect.prompt) {
-    sendPrompt(pi, buildRetryPrompt(effect.prompt, lang, gateResult, state));
+    sendPrompt(pi, buildRetryPrompt(effect.prompt, lang, gateResult, state), state, debug);
   }
   return { applied: true };
 }
@@ -117,7 +118,7 @@ export function applyAdvanceEffect(input: EffectInput): EffectResult {
     }
   }
   if (effect.prompt) {
-    sendPrompt(pi, buildAdvancePrompt(effect.prompt, state, lang));
+    sendPrompt(pi, buildAdvancePrompt(effect.prompt, state, lang), state, debug);
   }
   return { applied: true };
 }
@@ -148,6 +149,8 @@ function reportDone(state: LoopState, effect: DoneEffect, pi: ExtensionAPI, ctx:
   sendPrompt(
     pi,
     GP.promptLoopComplete(state.specPath, state.disputeCount, effect.status === "done (cleaner failed)"),
+    state,
+    () => {},
   );
 }
 
@@ -185,7 +188,7 @@ export async function mergeBranchBack(
       "warning",
     );
     ctx.ui.setStatus("loop", `merge conflict — Writer resolving (${branch.name})`);
-    pi.sendUserMessage(promptMergeConflict(outcome.files), { deliverAs: "followUp" });
+    sendPromptImpl(pi, promptMergeConflict(outcome.files), state.current, debug);
     return "conflict";
   }
   debug(`--branch merge: ERROR (${outcome.error})`);

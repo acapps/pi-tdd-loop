@@ -8,6 +8,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { slugBugName } from "./bug-spec";
 import { readSpec } from "./reviewer";
 import type { LoopState } from "./types";
+import { sendPrompt } from "./prompt";
 
 // --- Types ---
 
@@ -229,9 +230,11 @@ function startAuthorTurn(
       state.current.phase +
       ")",
   );
-  pi.sendUserMessage(
+  sendPrompt(
+    pi,
     renderAuthorPrompt({ ...input, now: new Date() }),
-    { deliverAs: "followUp" },
+    state.current,
+    debug,
   );
   ctx.ui.notify(
     `Author: writing ${input.outDir}/${input.slug}.md. Review it, then run /loop ${input.outDir}/${input.slug}.md`,

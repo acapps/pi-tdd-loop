@@ -10,6 +10,7 @@ import type { LanguageConfig } from "../../languages";
 import * as T from "../../transitions";
 import * as GP from "../../generic-prompts";
 import { REPROMPT_KEYS } from "../../constants";
+import { sendPrompt } from "../../prompt";
 
 // --- Types ---
 
@@ -56,9 +57,9 @@ export function handleNegotiateSettled(
   } else if (effect.type === "escalated") {
     deliverEscalated(effect, ctx, debug);
   } else if (effect.type === "reprompt") {
-    deliverReprompt(effect, pi, ctx);
+    deliverReprompt(effect, pi, ctx, state, debug);
   } else if (effect.type === "advance") {
-    deliverAdvance(effect, pi, ctx, lang, debug);
+    deliverAdvance(effect, pi, ctx, lang, state, debug);
   }
   return { handled: true, newState };
 }
@@ -74,7 +75,7 @@ function deliverReviewRequest(
 ): void {
   debug(`Negotiate: proposal → Tester review (round ${state.round + 1})`);
   ctx.ui.notify(effect.notify, "info");
-  pi.sendUserMessage(GP.promptNegotiateProposalForReview(state.lastProposal), { deliverAs: "followUp" });
+  sendPrompt(pi, GP.promptNegotiateProposalForReview(state.lastProposal), state, debug);
 }
 
 function deliverFeedback(
@@ -86,7 +87,7 @@ function deliverFeedback(
 ): void {
   debug(`Negotiate: feedback → Writer revision (round ${state.round + 1})`);
   ctx.ui.notify(effect.notify, "info");
-  pi.sendUserMessage(GP.promptNegotiateFeedback(state.negotiateFeedback ?? ""), { deliverAs: "followUp" });
+  sendPrompt(pi, GP.promptNegotiateFeedback(state.negotiateFeedback ?? ""), state, debug);
 }
 
 function deliverEscalated(
@@ -103,9 +104,11 @@ function deliverReprompt(
   effect: RepromptEffect,
   pi: ExtensionAPI,
   ctx: EventCtx,
+  state: LoopState,
+  debug: (msg: string) => void,
 ): void {
   ctx.ui.notify(effect.notify, effect.level);
-  pi.sendUserMessage(buildRepromptPrompt(effect), { deliverAs: "followUp" });
+  sendPrompt(pi, buildRepromptPrompt(effect), state, debug);
 }
 
 // fix-negotiate-confirm-approval-loop §3: the reprompt carries the round and
@@ -121,10 +124,11 @@ function deliverAdvance(
   pi: ExtensionAPI,
   ctx: EventCtx,
   lang: LanguageConfig,
+  state: LoopState,
   debug: (msg: string) => void,
 ): void {
   debug("Negotiate: auto-advancing to Phase B");
   ctx.ui.notify(effect.notify, "info");
   ctx.ui.setStatus("loop", effect.status);
-  pi.sendUserMessage(lang.prompts.promptNegotiateAutoAdvance(), { deliverAs: "followUp" });
+  sendPrompt(pi, lang.prompts.promptNegotiateAutoAdvance(), state, debug);
 }

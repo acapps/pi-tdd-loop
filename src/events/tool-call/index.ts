@@ -189,9 +189,14 @@ function blockRepeatedCall(
   const msg = `Loop breaker: ${count}x ${event.toolName} with identical args — blocking call`;
   debug(msg);
   pi.appendEntry("loop-debug", { ts: Date.now(), msg });
-  pi.sendMessage(
-    { customType: "loop-breaker", content: BREAKER_NOTICE, display: true },
-    { triggerTurn: false },
-  );
+  try {
+    pi.sendMessage(
+      { customType: "loop-breaker", content: BREAKER_NOTICE, display: true },
+      { triggerTurn: false },
+    );
+  } catch {
+    // pi may be stale in print mode after session replacement; the block
+    // + terminate above still stops the call. The notice is best-effort.
+  }
   return { block: true, terminate: true, reason: BREAKER_NOTICE };
 }

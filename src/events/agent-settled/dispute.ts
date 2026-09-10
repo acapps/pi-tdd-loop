@@ -12,6 +12,7 @@ import type { EventCtx } from "../index";
 import type { LanguageConfig } from "../../languages";
 import * as GP from "../../generic-prompts";
 import { commit } from "../../commit";
+import { sendPrompt } from "../../prompt";
 
 // --- Types ---
 
@@ -46,7 +47,7 @@ export function handleDisputeFix(
   state.current.dispute = { ...d, status: "closed" };
   commit(state.current, pi, debug ?? (() => {}));
   ctx.ui.setStatus("loop", `Phase B — round ${state.current.round} (dispute fix)`);
-  pi.sendUserMessage(lang.prompts.promptTesterDisputeFix(), { deliverAs: "followUp" });
+  sendPrompt(pi, lang.prompts.promptTesterDisputeFix(), state.current, debug ?? (() => {}));
   return { handled: true };
 }
 
@@ -70,7 +71,7 @@ export function handleDisputeReview(
 
   state.current.dispute = { ...d, status: "in-review" };
   commit(state.current, pi, debug ?? (() => {})); // persist BEFORE the send (S2)
-  pi.sendUserMessage(prompt, { deliverAs: "followUp" });
+  sendPrompt(pi, prompt, state.current, debug ?? (() => {}));
   ctx.ui.setStatus("loop", `Phase ${state.current.phase} — round ${state.current.round} (dispute review)`);
   return { handled: true, type: "review" }; // the gate resumes on the next settle
 }
@@ -90,7 +91,7 @@ export function handleDisputeDefend(
   debug?.("Dispute defend → delivering decision");
   state.current.dispute = { ...d, status: "closed" };
   commit(state.current, pi, debug ?? (() => {})); // persist BEFORE the send
-  pi.sendUserMessage(prompt, { deliverAs: "followUp" });
+  sendPrompt(pi, prompt, state.current, debug ?? (() => {}));
   return { handled: true, type: "defend" };
 }
 
@@ -106,6 +107,6 @@ export function handleWriterConcedeFix(
   debug?.("Writer conceded → fix turn");
   state.current.dispute = { ...d, status: "closed" };
   commit(state.current, pi, debug ?? (() => {})); // persist BEFORE the send
-  pi.sendUserMessage(GP.promptWriterConcedeFix(d.claim ?? state.current.lastProposal), { deliverAs: "followUp" });
+  sendPrompt(pi, GP.promptWriterConcedeFix(d.claim ?? state.current.lastProposal), state.current, debug ?? (() => {}));
   return { handled: true, type: "writer-fix" };
 }

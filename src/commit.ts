@@ -36,7 +36,13 @@ export function commit(state: LoopState, api: CommitApi, debug: CommitDebug): vo
     // Pinned debug format (Q1): `commit: state failed validation — ${errors}`
     debug(`commit: state failed validation — ${errors.join("; ")}`);
   }
-  api.appendEntry("loop-state", { ...state });
+  try {
+    api.appendEntry("loop-state", { ...state });
+  } catch (err) {
+    // pi may be stale in print mode after session replacement.
+    // The status file write below (if runner mode) is the fallback.
+    debug(`commit: appendEntry failed — ${err}`);
+  }
 
   // Best-effort status file for external runner (PI_LOOP_RUNNER=1).
   // The session entry is the source of truth; this file is a convenience

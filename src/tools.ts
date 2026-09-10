@@ -7,6 +7,7 @@ import * as T from "./transitions";
 import * as GP from "./generic-prompts";
 import { getLanguageConfig } from "./languages";
 import { commit } from "./commit";
+import { sendPrompt } from "./prompt";
 
 // --- Types ---
 
@@ -202,9 +203,11 @@ function executePhase0Approve(
   ctx.ui.setStatus("loop", "Phase A — round 1");
   persistState(state, pi, debug);
 
-  pi.sendUserMessage(
+  sendPrompt(
+    pi,
     lang.prompts.promptTesterPhaseA(state.current.specPath, state.current.buildTool, getWorkspaceRoot(state.current.specPath)),
-    { deliverAs: "followUp" },
+    state.current,
+    debug,
   );
   return { content: [{ text: "Proposal recorded. Moving to Phase A." }] };
 }
@@ -488,7 +491,7 @@ function executeNegotiateReReview(
   state.current.negotiateFeedback = "";
   state.current.justTransitioned = true;
   persistState(state, pi, debug);
-  pi.sendUserMessage(GP.promptNegotiateContractReReview(lang.testFilePattern), { deliverAs: "followUp" });
+  sendPrompt(pi, GP.promptNegotiateContractReReview(lang.testFilePattern), state.current, debug);
   return { content: [{ text: "Proposal accepted. Re-reviewing the contract file before Phase B." }] };
 }
 

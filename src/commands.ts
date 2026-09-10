@@ -13,6 +13,7 @@ import { setupBranch } from "./git-workflow";
 import { getLanguageConfig, detectProject } from "./languages";
 import { slugBugName, extractLoopLogs, renderBugSpec, writeBugSpec } from "./bug-spec";
 import { commit } from "./commit";
+import { sendPrompt } from "./prompt";
 
 // --- Types ---
 
@@ -213,7 +214,7 @@ export function cmdLoop(
       );
       ctx.ui.setStatus("loop", "Phase 0 — review pending");
       commit(state.current, pi, debug);
-      pi.sendUserMessage(reviewPrompt, { deliverAs: "followUp" });
+      sendPrompt(pi, reviewPrompt, state.current, debug);
       return;
     },
   };
@@ -334,7 +335,7 @@ export function cmdContinue(
       ctx.ui.notify(`Continued from Phase ${state.current.phase}, round 1.`, "info");
       ctx.ui.setStatus("loop", `Phase ${state.current.phase} — round 1`);
       commit(state.current, pi, debug);
-      pi.sendUserMessage(buildContinuePrompt(state.current), { deliverAs: "followUp" });
+      sendPrompt(pi, buildContinuePrompt(state.current), state.current, debug);
     },
   };
 }
@@ -381,7 +382,7 @@ function handlePhaseRestart(
   ctx.ui.notify(`Restarted from Phase ${phase}, round 1.`, "info");
   ctx.ui.setStatus("loop", `Phase ${phase} — round 1`);
   commit(state.current, pi, debug);
-  pi.sendUserMessage(buildRestartPrompt(state.current, state.current.specPath), { deliverAs: "followUp" });
+  sendPrompt(pi, buildRestartPrompt(state.current, state.current.specPath), state.current, debug);
 }
 
 export function cmdDebug(
@@ -539,9 +540,11 @@ export function cmdApprove(
       ctx.ui.setStatus("loop", "Phase A — round 1");
       commit(state.current, pi, debug);
 
-      pi.sendUserMessage(
+      sendPrompt(
+        pi,
         lang.prompts.promptTesterPhaseA(state.current.specPath, state.current.buildTool),
-        { deliverAs: "followUp" },
+        state.current,
+        debug,
       );
     },
   };
