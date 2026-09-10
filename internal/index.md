@@ -20,7 +20,8 @@ Conventions for specs in this directory: [docs/spec-authoring.md](../docs/spec-a
 | [done-remove-dead-metrics.md](done-remove-dead-metrics.md) | cleanup | **done** (2026-09-09) | **Invalid spec** — `src/metrics.ts` is used by `test/golden/runner.ts` and `test/e2e/runner.ts`. Not dead code. No change. |
 | [done-gate-timeout-config.md](done-gate-timeout-config.md) | feature | **done** (2026-09-09) | `--timeout <N>` flag on `/loop`; `gateTimeoutSec` in `LoopState`; threaded through `runGates` → `execCommand`. 27 test fixtures updated. |
 | [done-loop-status-command.md](done-loop-status-command.md) | feature | **done** (2026-09-09) | Enhanced existing `/loop-status`: phase/round/turns/disputes/spec/language snapshot. Idle/done/escalated branches. |
-| [bug-golden-baseline-cwd.md](bug-golden-baseline-cwd.md) | bug | **open** | Golden project baseline runs in `ctx.cwd` instead of workspace root; `sendUserMessage` used deprecated `triggerTurn` instead of `deliverAs`; golden project missing `go.mod` seed. Found via RPC-mode golden loop test. |
+| [bug-golden-baseline-cwd.md](bug-golden-baseline-cwd.md) | bug | **done** (merged `03fb45c`) | Golden project baseline runs in workspace root; `sendUserMessage` → `deliverAs: "followUp"`; 33 test assertions updated. |
+| [phase0-auto-approve.md](phase0-auto-approve.md) | feature | **open** | Phase 0 auto-advance when review is clean (no feedback, no dispute); `--no-auto-approve` opt-out; 5-row decision table in `handleReviewSettled`. |
 | [done-bug-phase-0-approval-dead-end.md](done-bug-phase-0-approval-dead-end.md) | bug | **done** | Phase × Tool policy matrix; Phase 0 approve/feedback handlers; `/loop-restart` extended. |
 
 ## Feature specs (not bug-specs)
