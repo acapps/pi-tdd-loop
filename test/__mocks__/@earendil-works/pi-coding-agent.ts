@@ -101,6 +101,7 @@ export type MockExtensionAPI = ExtensionAPI & {
   registeredTools: MockToolRegistration[];
   eventHandlers: Map<string, ((...args: any[]) => any)[]>;
   sentMessages: MockMessage[];
+  sentCustomMessages: { message: any; options: any }[];
   appendedEntries: MockEntry[];
   notifications: { message: string; type: string }[];
   statusUpdates: { key: string; text: string }[];
@@ -111,6 +112,7 @@ export function createMockExtensionAPI(): MockExtensionAPI {
   const registeredTools: MockToolRegistration[] = [];
   const eventHandlers = new Map<string, ((...args: any[]) => any)[]>();
   const sentMessages: MockMessage[] = [];
+  const sentCustomMessages: { message: any; options: any }[] = [];
   const appendedEntries: MockEntry[] = [];
   const notifications: { message: string; type: string }[] = [];
   const statusUpdates: { key: string; text: string }[] = [];
@@ -120,6 +122,7 @@ export function createMockExtensionAPI(): MockExtensionAPI {
     registeredTools,
     eventHandlers,
     sentMessages,
+    sentCustomMessages,
     appendedEntries,
     notifications,
     statusUpdates,
@@ -145,7 +148,9 @@ export function createMockExtensionAPI(): MockExtensionAPI {
     registerMarkdownTransformer: () => {},
     registerEntryRenderer: () => {},
 
-    sendMessage: () => {},
+    sendMessage(message: any, options?: any): void {
+      sentCustomMessages.push({ message, options });
+    },
 
     sendUserMessage(content: string, options?: any): void {
       sentMessages.push({ content, options });

@@ -14,6 +14,7 @@ function makeState(overrides: Partial<LoopState> = {}): LoopState {
     phase: "negotiate", round: 1, specPath: "spec.md", language: "go", buildTool: "go",
     maxA: 3, maxNegotiate: 3, maxB: 3, maxC: 3, maxDispute: 3, maxTurnsPerPhase: 5,
   coverageThreshold: 80, disputeCount: 0, turnsThisPhase: 1,
+  gateTimeoutSec: 60,
     lastProposal: "propose X", lastPhase: "A", justTransitioned: false,
     negotiateReprompted: false, ...overrides};
 }

@@ -22,7 +22,10 @@ export async function runGates(
   language: LanguageKey,
   buildTool: BuildTool,
   phase: Phase,
+  timeoutSec?: number,
 ): Promise<GateOutcome> {
+  const testTimeout = (timeoutSec ?? 60) * 1000;
+  const compileTimeout = Math.max(10, Math.floor((timeoutSec ?? 60) / 2)) * 1000;
   void coverageThreshold; // the threshold is a transition concern (T2), not a signal concern
   const result: GateResult = {
     compile: false,
@@ -33,7 +36,7 @@ export async function runGates(
   };
 
   // 1. Compile check (execFile-based; a spawn error is a gate error, never a pass)
-  const compile = await execCommand(getCompileCommand(language, buildTool), cwd, 30_000);
+  const compile = await execCommand(getCompileCommand(language, buildTool), cwd, compileTimeout);
   if (compile.kind === "error") return { kind: "error", error: compile.error };
   if (compile.exitCode !== 0) {
     result.compileError = compile.stderr || compile.stdout || "(no output captured)";
@@ -43,7 +46,7 @@ export async function runGates(
 
   // 2. Test check — the exit code is the signal; parsed failures are display-only.
   // The { cwd } makes the typescript command environment-aware (provider probe).
-  const test = await execCommand(getTestCommand(language, buildTool, { cwd }), cwd, 60_000);
+  const test = await execCommand(getTestCommand(language, buildTool, { cwd }), cwd, testTimeout);
   if (test.kind === "error") return { kind: "error", error: test.error };
 
   const output = (test.stdout ?? "") + (test.stderr ?? "");

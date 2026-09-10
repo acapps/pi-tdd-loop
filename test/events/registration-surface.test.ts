@@ -87,7 +87,7 @@ const ENTRY_PATH = path.join(ROOT, "index.ts");
 // `pi.registerCommand("spec", ...)` line are the only spec-command changes to
 // index.ts. The registration-block diagnostic guard
 // below still enforces the registration-surface invariant.
-const ENTRY_SHA256 = "62c879ee5476faf10957263044db5aac6adad38ce36168bc482de71745bb05e2";
+const ENTRY_SHA256 = "eab61a3a65a375d76990cc8ad7399af289d603102d9f01d6ad5cd9677f25002a";
 
 // F3 sweep needle (built to keep this file clean).
 const NEEDLE = new RegExp("events" + String.raw`\.ts`);
@@ -110,6 +110,7 @@ function makeState(overrides: Partial<LoopState> = {}): LoopState {
     maxDispute: 3,
     maxTurnsPerPhase: 5,
   coverageThreshold: 80,
+  gateTimeoutSec: 60,
     disputeCount: 0,
     turnsThisPhase: 0,
     lastProposal: "",

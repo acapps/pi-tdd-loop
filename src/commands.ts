@@ -104,6 +104,7 @@ function createInitialState(
   language: LanguageKey,
   buildTool: string,
   coverage: number | undefined,
+  timeoutSec?: number,
 ): LoopState {
   return {
     phase: "A",
@@ -118,6 +119,7 @@ function createInitialState(
     maxDispute: 3,
     maxTurnsPerPhase: 5,
     coverageThreshold: coverage ?? 80,
+    gateTimeoutSec: timeoutSec ?? 60,
     dispute: { status: "none" },
     disputeCount: 0,
     turnsThisPhase: 1,
@@ -140,7 +142,7 @@ export function cmdLoop(
   return {
     description: "Start adversarial loop: [--language go|java|typescript] [--coverage N] [--branch [name]] <spec-path>",
     handler: async (args: string, ctx: CommandContext) => {
-      const { specPath, coverage, language: argLanguage, branch: branchArg } = parseLoopArgs(args);
+      const { specPath, coverage, language: argLanguage, branch: branchArg, timeout: timeoutArg } = parseLoopArgs(args);
       if (!specPath) {
         ctx.ui.notify(
           "Usage: /loop [--language go|java|typescript] [--coverage N] [--branch [name]] <spec-path>",
@@ -180,7 +182,7 @@ export function cmdLoop(
       );
       debug(`Phase 0 baseline: OK (${baseline.noTests ? "no existing tests" : "suite green"})`);
 
-      state.current = createInitialState(specPath, language, buildTool, coverage);
+      state.current = createInitialState(specPath, language, buildTool, coverage, timeoutArg);
       const lang = getLanguageConfig(language);
 
       // Git branch workflow (opt-in via --branch): create the feature branch
@@ -279,7 +281,35 @@ export function cmdStatus(state: { current: LoopState }) {
   return {
     description: "Show current loop status",
     handler: async (_args: string, ctx: CommandContext) => {
-      ctx.ui.notify(formatStatus(state.current), "info");
+      const s = state.current;
+      if (s.phase === "idle") {
+        ctx.ui.notify("Loop is not running.", "info");
+        return;
+      }
+      if (s.phase === "done") {
+        ctx.ui.notify(
+          `Loop complete. (Phase ${s.lastPhase}, round ${s.round})`,
+          "info",
+        );
+        return;
+      }
+      if (s.phase === "escalated") {
+        ctx.ui.notify(
+          `Loop escalated at Phase ${s.lastPhase}, round ${s.round}. Run /loop-continue to resume.`,
+          "warning",
+        );
+        return;
+      }
+      const maxTurns = s.maxTurnsPerPhase ?? 5;
+      const phaseMax = (s as any)[`max${s.phase}`] ?? 5;
+      const lines = [
+        `Phase: ${s.phase} (round ${s.round}/${phaseMax})`,
+        `Turns this phase: ${s.turnsThisPhase}/${maxTurns}`,
+        `Disputes: ${s.disputeCount}/${s.maxDispute}`,
+        `Spec: ${s.specPath}`,
+        `Language: ${s.language} / ${s.buildTool}`,
+      ];
+      ctx.ui.notify(lines.join("\n"), "info");
     },
   };
 }
@@ -513,6 +543,33 @@ export function cmdApprove(
         lang.prompts.promptTesterPhaseA(state.current.specPath, state.current.buildTool),
         { deliverAs: "followUp" },
       );
+    },
+  };
+}
+
+export function cmdStop(
+  state: { current: LoopState },
+  pi: ExtensionAPI,
+  debug: DebugFn,
+) {
+  return {
+    description: "Stop the loop, preserving state for /loop-continue",
+    handler: async (_args: string, ctx: CommandContext) => {
+      if (isIdleOrDone(state.current.phase)) {
+        ctx.ui.notify("Loop is not running.", "warning");
+        return;
+      }
+      const prevPhase = state.current.phase;
+      const round = state.current.round;
+      state.current.phase = "escalated";
+      state.current.lastPhase = prevPhase;
+      commit(state.current, pi, debug);
+      ctx.ui.notify(
+        `Loop stopped at Phase ${prevPhase}, round ${round}. Run /loop-continue to resume.`,
+        "info",
+      );
+      ctx.ui.setStatus("loop", `Stopped — Phase ${prevPhase} round ${round}`);
+      debug(`Command: /loop-stop → phase ${prevPhase} → escalated`);
     },
   };
 }

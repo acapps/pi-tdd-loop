@@ -47,6 +47,7 @@ function makeState(overrides: Partial<LoopState> = {}): LoopState {
     maxDispute: 3,
     maxTurnsPerPhase: 5,
   coverageThreshold: 80,
+  gateTimeoutSec: 60,
     disputeCount: 0,
     turnsThisPhase: 0,
     lastProposal: "",
@@ -353,6 +354,7 @@ describe("extension entry point (index.ts) — session_start seam", () => {
           maxDispute: 3,
           maxTurnsPerPhase: 5,
           coverageThreshold: 90,
+          gateTimeoutSec: 60,
           dispute: { status: "conceded", filer: "writer" }, // should be cleared
           disputeCount: 1,
           turnsThisPhase: 1,

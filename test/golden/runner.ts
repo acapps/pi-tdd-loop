@@ -168,6 +168,7 @@ function initializeState(scenario: GateScenario, specPath: string): LoopState {
     maxDispute: 3,
     maxTurnsPerPhase: 10,
   coverageThreshold: 80,
+  gateTimeoutSec: 60,
     disputeCount: 0,
     turnsThisPhase: 0,
     lastProposal: "",

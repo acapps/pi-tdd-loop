@@ -164,11 +164,11 @@ function findEventHandler(
 // ================================================================
 
 describe("extension factory", () => {
-  it("registers all 8 commands", () => {
+  it("registers all 9 commands", () => {
     const api = buildTestAPI();
     extensionFactory(api);
 
-    expect(api.registeredCommands.length).toBe(8);
+    expect(api.registeredCommands.length).toBe(9);
     const names = api.registeredCommands.map((c) => c.name);
     expect(names).toContain("loop");
     expect(names).toContain("loop-approve");
@@ -177,6 +177,7 @@ describe("extension factory", () => {
     expect(names).toContain("loop-restart");
     expect(names).toContain("loop-debug");
     expect(names).toContain("loop-cancel");
+    expect(names).toContain("loop-stop");
     expect(names).toContain("spec");
   });
 
@@ -345,11 +346,7 @@ describe("/loop-status command", () => {
     await handler("", api._mockCtx);
 
     expect(api._mockUi.notify).toHaveBeenCalledWith(
-      expect.stringContaining("Phase: idle"),
-      "info"
-    );
-    expect(api._mockUi.notify).toHaveBeenCalledWith(
-      expect.stringContaining("no gate data"),
+      "Loop is not running.",
       "info"
     );
   });
@@ -1552,6 +1549,7 @@ describe("session_start event", () => {
           maxDispute: 3,
           maxTurnsPerPhase: 5,
           coverageThreshold: 90,
+          gateTimeoutSec: 60,
           dispute: { status: "conceded", filer: "writer" }, // should be cleared
           disputeCount: 1,
           turnsThisPhase: 1,
@@ -1789,6 +1787,7 @@ describe("tool_call event (path enforcement)", () => {
           maxDispute: 3,
           maxTurnsPerPhase: 5,
           coverageThreshold: 80,
+          gateTimeoutSec: 60,
           disputeCount: 3,
           turnsThisPhase: 1,
           lastProposal: "",
@@ -1853,6 +1852,7 @@ describe("agent_settled event (phase transitions)", () => {
           maxC: 3,
           maxDispute: 3,
           coverageThreshold: 80,
+          gateTimeoutSec: 60,
           disputeCount: 0,
           lastProposal: "",
           lastPhase: "C",
@@ -1890,6 +1890,7 @@ describe("agent_settled event (phase transitions)", () => {
           maxC: 3,
           maxDispute: 3,
           coverageThreshold: 80,
+          gateTimeoutSec: 60,
           disputeCount: 3,
           lastProposal: "",
           lastPhase: "B",
@@ -1929,6 +1930,7 @@ describe("agent_settled event (phase transitions)", () => {
           maxDispute: 3,
           maxTurnsPerPhase: 5,
           coverageThreshold: 80,
+          gateTimeoutSec: 60,
           disputeCount: 0,
           turnsThisPhase: 1,
           lastProposal: "",
@@ -2075,6 +2077,7 @@ describe("spec 08 — dispute flags cleared at phase boundaries", () => {
         maxDispute: 3,
         maxTurnsPerPhase: 5,
         coverageThreshold: 80,
+        gateTimeoutSec: 60,
         disputeCount: 0,
         turnsThisPhase: 1,
         lastProposal: "plan",

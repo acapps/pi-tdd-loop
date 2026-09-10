@@ -172,7 +172,7 @@ describe("createRepeatedToolCallHandler", () => {
     for (let i = 0; i < 4; i++) {
       expect(handler(makeEvent())).toBeUndefined();
     }
-    expect(pi.sentMessages).toHaveLength(0);
+    expect(pi.sentCustomMessages).toHaveLength(0);
   });
 
   it("5th identical call → { block: true, terminate: true, reason } + verbatim user message + debug entry", () => {
@@ -184,9 +184,9 @@ describe("createRepeatedToolCallHandler", () => {
     expect(result).toEqual({ block: true, terminate: true, reason: NOTICE });
 
     // The user-visible notice (Acceptance Criteria — verbatim pin).
-    expect(pi.sentMessages).toHaveLength(1);
-    expect(pi.sentMessages[0].content).toBe(NOTICE);
-    expect(pi.sentMessages[0].options).toEqual({});
+    expect(pi.sentCustomMessages).toHaveLength(1);
+    expect(pi.sentCustomMessages[0].message.content).toBe(NOTICE);
+    expect(pi.sentCustomMessages[0].options).toEqual({ triggerTurn: false });
 
     // The loop-debug entry.
     const debugEntries = pi.appendedEntries.filter((e: any) => e.customType === "loop-debug");
@@ -207,8 +207,8 @@ describe("createRepeatedToolCallHandler", () => {
     }
     expect(result).toEqual({ block: true, terminate: true, reason: NOTICE });
     // Two blocks → two notices (one per blocked call).
-    expect(pi.sentMessages).toHaveLength(2);
-    expect(pi.sentMessages[1].content).toBe(NOTICE);
+    expect(pi.sentCustomMessages).toHaveLength(2);
+    expect(pi.sentCustomMessages[1].message.content).toBe(NOTICE);
   });
 
   it("different logical calls → distinct counters: the 5th different call is not blocked", () => {
@@ -216,7 +216,7 @@ describe("createRepeatedToolCallHandler", () => {
     for (let i = 0; i < 4; i++) handler(makeEvent({ input: { command: "grep a" } }));
     // 5 calls in total, all distinct logical calls → nothing blocked.
     handler(makeEvent({ input: { command: "grep b" } }));
-    expect(pi.sentMessages).toHaveLength(0);
+    expect(pi.sentCustomMessages).toHaveLength(0);
   });
 
   // Intended shift (bug-loop-breaker-repetition-with-mutation, Behavior §6):
@@ -236,10 +236,10 @@ describe("createRepeatedToolCallHandler", () => {
       expect(ra).toEqual(i < 2 ? undefined : { block: true, terminate: true, reason: NOTICE });
       expect(rb).toEqual(i < 2 ? undefined : { block: true, terminate: true, reason: NOTICE });
     }
-    expect(pi.sentMessages).toHaveLength(4);
+    expect(pi.sentCustomMessages).toHaveLength(4);
     // The 9th write to the path (regardless of content) is still blocked.
     expect(handler(a as any)).toEqual({ block: true, terminate: true, reason: NOTICE });
-    expect(pi.sentMessages).toHaveLength(5);
+    expect(pi.sentCustomMessages).toHaveLength(5);
   });
 
   it("key-order-only differences are the SAME counter (sorted keys)", () => {
@@ -250,7 +250,7 @@ describe("createRepeatedToolCallHandler", () => {
     // e2 counts into the same counter even though it is the 6th call overall.
     expect(handler(e2)).toBeUndefined(); // count 4
     expect(handler(e2)).toEqual({ block: true, terminate: true, reason: NOTICE }); // count 5
-    expect(pi.sentMessages).toHaveLength(1);
+    expect(pi.sentCustomMessages).toHaveLength(1);
   });
 
   it("resetCallCounters clears the per-turn counter (turn_start / agent_settled reset set)", () => {
@@ -258,7 +258,7 @@ describe("createRepeatedToolCallHandler", () => {
     for (let i = 0; i < 4; i++) handler(makeEvent());
     resetCallCounters(); // the pinned reset: fired on turn_start and agent_settled
     expect(handler(makeEvent())).toBeUndefined(); // fresh turn: count 1 again
-    expect(pi.sentMessages).toHaveLength(0);
+    expect(pi.sentCustomMessages).toHaveLength(0);
   });
 
   it("batch-caveat note: terminate is set on every block from the 5th onward", () => {
@@ -281,7 +281,7 @@ describe("repetition-with-mutation (the bug)", () => {
     }
     const fifth = makeEvent({ input: { command: "cat <<'EOF'\nprobe v4\nEOF" } });
     expect(handler(fifth)).toEqual({ block: true, terminate: true, reason: NOTICE });
-    expect(pi.sentMessages).toHaveLength(1);
+    expect(pi.sentCustomMessages).toHaveLength(1);
   });
 
   it("5 read calls, same path, different offset each → 5th blocked", () => {
@@ -292,7 +292,7 @@ describe("repetition-with-mutation (the bug)", () => {
     expect(handler(makeEvent({ toolName: "read", input: { path: "big.log", offset: 400 } }))).toEqual(
       { block: true, terminate: true, reason: NOTICE },
     );
-    expect(pi.sentMessages).toHaveLength(1);
+    expect(pi.sentCustomMessages).toHaveLength(1);
   });
 
   it("5 grep calls, same pattern+path, different limit each → 5th blocked", () => {
@@ -303,7 +303,7 @@ describe("repetition-with-mutation (the bug)", () => {
     expect(handler(makeEvent({ toolName: "grep", input: { pattern: "foo", path: "src/", limit: 5 } }))).toEqual(
       { block: true, terminate: true, reason: NOTICE },
     );
-    expect(pi.sentMessages).toHaveLength(1);
+    expect(pi.sentCustomMessages).toHaveLength(1);
   });
 
   it("5 grep calls with 5 different patterns → nothing blocked (distinct logical calls)", () => {
@@ -311,7 +311,7 @@ describe("repetition-with-mutation (the bug)", () => {
     for (let i = 0; i < 5; i++) {
       handler(makeEvent({ toolName: "grep", input: { pattern: `p${i}`, path: "src/" } }));
     }
-    expect(pi.sentMessages).toHaveLength(0);
+    expect(pi.sentCustomMessages).toHaveLength(0);
   });
 
   it("5 write calls to 5 different paths → nothing blocked (distinct logical calls)", () => {
@@ -319,7 +319,7 @@ describe("repetition-with-mutation (the bug)", () => {
     for (let i = 0; i < 5; i++) {
       handler(makeEvent({ toolName: "write", input: { path: `src/f${i}.ts`, content: "x" } }));
     }
-    expect(pi.sentMessages).toHaveLength(0);
+    expect(pi.sentCustomMessages).toHaveLength(0);
   });
 
   it("fallback: 5 custom-tool calls with byte-identical input → 5th blocked (byte-exact key preserved)", () => {
@@ -330,7 +330,7 @@ describe("repetition-with-mutation (the bug)", () => {
     expect(handler(makeEvent({ toolName: "negotiate_propose", input: { plan: "x" } }))).toEqual(
       { block: true, terminate: true, reason: NOTICE },
     );
-    expect(pi.sentMessages).toHaveLength(1);
+    expect(pi.sentCustomMessages).toHaveLength(1);
   });
 
   it("fallback: 5 custom-tool calls with one field mutated each → nothing blocked (fallback stays byte-exact)", () => {
@@ -338,6 +338,6 @@ describe("repetition-with-mutation (the bug)", () => {
     for (let i = 0; i < 5; i++) {
       handler(makeEvent({ toolName: "negotiate_propose", input: { plan: `x${i}` } }));
     }
-    expect(pi.sentMessages).toHaveLength(0);
+    expect(pi.sentCustomMessages).toHaveLength(0);
   });
 });

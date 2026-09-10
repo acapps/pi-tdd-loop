@@ -48,6 +48,7 @@ function makeState(overrides: Partial<LoopState> = {}): LoopState {
     maxDispute: 3,
     maxTurnsPerPhase: 5,
   coverageThreshold: 80,
+  gateTimeoutSec: 60,
     disputeCount: 0,
     turnsThisPhase: 0,
     lastProposal: "",
@@ -141,7 +142,7 @@ describe("handleGateTransition — contract basics", () => {
       state: makeState({ phase: "C", round: 2, coverageThreshold: 60, language: "java", buildTool: "gradle" })});
     await handleGateTransition(input);
     expect(runGatesMock).toHaveBeenCalledTimes(1);
-    expect(runGatesMock).toHaveBeenCalledWith("/tmp/test-project", 60, "java", "gradle", "C");
+    expect(runGatesMock).toHaveBeenCalledWith("/tmp/test-project", 60, "java", "gradle", "C", 60);
   });
 
   it("passes the gate result through in output (same reference)", async () => {

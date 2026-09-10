@@ -18,6 +18,7 @@ function makeState(phase: Phase = "idle", overrides = {}): LoopState {
     maxDispute: 3,
     maxTurnsPerPhase: 5,
   coverageThreshold: 80,
+  gateTimeoutSec: 60,
     disputeCount: 0,
     turnsThisPhase: 0,
     lastProposal: "",
@@ -76,6 +77,7 @@ describe("formatStatus", () => {
     const state = makeState("C", {
       round: 1,
       coverageThreshold: 90,
+      gateTimeoutSec: 60,
       lastGateResult: {
         compile: true,
         compileError: "",

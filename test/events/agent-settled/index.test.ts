@@ -50,6 +50,7 @@ function makeState(overrides: Partial<LoopState> = {}): LoopState {
     maxDispute: 3,
     maxTurnsPerPhase: 5,
   coverageThreshold: 80,
+  gateTimeoutSec: 60,
     disputeCount: 0,
     turnsThisPhase: 0,
     lastProposal: "",
@@ -505,7 +506,7 @@ describe("step 9 — gate (replaces state.current, sets lastGateResult, G2/G3)",
     const { input, pi } = makeInput({ state: { current: state } });
 
     expect(await handleAgentSettled(input)).toBe(true);
-    expect(runGatesMock).toHaveBeenCalledWith("/tmp/test-project", 80, "go", "maven", "A");
+    expect(runGatesMock).toHaveBeenCalledWith("/tmp/test-project", 80, "go", "maven", "A", 60);
     expect(input.state.current).not.toBe(state); // G2
     expect(state.round).toBe(1); // original unmutated
     expect(state.phase).toBe("A");
@@ -549,6 +550,6 @@ describe("step 9 — gate (replaces state.current, sets lastGateResult, G2/G3)",
     const { input } = makeInput({ state: { current: state } });
 
     await handleAgentSettled(input);
-    expect(runGatesMock).toHaveBeenCalledWith("/tmp/test-project", 60, "java", "gradle", "C");
+    expect(runGatesMock).toHaveBeenCalledWith("/tmp/test-project", 60, "java", "gradle", "C", 60);
   });
 });

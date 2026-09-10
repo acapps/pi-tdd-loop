@@ -33,6 +33,7 @@ export default function (pi: ExtensionAPI) {
     maxDispute: 3,
     maxTurnsPerPhase: 5,
     coverageThreshold: 80,
+    gateTimeoutSec: 60,
     dispute: { status: "none" },
     disputeCount: 0,
     turnsThisPhase: 0,
@@ -60,6 +61,7 @@ export default function (pi: ExtensionAPI) {
   pi.registerCommand("loop-restart", Cmd.cmdRestart(state, pi, debug));
   pi.registerCommand("loop-debug", Cmd.cmdDebug(state, debug));
   pi.registerCommand("loop-cancel", Cmd.cmdCancel(state, pi, debug));
+  pi.registerCommand("loop-stop", Cmd.cmdStop(state, pi, debug));
 
   // =========================================================================
   // Tools

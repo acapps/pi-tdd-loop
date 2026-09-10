@@ -57,6 +57,7 @@ export interface LoopArgs {
   coverage?: number;
   language?: string;
   branch?: string;
+  timeout?: number;
 }
 
 export function parseLoopArgs(args: string): LoopArgs {
@@ -78,6 +79,10 @@ export function parseLoopArgs(args: string): LoopArgs {
       flags.branch = parts[++i];
     } else if (part.startsWith("--branch=")) {
       flags.branch = part.split("=").slice(1).join("=");
+    } else if (part === "--timeout" && i + 1 < parts.length) {
+      flags.timeout = parts[++i];
+    } else if (part.startsWith("--timeout=")) {
+      flags.timeout = part.split("=")[1];
     } else if (!part.startsWith("--")) {
       positional.push(part);
     }
@@ -88,6 +93,7 @@ export function parseLoopArgs(args: string): LoopArgs {
     coverage: flags.coverage !== undefined ? parseFloat(flags.coverage) : undefined,
     language: flags.language,
     branch: flags.branch,
+    timeout: flags.timeout !== undefined ? parseInt(flags.timeout, 10) : undefined,
   };
 }
 

@@ -40,6 +40,7 @@ const FIELD_SPECS: Record<string, FieldSpec> = {
   maxDispute: { type: "number" },
   maxTurnsPerPhase: { type: "number" },
   coverageThreshold: { type: "number" },
+  gateTimeoutSec: { type: "number" },
   disputeCount: { type: "number" },
   justTransitioned: { type: "boolean" },
   negotiateReprompted: { type: "boolean" },

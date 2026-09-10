@@ -33,6 +33,7 @@ function makeState(overrides: Partial<LoopState> = {}): { current: LoopState } {
       maxDispute: 3,
       maxTurnsPerPhase: 5,
       coverageThreshold: 80,
+      gateTimeoutSec: 60,
       disputeCount: 0,
       turnsThisPhase: 1,
       lastProposal: "plan X",

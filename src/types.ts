@@ -17,6 +17,7 @@ export interface LoopState {
   maxDispute: number;
   maxTurnsPerPhase: number;
   coverageThreshold: number;
+  gateTimeoutSec: number;
   // Dispute lifecycle (bug-dispute-reload-evaporation): one status object
   // replaces the old 6 flat fields (disputeMode, awaitDisputeFix,
   // awaitDisputeReview, disputeDefended, awaitWriterConcedeFix, disputeFiler).

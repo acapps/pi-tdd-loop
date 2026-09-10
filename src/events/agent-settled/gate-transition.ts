@@ -52,7 +52,7 @@ export async function handleGateTransition(
   input: GateHandlerInput,
 ): Promise<GateHandlerOutput> {
   const { state, pi, ctx, lang, debug } = input;
-  const { phase, round, coverageThreshold, language, buildTool } = state;
+  const { phase, round, coverageThreshold, language, buildTool, gateTimeoutSec } = state;
 
   // A second agent_settled landing while the first gate is still running is
   // dropped: no second runGates, no second effect, no second prompt. The
@@ -68,7 +68,7 @@ export async function handleGateTransition(
     const workspaceRoot = getWorkspaceRoot(state.specPath);
     const gateCwd = workspaceRoot === "." ? ctx.cwd : join(ctx.cwd, workspaceRoot);
 
-    const outcome = await runGates(gateCwd, coverageThreshold, language, buildTool, phase);
+    const outcome = await runGates(gateCwd, coverageThreshold, language, buildTool, phase, gateTimeoutSec);
 
     const gate = outcome.kind === "result" ? outcome.result! : null;
     const transition = gate
