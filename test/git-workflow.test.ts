@@ -543,7 +543,8 @@ describe("parseLoopArgs --branch", () => {
       specPath: "spec.md",
       coverage: undefined,
       language: undefined,
-      branch: "my-branch"});
+      branch: "my-branch",
+      autoApprove: true});
   });
 
   it("parses --branch=<name> (equals form)", () => {
@@ -551,7 +552,8 @@ describe("parseLoopArgs --branch", () => {
       specPath: "spec.md",
       coverage: undefined,
       language: undefined,
-      branch: "feat/x"});
+      branch: "feat/x",
+      autoApprove: true});
   });
 
   it("absent → branch undefined", () => {
@@ -563,7 +565,8 @@ describe("parseLoopArgs --branch", () => {
       specPath: "spec.md",
       coverage: 90,
       language: "go",
-      branch: "b"});
+      branch: "b",
+      autoApprove: true});
   });
 });
 

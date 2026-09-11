@@ -149,4 +149,23 @@ describe("parseLoopArgs", () => {
     const os = require("node:os");
     expect(result.specPath).toBe(`${os.homedir()}/project/spec.md`);
   });
+
+  it("--no-auto-approve flag → autoApprove false", () => {
+    const result = parseLoopArgs("--no-auto-approve spec.md");
+    expect(result.specPath).toBe("spec.md");
+    expect(result.autoApprove).toBe(false);
+  });
+
+  it("no --no-auto-approve flag → autoApprove true", () => {
+    const result = parseLoopArgs("spec.md");
+    expect(result.autoApprove).toBe(true);
+  });
+
+  it("--no-auto-approve combined with other flags", () => {
+    const result = parseLoopArgs("--coverage 90 --language java --no-auto-approve spec.md");
+    expect(result.specPath).toBe("spec.md");
+    expect(result.coverage).toBe(90);
+    expect(result.language).toBe("java");
+    expect(result.autoApprove).toBe(false);
+  });
 });

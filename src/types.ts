@@ -36,6 +36,9 @@ export interface LoopState {
   // Phase 0
   specFindings?: Finding[];
   awaitingReview?: boolean;
+  // Phase 0 auto-approve: when true (default), a clean review (no feedback,
+  // no dispute) auto-advances to Phase A. Set false by --no-auto-approve.
+  autoApprove?: boolean;
   // Git branch workflow (--branch, opt-in): set by /loop when --branch is
   // given; consumed by the done effect (merge back) and by /loop-continue /
   // /loop-restart (must NOT re-branch). `merged` flips true once the merge

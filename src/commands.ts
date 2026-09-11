@@ -106,6 +106,7 @@ function createInitialState(
   buildTool: string,
   coverage: number | undefined,
   timeoutSec?: number,
+  autoApprove?: boolean,
 ): LoopState {
   return {
     phase: "A",
@@ -130,6 +131,7 @@ function createInitialState(
     negotiateReprompted: false,
     negotiateProposed: false,
     negotiateFeedback: "",
+    autoApprove,
   };
 }
 
@@ -143,7 +145,7 @@ export function cmdLoop(
   return {
     description: "Start adversarial loop: [--language go|java|typescript] [--coverage N] [--branch [name]] <spec-path>",
     handler: async (args: string, ctx: CommandContext) => {
-      const { specPath, coverage, language: argLanguage, branch: branchArg, timeout: timeoutArg } = parseLoopArgs(args);
+      const { specPath, coverage, language: argLanguage, branch: branchArg, timeout: timeoutArg, autoApprove } = parseLoopArgs(args);
       if (!specPath) {
         ctx.ui.notify(
           "Usage: /loop [--language go|java|typescript] [--coverage N] [--branch [name]] <spec-path>",
@@ -183,7 +185,7 @@ export function cmdLoop(
       );
       debug(`Phase 0 baseline: OK (${baseline.noTests ? "no existing tests" : "suite green"})`);
 
-      state.current = createInitialState(specPath, language, buildTool, coverage, timeoutArg);
+      state.current = createInitialState(specPath, language, buildTool, coverage, timeoutArg, autoApprove);
       const lang = getLanguageConfig(language);
 
       // Git branch workflow (opt-in via --branch): create the feature branch

@@ -423,8 +423,8 @@ describe("step 6c — writerConcedeFix delivery", () => {
 // --- Step 7: review ---
 
 describe("step 7 — review", () => {
-  it("awaitingReview true → returns true: notify + status + entry, no gate, no user message", async () => {
-    const state = makeState({ phase: "review", awaitingReview: true });
+  it("awaitingReview true, autoApprove false → returns true: notify + status + entry, no gate, no user message", async () => {
+    const state = makeState({ phase: "review", awaitingReview: true, autoApprove: false });
     const { input, pi, ctx } = makeInput({ state: { current: state } });
 
     expect(await handleAgentSettled(input)).toBe(true);
@@ -433,6 +433,18 @@ describe("step 7 — review", () => {
     expect(pi.appendedEntries).toHaveLength(1); // review settle commit (single commit point for this settle)
     expect(pi.appendedEntries[0].customType).toBe("loop-state");
     expect(pi.sentMessages).toHaveLength(0);
+    expect(runGatesMock).not.toHaveBeenCalled();
+  });
+
+  it("awaitingReview true, clean review → auto-advances to Phase A", async () => {
+    const state = makeState({ phase: "review", awaitingReview: true });
+    const { input, pi, ctx } = makeInput({ state: { current: state } });
+
+    expect(await handleAgentSettled(input)).toBe(true);
+    expect(state.phase).toBe("A");
+    expect(ctx.ui.notify).toHaveBeenCalledWith("Phase 0: Clean review — auto-advancing to Phase A.", "info");
+    expect(ctx.ui.setStatus).toHaveBeenCalledWith("loop", "Phase A — round 1");
+    expect(pi.sentMessages).toHaveLength(1);
     expect(runGatesMock).not.toHaveBeenCalled();
   });
 

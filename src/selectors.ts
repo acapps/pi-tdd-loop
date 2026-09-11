@@ -58,6 +58,7 @@ export interface LoopArgs {
   language?: string;
   branch?: string;
   timeout?: number;
+  autoApprove?: boolean;
 }
 
 export function parseLoopArgs(args: string): LoopArgs {
@@ -83,6 +84,8 @@ export function parseLoopArgs(args: string): LoopArgs {
       flags.timeout = parts[++i];
     } else if (part.startsWith("--timeout=")) {
       flags.timeout = part.split("=")[1];
+    } else if (part === "--no-auto-approve") {
+      flags.noAutoApprove = "true";
     } else if (!part.startsWith("--")) {
       positional.push(part);
     }
@@ -94,6 +97,7 @@ export function parseLoopArgs(args: string): LoopArgs {
     language: flags.language,
     branch: flags.branch,
     timeout: flags.timeout !== undefined ? parseInt(flags.timeout, 10) : undefined,
+    autoApprove: flags.noAutoApprove === "true" ? false : true,
   };
 }
 
