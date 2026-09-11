@@ -21,7 +21,7 @@ Conventions for specs in this directory: [docs/spec-authoring.md](../docs/spec-a
 | [done-gate-timeout-config.md](done-gate-timeout-config.md) | feature | **done** (2026-09-09) | `--timeout <N>` flag on `/loop`; `gateTimeoutSec` in `LoopState`; threaded through `runGates` → `execCommand`. 27 test fixtures updated. |
 | [done-loop-status-command.md](done-loop-status-command.md) | feature | **done** (2026-09-09) | Enhanced existing `/loop-status`: phase/round/turns/disputes/spec/language snapshot. Idle/done/escalated branches. |
 | [bug-golden-baseline-cwd.md](bug-golden-baseline-cwd.md) | bug | **done** (merged `03fb45c`) | Golden project baseline runs in workspace root; `sendUserMessage` → `deliverAs: "followUp"`; 33 test assertions updated. |
-| [phase0-auto-approve.md](phase0-auto-approve.md) | feature | **open** | Phase 0 auto-advance when review is clean (no feedback, no dispute); `--no-auto-approve` opt-out; 5-row decision table in `handleReviewSettled`. |
+| [done-phase0-auto-approve.md](done-phase0-auto-approve.md) | feature | **done** (merged `4437904`) | Phase 0 auto-advance when review is clean (no feedback, no dispute); `--no-auto-approve` opt-out; 5-row decision table in `handleReviewSettled`; `lang` param becomes live. 14 tests in review.test.ts (was 3). |
 | [done-bug-phase-0-approval-dead-end.md](done-bug-phase-0-approval-dead-end.md) | bug | **done** | Phase × Tool policy matrix; Phase 0 approve/feedback handlers; `/loop-restart` extended. |
 
 ## Feature specs (not bug-specs)
