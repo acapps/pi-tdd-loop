@@ -9,8 +9,8 @@
 // Returns false, never throws.
 
 import type { LoopState, Phase, LanguageKey, BuildTool } from "./types";
-
-export const PHASES: readonly Phase[] = ["review", "A", "negotiate", "B", "C", "done", "escalated", "idle"];
+import { PHASES } from "./constants";
+export { PHASES };
 
 const LANGUAGES: readonly LanguageKey[] = ["go", "java", "typescript"];
 const BUILD_TOOLS: readonly BuildTool[] = ["maven", "gradle", "go"];

@@ -4,6 +4,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { LanguageKey } from "./types";
 import { execSync } from "node:child_process";
+import { execErrorMessage } from "./exec-error";
 
 import type {
   Finding,
@@ -60,8 +61,8 @@ export function validateTestRunner(
   try {
     execSync(cmd, { cwd, timeout: 15000, stdio: "pipe" });
     return { ok: true };
-  } catch (err: any) {
-    return { ok: false, error: err.stderr || err.stdout || err.message || "Unknown error" };
+  } catch (err) {
+    return { ok: false, error: execErrorMessage(err) };
   }
 }
 

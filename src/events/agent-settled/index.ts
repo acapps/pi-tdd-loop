@@ -2,7 +2,8 @@
 // Routes to phase-specific handler based on current state.
 // Spec: internal/04-implement-agent-settled-handlers.md (G2, G3, G5).
 
-import type { LoopState } from "../../types";
+import type { LoopState, Phase } from "../../types";
+import { stateSummary } from "../../types";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { EventCtx } from "../index";
 import { getLanguageConfig, type LanguageConfig } from "../../languages";
@@ -27,15 +28,8 @@ export interface AgentSettledDispatcher {
 }
 
 // --- Local helpers ---
-// stateSummary is a local copy, NOT a shared export: index.ts imports the
-// sub-modules, so sub-modules importing from index.ts would create the
-// circular dependency the refactor exists to remove (session-start.ts precedent).
 
-function stateSummary(s: LoopState): string {
-  return `Phase ${s.phase} round ${s.round}`;
-}
-
-function isTerminalPhase(phase: string): boolean {
+function isTerminalPhase(phase: Phase): boolean {
   return phase === "idle" || phase === "done" || phase === "escalated";
 }
 

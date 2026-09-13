@@ -2,6 +2,7 @@
 // State restoration on reload.
 
 import type { LoopState, DisputeState } from "../types";
+import { stateSummary } from "../types";
 import type { EventCtx } from "./index";
 import { validateLoopState } from "../state-validation";
 
@@ -24,10 +25,6 @@ const CORRUPT_STATUS = "state corrupted — run /loop to restart";
 const CORRUPT_DEBUG = "session_start: restored entry failed validation — quarantining";
 
 // --- Helpers ---
-
-function stateSummary(s: LoopState): string {
-  return `Phase ${s.phase} round ${s.round}`;
-}
 
 function quarantine(ctx: EventCtx, debug: (msg: string) => void): void {
   debug(CORRUPT_DEBUG);

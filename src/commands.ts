@@ -5,6 +5,7 @@ import type { Phase, LoopState, LanguageKey, BuildTool, SpecAnalysis } from "./t
 import { getWorkspaceRoot } from "./types";
 import type { DebugFn } from "./events";
 import { formatStatus, parseLoopArgs } from "./selectors";
+import { getPhaseMax } from "./phase-max";
 import { formatFailures } from "./gates";
 import * as GP from "./generic-prompts";
 import * as R from "./reviewer";
@@ -14,6 +15,7 @@ import { getLanguageConfig, detectProject } from "./languages";
 import { slugBugName, extractLoopLogs, renderBugSpec, writeBugSpec } from "./bug-spec";
 import { commit } from "./commit";
 import { sendPrompt } from "./prompt";
+import { startPhaseA } from "./phase-a";
 
 // --- Types ---
 
@@ -88,7 +90,6 @@ function resetPhaseState(state: LoopState): void {
   state.negotiateProposed = false;
   state.negotiateFeedback = "";
   state.justTransitioned = false;
-  state.dispute = { status: "none" };
   state.turnsThisPhase = 1;
 }
 
@@ -103,7 +104,7 @@ function resolvePhaseArg(raw: string): Phase {
 function createInitialState(
   specPath: string,
   language: LanguageKey,
-  buildTool: string,
+  buildTool: BuildTool,
   coverage: number | undefined,
   timeoutSec?: number,
   autoApprove?: boolean,
@@ -113,7 +114,7 @@ function createInitialState(
     round: 1,
     specPath,
     language,
-    buildTool: buildTool as "maven" | "gradle",
+    buildTool,
     maxA: 3,
     maxNegotiate: 3,
     maxB: 5,
@@ -186,7 +187,6 @@ export function cmdLoop(
       debug(`Phase 0 baseline: OK (${baseline.noTests ? "no existing tests" : "suite green"})`);
 
       state.current = createInitialState(specPath, language, buildTool, coverage, timeoutArg, autoApprove);
-      const lang = getLanguageConfig(language);
 
       // Git branch workflow (opt-in via --branch): create the feature branch
       // off the mainline before Phase 0. On failure the loop does not start.
@@ -205,7 +205,7 @@ export function cmdLoop(
       // Phase 0: Spec Review (always runs)
       const analysis = R.analyzeSpec(specText);
       debug(`Phase 0: reviewing spec (${analysis.findings.length} findings)`);
-      state.current.phase = "review" as Phase;
+      state.current.phase = "review";
       state.current.specFindings = analysis.findings;
       state.current.awaitingReview = true;
 
@@ -303,16 +303,7 @@ export function cmdStatus(state: { current: LoopState }) {
         );
         return;
       }
-      const maxTurns = s.maxTurnsPerPhase ?? 5;
-      const phaseMax = (s as any)[`max${s.phase}`] ?? 5;
-      const lines = [
-        `Phase: ${s.phase} (round ${s.round}/${phaseMax})`,
-        `Turns this phase: ${s.turnsThisPhase}/${maxTurns}`,
-        `Disputes: ${s.disputeCount}/${s.maxDispute}`,
-        `Spec: ${s.specPath}`,
-        `Language: ${s.language} / ${s.buildTool}`,
-      ];
-      ctx.ui.notify(lines.join("\n"), "info");
+      ctx.ui.notify(formatStatusLines(s), "info");
     },
   };
 }
@@ -342,8 +333,20 @@ export function cmdContinue(
   };
 }
 
-function isIdleOrDone(phase: string): boolean {
+function isIdleOrDone(phase: Phase): boolean {
   return phase === "idle" || phase === "done";
+}
+
+function formatStatusLines(s: LoopState): string {
+  const maxTurns = s.maxTurnsPerPhase ?? 5;
+  const phaseMax = getPhaseMax(s, s.phase);
+  return [
+    `Phase: ${s.phase} (round ${s.round}/${phaseMax})`,
+    `Turns this phase: ${s.turnsThisPhase}/${maxTurns}`,
+    `Disputes: ${s.disputeCount}/${s.maxDispute}`,
+    `Spec: ${s.specPath}`,
+    `Language: ${s.language} / ${s.buildTool}`,
+  ].join("\n");
 }
 
 export function cmdRestart(
@@ -480,23 +483,37 @@ function runLogBug(
   );
 }
 
+interface SessionEntry {
+  type?: unknown;
+  customType?: unknown;
+  timestamp?: unknown;
+  data?: { ts?: unknown } | null;
+}
+
+const DEBUG_LOG_TYPES = new Set([
+  "loop-debug",
+  "loop-gate",
+  "loop-refusal",
+  "loop-negotiate",
+  "loop-dispute",
+]);
+
+function isDebugLogEntry(entry: SessionEntry): entry is SessionEntry & { customType: string } {
+  return entry.type === "custom" && typeof entry.customType === "string" && DEBUG_LOG_TYPES.has(entry.customType);
+}
+
+function entryTimestamp(entry: SessionEntry): string {
+  const dataTs = entry.data?.ts;
+  if (typeof dataTs === "number") return new Date(dataTs).toISOString();
+  if (typeof entry.timestamp === "string") return entry.timestamp;
+  return "-";
+}
+
 function extractDebugLogs(entries: unknown[]): string[] {
-  const validTypes = [
-    "loop-debug",
-    "loop-gate",
-    "loop-refusal",
-    "loop-negotiate",
-    "loop-dispute",
-  ];
   return entries
-    .filter((e) => (e as Record<string, unknown>).type === "custom" &&
-      validTypes.includes((e as Record<string, string>).customType))
-    .map((e) => {
-      const entry = e as Record<string, unknown>;
-      const d = entry.data as { ts?: number } | null | undefined;
-      const ts = typeof d?.ts === "number" ? new Date(d.ts).toISOString() : typeof entry.timestamp === "string" ? entry.timestamp : "-";
-      return `[${ts}] ${entry.customType}: ${JSON.stringify(entry).slice(0, 120)}`;
-    });
+    .map((e) => e as SessionEntry)
+    .filter(isDebugLogEntry)
+    .map((entry) => `[${entryTimestamp(entry)}] ${entry.customType}: ${JSON.stringify(entry).slice(0, 120)}`);
 }
 
 export function cmdCancel(
@@ -531,23 +548,7 @@ export function cmdApprove(
         return;
       }
 
-      debug("Command: /loop-approve → Phase A, round 1");
-      state.current.phase = "A";
-      state.current.round = 1;
-      state.current.awaitingReview = false;
-      state.current.turnsThisPhase = 1;
-
-      const lang = getLanguageConfig(state.current.language);
-      ctx.ui.notify("Spec review approved. Phase A: Tester writes contract.", "info");
-      ctx.ui.setStatus("loop", "Phase A — round 1");
-      commit(state.current, pi, debug);
-
-      sendPrompt(
-        pi,
-        lang.prompts.promptTesterPhaseA(state.current.specPath, state.current.buildTool),
-        state.current,
-        debug,
-      );
+      startPhaseA(state, pi, ctx, debug);
     },
   };
 }

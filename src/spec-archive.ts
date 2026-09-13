@@ -8,10 +8,9 @@ import { basename, dirname, extname, join, resolve } from "node:path";
 // Sync fs is resolved lazily (inside archiveSpecFile): the pure path function
 // must not load node:fs, and lazy resolution keeps failure-path tests free of
 // ESM module-mocking (vi.spyOn on node builtins does not work under vitest).
-let fsSync: any;
+let fsSync: typeof import("node:fs") | undefined;
 function syncFs(): typeof import("node:fs") {
-  if (!fsSync) fsSync = require("node:fs");
-  return fsSync;
+  return fsSync ?? (fsSync = require("node:fs"));
 }
 
 /**

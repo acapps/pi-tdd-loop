@@ -8,6 +8,7 @@ import * as GP from "./generic-prompts";
 import { getLanguageConfig } from "./languages";
 import { commit } from "./commit";
 import { sendPrompt } from "./prompt";
+import { startPhaseA } from "./phase-a";
 
 // --- Types ---
 
@@ -184,7 +185,7 @@ const REVIEW_REJECT_TEXT = "negotiate_review is not available in this phase.";
 /**
  * Phase 0 approve: the same transition as cmdApprove (src/commands.ts).
  * "Same transition, two entry points" — the agent's negotiate_propose("approve")
- * and the human's /loop-approve perform identical field writes.
+ * and the human's /loop-approve both call startPhaseA.
  */
 function executePhase0Approve(
   state: StateRef,
@@ -192,23 +193,7 @@ function executePhase0Approve(
   ctx: ToolCtx,
   debug: Debug,
 ): ToolResult {
-  debug("Phase 0 approve → Phase A, round 1");
-  state.current.phase = "A";
-  state.current.round = 1;
-  state.current.awaitingReview = false;
-  state.current.turnsThisPhase = 1;
-
-  const lang = getLanguageConfig(state.current.language);
-  ctx.ui.notify("Spec review approved. Phase A: Tester writes contract.", "info");
-  ctx.ui.setStatus("loop", "Phase A — round 1");
-  persistState(state, pi, debug);
-
-  sendPrompt(
-    pi,
-    lang.prompts.promptTesterPhaseA(state.current.specPath, state.current.buildTool, getWorkspaceRoot(state.current.specPath)),
-    state.current,
-    debug,
-  );
+  startPhaseA(state, pi, ctx, debug);
   return { content: [{ text: "Proposal recorded. Moving to Phase A." }] };
 }
 
@@ -284,7 +269,7 @@ function handlePropose(
   ctx: ToolCtx,
   plan: string,
 ): ToolResult {
-  const phase = state.current.phase as Phase;
+  const phase = state.current.phase;
   debug(`negotiate_propose: plan=${plan.slice(0, 80)}... phase=${phase}`);
 
   switch (PROPOSE_POLICY[phase]) {
@@ -438,7 +423,7 @@ function handleReview(
   ctx: ToolCtx,
   decision: string,
 ): ToolResult {
-  const phase = state.current.phase as Phase;
+  const phase = state.current.phase;
   debug(`negotiate_review: decision=${decision.slice(0, 80)}... phase=${phase}`);
 
   switch (REVIEW_POLICY[phase]) {
@@ -515,23 +500,23 @@ function handleBDisputeReview(
     // filed) → Writer fixes the flagged file(s).
     if (state.current.disputeCount >= state.current.maxDispute) {
       logEscalation(state, pi, ctx, debug);
-      return buildReviewResult(state.current.phase as Phase, "approve");
+      return buildReviewResult(state.current.phase, "approve");
     }
     state.current.dispute = { ...state.current.dispute, status: "conceded", decision: "concede" };
     persistState(state, pi, debug);
     if (filer === "tester") {
       logDisputeConcession(state, pi);
     }
-    return buildReviewResult(state.current.phase as Phase, "approve");
+    return buildReviewResult(state.current.phase, "approve");
   }
 
   if (state.current.disputeCount >= state.current.maxDispute) {
     logEscalation(state, pi, ctx, debug);
-    return buildReviewResult(state.current.phase as Phase, decision);
+    return buildReviewResult(state.current.phase, decision);
   }
   state.current.dispute = { ...state.current.dispute, status: "defended", decision };
   persistState(state, pi, debug);
-  return buildReviewResult(state.current.phase as Phase, decision);
+  return buildReviewResult(state.current.phase, decision);
 }
 
 function executeNegotiateApprove(
@@ -542,7 +527,7 @@ function executeNegotiateApprove(
 ): ToolResult {
   debug("Approved → Phase B");
   transitionToPhaseB(state, pi, ctx, debug);
-  return buildReviewResult(state.current.phase as Phase, "approve");
+  return buildReviewResult(state.current.phase, "approve");
 }
 
 function executeNegotiateFeedback(
@@ -554,5 +539,5 @@ function executeNegotiateFeedback(
   debug("negotiate_review: feedback");
   state.current.negotiateFeedback = decision;
   persistState(state, pi, debug);
-  return buildReviewResult(state.current.phase as Phase, decision);
+  return buildReviewResult(state.current.phase, decision);
 }

@@ -2,7 +2,7 @@
 // Spec: internal/09-wire-dispute-review.md (Tables 1, 3; Filer routing invariant).
 //
 // Pinned contract:
-//  - handleDisputeFix: { state, pi, ctx, lang } — debug is OPTIONAL (R2). No state
+//  - handleDisputeFix: { state, pi, ctx, lang, debug }. No state
 //    mutation, no flag clearing (the flag is cleared at prompt-build time, spec 03).
 //  - handleDisputeReview (Table 1, rewritten):
 //      row 0: flag false → { handled: false, type: "review" }, zero side effects.
@@ -111,14 +111,6 @@ describe("handleDisputeFix", () => {
     expect(pi.sentMessages[0].options).toEqual({ deliverAs: "followUp" });
     expect(state.dispute?.status).toBe("closed"); // dispute status updated to closed
     expect(pi.appendedEntries).toHaveLength(1); // commit entry
-  });
-
-  it("works without debug (optional per R2)", () => {
-    const { input, ctx } = makeInput({ state: { current: makeState({ dispute: { status: "conceded", filer: "writer" } }) }, debug: undefined });
-    const result = handleDisputeFix(input);
-
-    expect(result.handled).toBe(true);
-    expect(ctx.ui.setStatus).toHaveBeenCalled();
   });
 
   it("status reflects the current round (round 2)", () => {

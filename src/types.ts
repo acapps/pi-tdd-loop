@@ -154,3 +154,9 @@ export interface ClarificationAddendum {
   clarifications: Clarification[];
   appliedInterpretations: string[];
 }
+
+// --- Debug helpers ---
+
+export function stateSummary(s: LoopState): string {
+  return `Phase ${s.phase} round ${s.round}`;
+}

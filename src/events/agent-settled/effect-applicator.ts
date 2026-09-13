@@ -14,7 +14,7 @@ import { RETRY_PROMPTS, ADVANCE_PROMPTS } from "../../constants";
 import { formatFailures } from "../../gates";
 import { archiveSpecFile } from "../../spec-archive";
 import { commitAndMerge, verifyMergeComplete, promptMergeConflict } from "../../git-workflow";
-import { sendPrompt as sendPromptImpl } from "../../prompt";
+import { sendPrompt } from "../../prompt";
 
 // --- Types ---
 
@@ -48,14 +48,6 @@ export interface EffectResult {
   // B2: return type is EffectResult — NOT bare boolean.
   applied: boolean;
 }
-
-// --- Private helpers ---
-
-// Every effect prompt triggers the agent's turn (pi convention for
-// messages that must start a new turn).
-const sendPrompt = (pi: ExtensionAPI, prompt: string, state: LoopState, debug: (msg: string) => void): void => {
-  sendPromptImpl(pi, prompt, state, debug);
-};
 
 // --- Public API ---
 
@@ -188,7 +180,7 @@ export async function mergeBranchBack(
       "warning",
     );
     ctx.ui.setStatus("loop", `merge conflict — Writer resolving (${branch.name})`);
-    sendPromptImpl(pi, promptMergeConflict(outcome.files), state.current, debug);
+    sendPrompt(pi, promptMergeConflict(outcome.files), state.current, debug);
     return "conflict";
   }
   debug(`--branch merge: ERROR (${outcome.error})`);

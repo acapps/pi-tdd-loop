@@ -6,6 +6,7 @@
 
 import { execSync } from "node:child_process";
 import { parseTestOutput, formatFailures } from "./gates";
+import { execErrorMessage } from "./exec-error";
 import { validateTestRunner } from "./reviewer";
 import type { LanguageKey, BuildTool, FailingTest } from "./types";
 
@@ -65,11 +66,9 @@ export function runBaselineTests(
       encoding: "utf-8",
       stdio: "pipe",
     });
-  } catch (err: any) {
+  } catch (err) {
     exitOk = false;
-    output = [err.stdout, err.stderr, err.message]
-      .filter(Boolean)
-      .join("\n");
+    output = execErrorMessage(err);
   }
   return evaluateBaseline(output, language, exitOk);
 }

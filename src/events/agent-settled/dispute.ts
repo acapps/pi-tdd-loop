@@ -21,9 +21,7 @@ export interface DisputeHandlerInput {
   pi: ExtensionAPI;
   ctx: EventCtx;
   lang: LanguageConfig;
-  // Optional (R2): the dispatcher omits it for handleDisputeFix, which never
-  // debug-logs; the other handlers still receive it.
-  debug?: (msg: string) => void;
+  debug: (msg: string) => void;
 }
 
 export interface DisputeHandlerOutput {
@@ -43,11 +41,11 @@ export function handleDisputeFix(
   const d = state.current.dispute;
   if (!d || d.status !== "conceded" || d.filer !== "writer") return { handled: false };
 
-  debug?.("Dispute fix → Tester fixes the test");
+  debug("Dispute fix → Tester fixes the test");
   state.current.dispute = { ...d, status: "closed" };
-  commit(state.current, pi, debug ?? (() => {}));
+  commit(state.current, pi, debug);
   ctx.ui.setStatus("loop", `Phase B — round ${state.current.round} (dispute fix)`);
-  sendPrompt(pi, lang.prompts.promptTesterDisputeFix(), state.current, debug ?? (() => {}));
+  sendPrompt(pi, lang.prompts.promptTesterDisputeFix(), state.current, debug);
   return { handled: true };
 }
 
@@ -67,11 +65,11 @@ export function handleDisputeReview(
   const prompt = filer === "writer"
     ? GP.promptTesterReviewWriterDispute(d.claim ?? state.current.lastProposal)
     : GP.promptWriterDisputeReview(d.claim ?? state.current.lastProposal);
-  debug?.(`Dispute review → ${reviewer} review turn`);
+  debug(`Dispute review → ${reviewer} review turn`);
 
   state.current.dispute = { ...d, status: "in-review" };
-  commit(state.current, pi, debug ?? (() => {})); // persist BEFORE the send (S2)
-  sendPrompt(pi, prompt, state.current, debug ?? (() => {}));
+  commit(state.current, pi, debug); // persist BEFORE the send (S2)
+  sendPrompt(pi, prompt, state.current, debug);
   ctx.ui.setStatus("loop", `Phase ${state.current.phase} — round ${state.current.round} (dispute review)`);
   return { handled: true, type: "review" }; // the gate resumes on the next settle
 }
@@ -88,10 +86,10 @@ export function handleDisputeDefend(
   const prompt = d.filer === "tester"
     ? GP.promptTesterReportRejected(d.decision ?? "")
     : GP.promptWriterDisputeDefended(d.decision ?? "");
-  debug?.("Dispute defend → delivering decision");
+  debug("Dispute defend → delivering decision");
   state.current.dispute = { ...d, status: "closed" };
-  commit(state.current, pi, debug ?? (() => {})); // persist BEFORE the send
-  sendPrompt(pi, prompt, state.current, debug ?? (() => {}));
+  commit(state.current, pi, debug); // persist BEFORE the send
+  sendPrompt(pi, prompt, state.current, debug);
   return { handled: true, type: "defend" };
 }
 
@@ -104,9 +102,9 @@ export function handleWriterConcedeFix(
   const d = state.current.dispute;
   if (!d || d.status !== "conceded" || d.filer !== "tester") return { handled: false };
 
-  debug?.("Writer conceded → fix turn");
+  debug("Writer conceded → fix turn");
   state.current.dispute = { ...d, status: "closed" };
-  commit(state.current, pi, debug ?? (() => {})); // persist BEFORE the send
-  sendPrompt(pi, GP.promptWriterConcedeFix(d.claim ?? state.current.lastProposal), state.current, debug ?? (() => {}));
+  commit(state.current, pi, debug); // persist BEFORE the send
+  sendPrompt(pi, GP.promptWriterConcedeFix(d.claim ?? state.current.lastProposal), state.current, debug);
   return { handled: true, type: "writer-fix" };
 }

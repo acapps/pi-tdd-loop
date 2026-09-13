@@ -1,6 +1,8 @@
 // --- Language registry ---
 
 import type { LanguageKey, BuildTool, Phase } from "../types";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import goConfig from "./go";
 import javaConfig from "./java";
 import tsConfig from "./typescript";
@@ -50,23 +52,6 @@ register("go", goConfig);
 register("java", javaConfig);
 register("typescript", tsConfig);
 
-// Lazy-load languages (async version for future use)
-async function loadLanguage(key: LanguageKey): Promise<LanguageConfig> {
-  if (registry.has(key)) return registry.get(key)!;
-
-  let mod: any;
-  switch (key) {
-    case "go": mod = await import("./go"); break;
-    case "java": mod = await import("./java"); break;
-    case "typescript": mod = await import("./typescript"); break;
-    default: throw new Error(`Unknown language: ${key}`);
-  }
-
-  const config = mod.default;
-  register(key, config);
-  return config;
-}
-
 // --- Public API ---
 
 export function getLanguageConfig(key: LanguageKey): LanguageConfig {
@@ -74,36 +59,25 @@ export function getLanguageConfig(key: LanguageKey): LanguageConfig {
   throw new Error(`Language not available: ${key}`);
 }
 
-export async function ensureLanguage(key: LanguageKey): Promise<LanguageConfig> {
-  return loadLanguage(key);
-}
-
-export function isKnownLanguage(key: string): key is LanguageKey {
-  return ["go", "java", "typescript"].includes(key);
-}
-
-export function detectProject(cwd: string): { language: LanguageKey; buildTool?: BuildTool } | null {
-  const fs = require("node:fs");
-  const path = require("node:path");
-
-  // Go
-  if (fs.existsSync(path.join(cwd, "go.mod"))) return { language: "go" as LanguageKey };
-
-  // Java (Maven)
-  if (fs.existsSync(path.join(cwd, "pom.xml"))) return { language: "java" as LanguageKey, buildTool: "maven" as BuildTool };
-
-  // Java (Gradle)
-  if (fs.existsSync(path.join(cwd, "build.gradle")) || fs.existsSync(path.join(cwd, "build.gradle.kts"))) {
-    return { language: "java" as LanguageKey, buildTool: "gradle" as BuildTool };
-  }
-
-  // TypeScript
-  if (fs.existsSync(path.join(cwd, "tsconfig.json"))) return { language: "typescript" as LanguageKey };
-
-  return null;
-}
-
 export interface DetectedProject {
   language: LanguageKey;
   buildTool?: BuildTool;
+}
+
+export function detectProject(cwd: string): DetectedProject | null {
+  // Go
+  if (existsSync(join(cwd, "go.mod"))) return { language: "go" };
+
+  // Java (Maven)
+  if (existsSync(join(cwd, "pom.xml"))) return { language: "java", buildTool: "maven" };
+
+  // Java (Gradle)
+  if (existsSync(join(cwd, "build.gradle")) || existsSync(join(cwd, "build.gradle.kts"))) {
+    return { language: "java", buildTool: "gradle" };
+  }
+
+  // TypeScript
+  if (existsSync(join(cwd, "tsconfig.json"))) return { language: "typescript" };
+
+  return null;
 }

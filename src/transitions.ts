@@ -2,6 +2,7 @@
 
 import type { LoopState, Phase, GateResult } from "./types";
 import { RETRY_PROMPTS, ADVANCE_PROMPTS, REPROMPT_KEYS } from "./constants";
+import { getPhaseMax } from "./phase-max";
 import type { RetryPromptType, AdvancePromptType } from "./constants";
 import * as GP from "./generic-prompts";
 
@@ -50,7 +51,7 @@ export function computeGateErrorTransition(
   state: LoopState,
   error: string,
 ): { state: LoopState; effect: TransitionEffect } {
-  const phase = state.phase as Phase;
+  const phase = state.phase;
   const max = getPhaseMax(state, phase);
   if (state.round >= max) {
     return {
@@ -120,7 +121,7 @@ function autoAdvanceToPhaseB(state: LoopState): { state: LoopState; effect: Tran
     state: { ...advanceToPhaseB(state), negotiateReprompted: false },
     effect: {
       type: "advance",
-      phase: "B" as Phase,
+      phase: "B",
       status: "Phase B — round 1",
       notify: "Advancing to Phase B without explicit proposal.",
       prompt: "cleaner_phase_c",
@@ -202,7 +203,7 @@ function handleDisputeFixIncomplete(
       state: clearDisputeMode(state),
       effect: {
         type: "retry",
-        phase: state.phase as Phase,
+        phase: state.phase,
         round: state.round + 1,
         status: `Phase ${state.phase} — round ${state.round + 1}`,
         notify: "compile failed after dispute fix.",
@@ -235,7 +236,7 @@ function handlePhaseBTransition(
         state: incrementRound(state),
         effect: {
           type: "retry",
-          phase: "B" as Phase,
+          phase: "B",
           round: state.round + 1,
           status: `Phase B — round ${state.round + 1}`,
           notify: GP.promptCoverageBelowThreshold(gate.coverage, state.coverageThreshold),
@@ -279,7 +280,7 @@ function incrementRound(state: LoopState): LoopState {
 function advanceToNegotiate(state: LoopState): LoopState {
   return {
     ...state,
-    phase: "negotiate" as Phase,
+    phase: "negotiate",
     round: 1,
     turnsThisPhase: 1,
     dispute: { status: "none" },
@@ -289,7 +290,7 @@ function advanceToNegotiate(state: LoopState): LoopState {
 function advanceToPhaseB(state: LoopState): LoopState {
   return {
     ...state,
-    phase: "B" as Phase,
+    phase: "B",
     round: 1,
     turnsThisPhase: 1,
     justTransitioned: true,
@@ -301,7 +302,7 @@ function advanceToPhaseB(state: LoopState): LoopState {
 function advanceToPhaseC(state: LoopState): LoopState {
   return {
     ...state,
-    phase: "C" as Phase,
+    phase: "C",
     round: 1,
     turnsThisPhase: 1,
     dispute: { status: "none" },
@@ -311,15 +312,15 @@ function advanceToPhaseC(state: LoopState): LoopState {
 function escalateTo(state: LoopState, fromPhase: string): LoopState {
   return {
     ...state,
-    phase: "escalated" as Phase,
-    lastPhase: state.phase as Phase,
+    phase: "escalated",
+    lastPhase: state.phase,
     turnsThisPhase: 1,
     dispute: { status: "none" },
   };
 }
 
 export function markDone(state: LoopState): LoopState {
-  return { ...state, phase: "done" as Phase, lastPhase: state.phase as Phase, turnsThisPhase: 1, dispute: { status: "none" } };
+  return { ...state, phase: "done", lastPhase: state.phase, turnsThisPhase: 1, dispute: { status: "none" } };
 }
 
 function clearDisputeMode(state: LoopState): LoopState {
@@ -332,7 +333,7 @@ function retryEffect(
   state: LoopState,
   prompt: RetryPromptType,
 ): TransitionEffect {
-  const phase = state.phase as Phase;
+  const phase = state.phase;
   const round = state.round + 1;
   return {
     type: "retry",
@@ -367,13 +368,3 @@ function escalatedEffect(phase: string): TransitionEffect {
   };
 }
 
-function getPhaseMax(state: LoopState, phase: string): number {
-  switch (phase) {
-    case "review": return state.maxNegotiate; // reuse maxNegotiate for review
-    case "A": return state.maxA;
-    case "negotiate": return state.maxNegotiate;
-    case "B": return state.maxB;
-    case "C": return state.maxC;
-    default: return 0;
-  }
-}
