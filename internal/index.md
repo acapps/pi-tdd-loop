@@ -8,6 +8,11 @@ Conventions for specs in this directory: [docs/spec-authoring.md](../docs/spec-a
 
 | Spec | Type | Status | Dependencies (hard → soft) |
 |---|---|---|---|
+| [loop-completion-report.md](loop-completion-report.md) | feature | **open** | Wire `src/metrics.ts` accumulation into the live loop; `formatReport` + `promptLoopReport` replace the one-line `promptLoopComplete`. |
+| [loop-config-file.md](loop-config-file.md) | feature | **open** | `loop.config.json` project-level defaults; `loadLoopConfig` + `mergeLoopArgs` in `selectors.ts`; CLI overrides config. |
+| [spec-format-validation.md](spec-format-validation.md) | feature | **open** | `validateSpecStructure` in `reviewer.ts`; structural findings (missing sections) prepended to heuristic findings; blocker severity. |
+| [spec-decomposition.md](spec-decomposition.md) | feature | **open** | `/loop-decompose` command; LLM-driven spec splitting into sub-specs; stateless (no loop state change). |
+| [loop-spec-patch-resume.md](loop-spec-patch-resume.md) | feature | **open** | `/loop-patch` command; re-read spec, reset round, record `loop-spec-patch` entry, send "spec was patched" prompt. |
 | [bug-dispute-reload-evaporation.md](done-bug-dispute-reload-evaporation.md) | bug | **done** (merged 2026-09-06) — 6 dispute flags → 1 `DisputeState` status object; `migrateDispute` in session-start; `clearTransientFlags` no longer touches dispute; budget at resolution not filing; 4 handlers rewritten; 19+ test flips across 8 files; 1170 tests passing. |
 | [bug-gate-green-stays-green.md](done-bug-gate-green-stays-green.md) | bug | **done** (merged 2026-09-06) — `makeGoCwd` fixture now writes `main.go` (buildable Go module); Writer prompt mandates `negotiate_propose` exit path for unpassable tests; "green stays green" live-toolchain regression added to `test/gate-signal-integrity.test.ts`. |
 | [bug-gate-slow-settle-duplicate.md](done-bug-gate-slow-settle-duplicate.md) | bug | **done** (merged 2026-09-06) — module-local `gateInFlight` lock in `handleGateTransition` (check + `try/finally` clear); duplicate settle returns the now-live `NO_GATE` sentinel; 3 regression tests (concurrent drop / no-wedge / wedge-on-throw) in `test/events/agent-settled/gate-transition.test.ts`, red-verified. |
