@@ -15,6 +15,7 @@ import { formatFailures } from "../../gates";
 import { archiveSpecFile } from "../../spec-archive";
 import { commitAndMerge, verifyMergeComplete, promptMergeConflict } from "../../git-workflow";
 import { sendPrompt } from "../../prompt";
+import { getLiveMetrics, finalize, formatReport, accumulatePhaseTransition } from "../../metrics";
 
 // --- Types ---
 
@@ -97,6 +98,9 @@ export function applyAdvanceEffect(input: EffectInput): EffectResult {
   state.turnsThisPhase = 1;
   debug(`Advance → ${effect.phase}`);
 
+  const metrics = getLiveMetrics();
+  if (metrics) accumulatePhaseTransition(metrics, effect.phase, state.round);
+
   ctx.ui.notify(effect.notify, "info");
   ctx.ui.setStatus("loop", effect.status);
   if (effect.phase === "C") {
@@ -138,9 +142,24 @@ export function applyDoneEffect(input: EffectInput): EffectResult {
 function reportDone(state: LoopState, effect: DoneEffect, pi: ExtensionAPI, ctx: EventCtx): void {
   ctx.ui.notify(effect.notify, "info");
   ctx.ui.setStatus("loop", effect.status);
+
+  // Build the completion report from live metrics
+  const metrics = getLiveMetrics();
+  let report: string;
+  if (metrics) {
+    const finalized = finalize(metrics, state.phase);
+    report = formatReport(finalized);
+  } else {
+    // Fallback: no metrics (shouldn't happen in production, but safe for tests)
+    const cleanerFailed = effect.status === "done (cleaner failed)";
+    report = cleanerFailed
+      ? `Loop complete — spec ${state.specPath}. Phase C failed; the original code is kept.`
+      : `Loop complete — spec ${state.specPath}. All phases passed the gate.`;
+  }
+
   sendPrompt(
     pi,
-    GP.promptLoopComplete(state.specPath, state.disputeCount, effect.status === "done (cleaner failed)"),
+    GP.promptLoopReport(report),
     state,
     () => {},
   );

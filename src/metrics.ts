@@ -1,7 +1,8 @@
 // --- Metrics ---
-// Scoreboard data types for golden/e2e comparison. (The live loop no longer
-// accumulates metrics; the golden and e2e harnesses type their fixtures
-// against the interfaces below.)
+// Scoreboard data types for golden/e2e comparison AND live-loop completion
+// reporting. The live loop accumulates metrics via a module-level instance
+// (see `liveMetrics` below); the golden and e2e harnesses build their own
+// from mock data.
 
 import type { FailingTest, LanguageKey, Phase } from "./types";
 
@@ -161,4 +162,61 @@ export function finalize(metrics: LoopMetrics, phase: string): LoopMetrics {
     result.durationMs = end - start;
   }
   return result;
+}
+
+// --- Live-loop metrics singleton ---
+
+let liveMetrics: LoopMetrics | null = null;
+
+/** Reset the live-loop metrics (called at /loop start). */
+export function initLiveMetrics(seed: MetricsSeed): void {
+  liveMetrics = createMetrics(seed);
+}
+
+/** Get the live-loop metrics (null if the loop hasn't started). */
+export function getLiveMetrics(): LoopMetrics | null {
+  return liveMetrics;
+}
+
+/** Clear the live-loop metrics (called at loop end). */
+export function clearLiveMetrics(): void {
+  liveMetrics = null;
+}
+
+// --- Report formatting ---
+
+function formatDuration(ms: number | undefined): string {
+  if (!ms || ms < 0) return "0s";
+  const totalSec = Math.floor(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
+/**
+ * Format a LoopMetrics object into a multi-line completion report.
+ */
+export function formatReport(m: LoopMetrics): string {
+  const cleanerFailed = m.finalPhase === "done" && m.failureDetails.length > 0;
+  const firstLine = cleanerFailed
+    ? `Loop complete (Phase C failed — original code kept) — spec ${m.specPath}`
+    : `Loop complete — spec ${m.specPath}`;
+
+  const a = m.roundsByPhase["A"] ?? 0;
+  const b = m.roundsByPhase["B"] ?? 0;
+  const c = m.roundsByPhase["C"] ?? 0;
+
+  const lines = [
+    firstLine,
+    `  Phases: A ${a} → B ${b} → C ${c}`,
+    `  Gates: ${m.gateRuns} runs, ${m.compileFails} compile fails, ${m.testFails} test fails`,
+    `  Coverage: ${m.finalCoverage}%`,
+    `  Disputes: ${m.disputesRaised} raised, ${m.disputesConceded} conceded, ${m.disputesDefended} defended`,
+    `  Duration: ${formatDuration(m.durationMs)}`,
+  ];
+
+  return lines.join("\n");
 }

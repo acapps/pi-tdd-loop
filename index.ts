@@ -62,6 +62,8 @@ export default function (pi: ExtensionAPI) {
   pi.registerCommand("loop-debug", Cmd.cmdDebug(state, debug));
   pi.registerCommand("loop-cancel", Cmd.cmdCancel(state, pi, debug));
   pi.registerCommand("loop-stop", Cmd.cmdStop(state, pi, debug));
+  pi.registerCommand("loop-patch", Cmd.cmdPatch(state, pi, debug));
+  pi.registerCommand("loop-decompose", Cmd.cmdDecompose(state, pi, debug));
 
   // =========================================================================
   // Tools

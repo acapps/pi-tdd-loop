@@ -9,6 +9,7 @@ import { getLanguageConfig } from "./languages";
 import { commit } from "./commit";
 import { sendPrompt } from "./prompt";
 import { startPhaseA } from "./phase-a";
+import { getLiveMetrics, accumulateDispute } from "./metrics";
 
 // --- Types ---
 
@@ -351,6 +352,8 @@ function handleBDisputePropose(
     claim: plan,
     filedRound: state.current.round,
   };
+  const metrics = getLiveMetrics();
+  if (metrics) accumulateDispute(metrics, "raised");
   debug(`Dispute filed: ${plan.slice(0, 60)}`);
 
   logDisputeEntry(state, pi, debug, plan);
@@ -494,8 +497,10 @@ function handleBDisputeReview(
   // value from filing — never re-derived (disputeMode no longer exists).
   state.current.disputeCount++;
   const filer = state.current.dispute?.filer ?? "writer";
+  const m = getLiveMetrics();
 
   if (isApproval(decision)) {
+    if (m) accumulateDispute(m, "conceded");
     // Table 2: row 1 (Writer filed) → Tester fixes the test; row 3 (Tester
     // filed) → Writer fixes the flagged file(s).
     if (state.current.disputeCount >= state.current.maxDispute) {
@@ -514,6 +519,7 @@ function handleBDisputeReview(
     logEscalation(state, pi, ctx, debug);
     return buildReviewResult(state.current.phase, decision);
   }
+  if (m) accumulateDispute(m, "defended");
   state.current.dispute = { ...state.current.dispute, status: "defended", decision };
   persistState(state, pi, debug);
   return buildReviewResult(state.current.phase, decision);

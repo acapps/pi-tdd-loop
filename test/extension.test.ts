@@ -164,11 +164,11 @@ function findEventHandler(
 // ================================================================
 
 describe("extension factory", () => {
-  it("registers all 9 commands", () => {
+  it("registers all 11 commands", () => {
     const api = buildTestAPI();
     extensionFactory(api);
 
-    expect(api.registeredCommands.length).toBe(9);
+    expect(api.registeredCommands.length).toBe(11);
     const names = api.registeredCommands.map((c) => c.name);
     expect(names).toContain("loop");
     expect(names).toContain("loop-approve");
@@ -178,6 +178,8 @@ describe("extension factory", () => {
     expect(names).toContain("loop-debug");
     expect(names).toContain("loop-cancel");
     expect(names).toContain("loop-stop");
+    expect(names).toContain("loop-patch");
+    expect(names).toContain("loop-decompose");
     expect(names).toContain("spec");
   });
 

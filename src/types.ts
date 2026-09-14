@@ -120,7 +120,8 @@ export type FindingCategory =
   | "Edge case missing"
   | "Underspecified behavior"
   | "Example-prose conflict"
-  | "Type contract gap";
+  | "Type contract gap"
+  | "Missing section";
 
 export interface Interpretation {
   label: string;

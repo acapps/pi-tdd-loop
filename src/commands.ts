@@ -4,7 +4,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { Phase, LoopState, LanguageKey, BuildTool, SpecAnalysis } from "./types";
 import { getWorkspaceRoot } from "./types";
 import type { DebugFn } from "./events";
-import { formatStatus, parseLoopArgs } from "./selectors";
+import { formatStatus, parseLoopArgs, loadLoopConfig, mergeLoopArgs, normalizeSpecPath } from "./selectors";
 import { getPhaseMax } from "./phase-max";
 import { formatFailures } from "./gates";
 import * as GP from "./generic-prompts";
@@ -16,6 +16,7 @@ import { slugBugName, extractLoopLogs, renderBugSpec, writeBugSpec } from "./bug
 import { commit } from "./commit";
 import { sendPrompt } from "./prompt";
 import { startPhaseA } from "./phase-a";
+import { initLiveMetrics, clearLiveMetrics } from "./metrics";
 
 // --- Types ---
 
@@ -108,6 +109,12 @@ function createInitialState(
   coverage: number | undefined,
   timeoutSec?: number,
   autoApprove?: boolean,
+  maxA?: number,
+  maxNegotiate?: number,
+  maxB?: number,
+  maxC?: number,
+  maxDispute?: number,
+  maxTurnsPerPhase?: number,
 ): LoopState {
   return {
     phase: "A",
@@ -115,12 +122,12 @@ function createInitialState(
     specPath,
     language,
     buildTool,
-    maxA: 3,
-    maxNegotiate: 3,
-    maxB: 5,
-    maxC: 3,
-    maxDispute: 3,
-    maxTurnsPerPhase: 5,
+    maxA: maxA ?? 3,
+    maxNegotiate: maxNegotiate ?? 3,
+    maxB: maxB ?? 5,
+    maxC: maxC ?? 3,
+    maxDispute: maxDispute ?? 3,
+    maxTurnsPerPhase: maxTurnsPerPhase ?? 5,
     coverageThreshold: coverage ?? 80,
     gateTimeoutSec: timeoutSec ?? 60,
     dispute: { status: "none" },
@@ -146,7 +153,9 @@ export function cmdLoop(
   return {
     description: "Start adversarial loop: [--language go|java|typescript] [--coverage N] [--branch [name]] <spec-path>",
     handler: async (args: string, ctx: CommandContext) => {
-      const { specPath, coverage, language: argLanguage, branch: branchArg, timeout: timeoutArg, autoApprove } = parseLoopArgs(args);
+      const cliArgs = parseLoopArgs(args);
+      const config = loadLoopConfig(ctx.cwd);
+      const { specPath, coverage, language: argLanguage, branch: branchArg, timeout: timeoutArg, autoApprove, maxA, maxNegotiate, maxB, maxC, maxDispute, maxTurnsPerPhase } = mergeLoopArgs(cliArgs, config);
       if (!specPath) {
         ctx.ui.notify(
           "Usage: /loop [--language go|java|typescript] [--coverage N] [--branch [name]] <spec-path>",
@@ -186,7 +195,8 @@ export function cmdLoop(
       );
       debug(`Phase 0 baseline: OK (${baseline.noTests ? "no existing tests" : "suite green"})`);
 
-      state.current = createInitialState(specPath, language, buildTool, coverage, timeoutArg, autoApprove);
+      state.current = createInitialState(specPath, language, buildTool, coverage, timeoutArg, autoApprove, maxA, maxNegotiate, maxB, maxC, maxDispute, maxTurnsPerPhase);
+      initLiveMetrics({ specPath, language, phase: "review" });
 
       // Git branch workflow (opt-in via --branch): create the feature branch
       // off the mainline before Phase 0. On failure the loop does not start.
@@ -576,6 +586,154 @@ export function cmdStop(
       );
       ctx.ui.setStatus("loop", `Stopped — Phase ${prevPhase} round ${round}`);
       debug(`Command: /loop-stop → phase ${prevPhase} → escalated`);
+    },
+  };
+}
+
+export function cmdPatch(
+  state: { current: LoopState },
+  pi: ExtensionAPI,
+  debug: DebugFn,
+) {
+  return {
+    description: "Patch the spec and restart from a phase: [spec-path] [--from <phase>]",
+    handler: async (args: string, ctx: CommandContext) => {
+      const parts = args.trim().split(/\s+/).filter(Boolean);
+      let specPath = state.current.specPath;
+      let fromPhase: Phase | undefined;
+
+      for (let i = 0; i < parts.length; i++) {
+        if (parts[i] === "--from" && i + 1 < parts.length) {
+          const target = parts[++i].trim().toLowerCase();
+          if (["a", "negotiate", "b", "c"].includes(target)) {
+            fromPhase = target === "negotiate" ? "negotiate" : (target.toUpperCase() as Phase);
+          } else {
+            ctx.ui.notify(`Invalid --from value: ${parts[i]}. Use A, negotiate, B, or C.`, "warning");
+            return;
+          }
+        } else if (!parts[i].startsWith("--")) {
+          specPath = normalizeSpecPath(parts[i]);
+        }
+      }
+
+      // Decision table
+      if (isIdleOrDone(state.current.phase)) {
+        ctx.ui.notify(
+          state.current.phase === "done"
+            ? "Loop is complete. Use /loop <spec> to start a new loop."
+            : "Loop is not running. Use /loop <spec> to start.",
+          "warning",
+        );
+        return;
+      }
+
+      const oldPhase = state.current.phase;
+      const targetPhase = fromPhase ?? (state.current.phase === "escalated" ? (state.current.lastPhase as Phase) : "A");
+
+      // Record the patch event
+      try {
+        pi.appendEntry("loop-spec-patch", {
+          specPath,
+          fromPhase: oldPhase,
+          toPhase: targetPhase,
+          ts: new Date().toISOString(),
+        });
+      } catch {
+        // Best-effort in print mode
+      }
+
+      // Mutate state
+      state.current.specPath = specPath;
+      state.current.phase = targetPhase;
+      state.current.lastPhase = oldPhase;
+      resetPhaseState(state.current);
+      state.current.justTransitioned = true;
+
+      commit(state.current, pi, debug);
+      ctx.ui.notify(`Spec patched. Restarting from Phase ${targetPhase}, round 1.`, "info");
+      ctx.ui.setStatus("loop", `Phase ${targetPhase} — round 1 (patched)`);
+      debug(`Command: /loop-patch → ${oldPhase} → ${targetPhase} (spec: ${specPath})`);
+
+      sendPrompt(
+        pi,
+        `The spec at ${specPath} has been patched. Re-read it carefully.\nRestarting from Phase ${targetPhase} (round 1).\nFocus on the changes — the previous tests/implementation may encode the old behavior.`,
+        state.current,
+        debug,
+      );
+    },
+  };
+}
+
+export function cmdDecompose(
+  state: { current: LoopState },
+  pi: ExtensionAPI,
+  debug: DebugFn,
+) {
+  return {
+    description: "Decompose a spec into sub-specs: <spec-path> [--out <dir>] [--prefix <slug>]",
+    handler: async (args: string, ctx: CommandContext) => {
+      const parts = args.trim().split(/\s+/).filter(Boolean);
+      let specPath = "";
+      let outDir = "internal";
+      let prefix = "";
+
+      for (let i = 0; i < parts.length; i++) {
+        if (parts[i] === "--out" && i + 1 < parts.length) {
+          outDir = parts[++i];
+        } else if (parts[i].startsWith("--out=")) {
+          outDir = parts[i].split("=").slice(1).join("=");
+        } else if (parts[i] === "--prefix" && i + 1 < parts.length) {
+          prefix = parts[++i];
+        } else if (parts[i].startsWith("--prefix=")) {
+          prefix = parts[i].split("=").slice(1).join("=");
+        } else if (!parts[i].startsWith("--")) {
+          specPath = normalizeSpecPath(parts[i]);
+        }
+      }
+
+      // Row 0: no args
+      if (!specPath) {
+        ctx.ui.notify("Usage: /loop-decompose <spec-path> [--out <dir>] [--prefix <slug>]", "warning");
+        return;
+      }
+
+      // Row 1: spec file not found
+      const { existsSync } = await import("node:fs");
+      const { resolve } = await import("node:path");
+      const fullSpecPath = resolve(ctx.cwd, specPath);
+      if (!existsSync(fullSpecPath)) {
+        ctx.ui.notify(`Spec not found: ${specPath}`, "error");
+        return;
+      }
+
+      // Derive prefix from spec filename if not given
+      if (!prefix) {
+        const basename = specPath.split("/").pop()?.replace(/\.md$/, "") ?? "spec";
+        prefix = basename.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+      }
+
+      // Row 2: build prompt and send
+      const prompt = `Read the spec at ${specPath}. Break it into independently-testable units.
+Each unit must:
+1. Be implementable and testable in a single /loop run
+2. Have a clear, self-contained scope (no "and other related things")
+3. Reference the parent spec and its position in the sequence
+4. Pass the spec template (all required sections present)
+
+Write each unit as ${outDir}/${prefix}-<N>.md.
+Write a summary at ${outDir}/${prefix}-index.md with the table above.
+
+Rules:
+- Maximum 5 units. If the spec needs more, group related endpoints/features.
+- Each unit's "Dependencies" section lists the units it depends on.
+- The last unit may be an "integration" unit that tests the whole system.
+- Do NOT modify the parent spec.`;
+
+      debug(`Command: /loop-decompose ${specPath} → ${outDir}/${prefix}-*`);
+      ctx.ui.notify(`Decomposing ${specPath} into ${outDir}/${prefix}-* ...`, "info");
+      ctx.ui.setStatus("loop", `decomposing: ${specPath}`);
+
+      sendPrompt(pi, prompt, state.current, debug);
     },
   };
 }

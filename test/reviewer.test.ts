@@ -9,6 +9,7 @@ import {
   formatAddendum,
   buildSummaryTable,
   readSpec,
+  validateSpecStructure,
 } from "../src/reviewer";
 import {
   type Finding,
@@ -641,6 +642,156 @@ Check if palindrome.
     const wellEdgeCases = wellResult.findings.filter(f => f.category === "Edge case missing");
     const underEdgeCases = underResult.findings.filter(f => f.category === "Edge case missing");
     expect(wellEdgeCases.length).toBeLessThan(underEdgeCases.length);
+  });
+});
+
+// ================================================================
+// validateSpecStructure
+// ================================================================
+
+function completeSpec(): string {
+  return [
+    "# implement-thing",
+    "",
+    "## Target",
+    "Do a thing.",
+    "",
+    "## Behavior",
+    "It works.",
+    "",
+    "## Inventory",
+    "- file.ts",
+    "",
+    "## Test Strategy",
+    "Unit tests.",
+    "",
+    "## Scope lines",
+    "- file.ts: kept",
+    "",
+    "## Acceptance Criteria",
+    "- tsc clean",
+    "",
+    "## Dependencies",
+    "None.",
+    "",
+    "## Findings log",
+    "(empty)",
+  ].join("\n");
+}
+
+describe("validateSpecStructure", () => {
+  it("returns [] for a complete spec", () => {
+    const result = validateSpecStructure(completeSpec());
+    expect(result).toEqual([]);
+  });
+
+  it("returns [] for empty text", () => {
+    expect(validateSpecStructure("")).toEqual([]);
+    expect(validateSpecStructure("   ")).toEqual([]);
+  });
+
+  it("detects missing title", () => {
+    const spec = "## Target\nDo a thing.\n## Behavior\nIt works.\n## Inventory\n- f\n## Test Strategy\nT\n## Scope lines\nS\n## Acceptance Criteria\nA\n## Dependencies\nNone.\n## Findings log\n(empty)";
+    const result = validateSpecStructure(spec);
+    expect(result.length).toBe(1);
+    expect(result[0].title).toBe("Missing title");
+  });
+
+  it("detects missing Target section", () => {
+    const spec = completeSpec().replace("## Target\nDo a thing.\n", "");
+    const result = validateSpecStructure(spec);
+    expect(result.length).toBe(1);
+    expect(result[0].title).toBe("Missing required section: Target");
+  });
+
+  it("detects missing Acceptance Criteria section", () => {
+    const spec = completeSpec().replace("## Acceptance Criteria\n- tsc clean\n", "");
+    const result = validateSpecStructure(spec);
+    expect(result.length).toBe(1);
+    expect(result[0].title).toBe("Missing required section: Acceptance Criteria");
+  });
+
+  it("detects multiple missing sections in order", () => {
+    const spec = "# title\n\n## Behavior\nIt works.\n## Findings log\n(empty)";
+    const result = validateSpecStructure(spec);
+    // Missing: Target, Inventory, Test Strategy, Scope lines, Acceptance Criteria, Dependencies
+    expect(result.length).toBe(6);
+    expect(result[0].title).toBe("Missing required section: Target");
+    expect(result[1].title).toBe("Missing required section: Inventory");
+    expect(result[2].title).toBe("Missing required section: Test Strategy");
+    expect(result[3].title).toBe("Missing required section: Scope lines");
+    expect(result[4].title).toBe("Missing required section: Acceptance Criteria");
+    expect(result[5].title).toBe("Missing required section: Dependencies");
+  });
+
+  it("matches headers case-insensitively", () => {
+    const spec = completeSpec().replace("## Target", "## target");
+    const result = validateSpecStructure(spec);
+    expect(result.find(f => f.title.includes("Target"))).toBeUndefined();
+  });
+
+  it("does NOT match '##Target' (no space)", () => {
+    const spec = completeSpec().replace("## Target", "##Target");
+    const result = validateSpecStructure(spec);
+    expect(result.find(f => f.title.includes("Target"))).toBeDefined();
+  });
+
+  it("does NOT count headers inside code blocks", () => {
+    const spec = completeSpec().replace("## Target", "```\n## Target\n```");
+    const result = validateSpecStructure(spec);
+    expect(result.find(f => f.title.includes("Target"))).toBeDefined();
+  });
+
+  it("all findings have category 'Missing section' and empty interpretations", () => {
+    const result = validateSpecStructure("# t\n");
+    for (const f of result) {
+      expect(f.category).toBe("Missing section");
+      expect(f.interpretations).toEqual([]);
+    }
+  });
+
+  it("produces 9 findings for a spec with no sections", () => {
+    const result = validateSpecStructure("just some text with no headers");
+    // Missing title + 8 H2 sections = 9
+    expect(result.length).toBe(9);
+  });
+});
+
+// ================================================================
+// analyzeSpec — structural + heuristic integration
+// ================================================================
+
+describe("analyzeSpec — structural integration", () => {
+  it("prepends structural findings before heuristic findings", () => {
+    // Spec with a vague phrase but missing sections
+    const spec = "# implement-thing\n\nDo it properly.\n";
+    const result = analyzeSpec(spec);
+    // First findings should be structural (missing sections)
+    const structural = result.findings.filter(f => f.category === "Missing section");
+    const heuristic = result.findings.filter(f => f.category !== "Missing section");
+    expect(structural.length).toBeGreaterThan(0);
+    expect(heuristic.length).toBeGreaterThan(0);
+    // Structural findings come first
+    const firstStructuralIdx = result.findings.findIndex(f => f.category === "Missing section");
+    const firstHeuristicIdx = result.findings.findIndex(f => f.category !== "Missing section");
+    expect(firstStructuralIdx).toBeLessThan(firstHeuristicIdx);
+  });
+
+  it("complete spec with vague phrase has only heuristic findings", () => {
+    const spec = completeSpec().replace("Do a thing.", "Do it properly.");
+    const result = analyzeSpec(spec);
+    const structural = result.findings.filter(f => f.category === "Missing section");
+    expect(structural.length).toBe(0);
+    const vague = result.findings.find(f => f.category === "Ambiguous phrase");
+    expect(vague).toBeDefined();
+  });
+
+  it("finding ids are sequential across structural and heuristic", () => {
+    const spec = "# t\n\nDo it properly.\n";
+    const result = analyzeSpec(spec);
+    for (let i = 0; i < result.findings.length; i++) {
+      expect(result.findings[i].id).toBe(i + 1);
+    }
   });
 });
 

@@ -409,7 +409,8 @@ describe("Phase C", () => {
     expect(ctx.ui.notify).toHaveBeenCalledWith("Phase C failed, keeping original code. Loop complete.", "info");
     expect(ctx.ui.setStatus).toHaveBeenCalledWith("loop", "done (cleaner failed)");
     expect(pi.sentMessages).toHaveLength(1);
-    expect(pi.sentMessages[0].content).toBe(GP.promptLoopComplete("spec.md", 0, true));
+    expect(pi.sentMessages[0].content).toContain("Loop complete");
+    expect(pi.sentMessages[0].content).toContain("Phase C failed");
     expect(pi.sentMessages[0].options).toEqual({ deliverAs: "followUp" });
   });
 
@@ -425,7 +426,8 @@ describe("Phase C", () => {
     expect(ctx.ui.notify).toHaveBeenCalledWith("All phases complete.", "info");
     expect(ctx.ui.setStatus).toHaveBeenCalledWith("loop", "done");
     expect(pi.sentMessages).toHaveLength(1);
-    expect(pi.sentMessages[0].content).toBe(GP.promptLoopComplete("spec.md", 0, false));
+    expect(pi.sentMessages[0].content).toContain("Loop complete");
+    expect(pi.sentMessages[0].content).toContain("spec.md");
     expect(pi.sentMessages[0].options).toEqual({ deliverAs: "followUp" });
   });
 });

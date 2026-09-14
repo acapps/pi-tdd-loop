@@ -87,7 +87,7 @@ const ENTRY_PATH = path.join(ROOT, "index.ts");
 // `pi.registerCommand("spec", ...)` line are the only spec-command changes to
 // index.ts. The registration-block diagnostic guard
 // below still enforces the registration-surface invariant.
-const ENTRY_SHA256 = "eab61a3a65a375d76990cc8ad7399af289d603102d9f01d6ad5cd9677f25002a";
+const ENTRY_SHA256 = "a2ce1a492855b9ae4d28ccd8a9dd1cc34adeec0a647da17d1865f6722da4f90b";
 
 // F3 sweep needle (built to keep this file clean).
 const NEEDLE = new RegExp("events" + String.raw`\.ts`);

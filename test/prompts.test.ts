@@ -97,35 +97,19 @@ describe("Negotiate prompts (language-agnostic)", () => {
   });
 });
 
-describe("promptLoopComplete (spec 10)", () => {
-  it("clean-finish branch: exact string with interpolated specPath and disputes", () => {
-    expect(GP.promptLoopComplete("internal/07.md", 2, false)).toBe(
-      "Loop complete — spec internal/07.md. All phases passed the gate. Disputes raised: 2.",
-    );
+describe("promptLoopReport (spec 10)", () => {
+  it("returns the report string as-is", () => {
+    const report = "Loop complete — spec internal/07.md\n  Phases: A 1 → B 2 → C 1";
+    expect(GP.promptLoopReport(report)).toBe(report);
   });
 
-  it("clean-finish branch: zero disputes reads as a count, not a flag", () => {
-    expect(GP.promptLoopComplete("spec.md", 0, false)).toBe(
-      "Loop complete — spec spec.md. All phases passed the gate. Disputes raised: 0.",
-    );
+  it("handles empty report", () => {
+    expect(GP.promptLoopReport("")).toBe("");
   });
 
-  it("Phase-C-failed branch: exact string with interpolated specPath and disputes", () => {
-    expect(GP.promptLoopComplete("internal/07.md", 2, true)).toBe(
-      "Loop complete — spec internal/07.md. Phase C failed; the original code is kept. Disputes raised: 2.",
-    );
-  });
-
-  it("Phase-C-failed branch: zero disputes", () => {
-    expect(GP.promptLoopComplete("spec.md", 0, true)).toBe(
-      "Loop complete — spec spec.md. Phase C failed; the original code is kept. Disputes raised: 0.",
-    );
-  });
-
-  it("single-character spec path interpolates verbatim", () => {
-    expect(GP.promptLoopComplete("a.md", 1, false)).toBe(
-      "Loop complete — spec a.md. All phases passed the gate. Disputes raised: 1.",
-    );
+  it("handles multi-line report", () => {
+    const report = "Loop complete — spec spec.md\n  Gates: 3 runs, 1 compile fails, 0 test fails\n  Duration: 2m 30s";
+    expect(GP.promptLoopReport(report)).toBe(report);
   });
 });
 

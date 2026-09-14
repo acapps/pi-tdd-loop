@@ -13,6 +13,7 @@ import { handleNegotiateSettled } from "./negotiate";
 import { handleGateTransition } from "./gate-transition";
 import { verifyBranchMerge } from "./effect-applicator";
 import { commit } from "../../commit";
+import { getLiveMetrics, accumulateTurn } from "../../metrics";
 
 // --- Types ---
 
@@ -40,6 +41,8 @@ function checkLoopEscalation(
   debug: (msg: string) => void,
 ): boolean {
   state.current.turnsThisPhase = (state.current.turnsThisPhase || 0) + 1;
+  const metrics = getLiveMetrics();
+  if (metrics) accumulateTurn(metrics, state.current.phase);
   const maxTurns = state.current.maxTurnsPerPhase || 5;
   if (state.current.turnsThisPhase <= maxTurns) {
     // No commit here: the single commit point is the end of handlePhaseSettled,

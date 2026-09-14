@@ -12,6 +12,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { EventCtx } from "../index";
 import type { LanguageConfig } from "../../languages";
 import { runGates } from "../../gates";
+import { getLiveMetrics, accumulateGate } from "../../metrics";
 import * as T from "../../transitions";
 import { applyEffect } from "./effect-applicator";
 
@@ -71,6 +72,15 @@ export async function handleGateTransition(
     const outcome = await runGates(gateCwd, coverageThreshold, language, buildTool, phase, gateTimeoutSec);
 
     const gate = outcome.kind === "result" ? outcome.result! : null;
+
+    // Accumulate gate metrics for the completion report
+    if (gate) {
+      const metrics = getLiveMetrics();
+      if (metrics) {
+        accumulateGate(metrics, { compile: gate.compile, allPassed: gate.allPassed, coverage: gate.coverage, failures: gate.failures });
+      }
+    }
+
     const transition = gate
       ? T.computeTransition(state, gate)
       : T.computeGateErrorTransition(state, outcome.error ?? "gate tool could not run");

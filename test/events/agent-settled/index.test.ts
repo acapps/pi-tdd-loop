@@ -553,7 +553,8 @@ describe("step 9 — gate (replaces state.current, sets lastGateResult, G2/G3)",
     expect(input.state.current.phase).toBe("done");
     expect(input.state.current.lastGateResult).toBeDefined();
     expect(pi.sentMessages).toHaveLength(1);
-    expect(pi.sentMessages[0].content).toBe(GP.promptLoopComplete("spec.md", 0, false));
+    expect(pi.sentMessages[0].content).toContain("Loop complete");
+    expect(pi.sentMessages[0].content).toContain("spec.md");
     expect(pi.sentMessages[0].options).toEqual({ deliverAs: "followUp" });
   });
 

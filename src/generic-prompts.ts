@@ -17,15 +17,8 @@ Do NOT write files. Tester reviews via negotiate_review.`;
 
 // Spec 10: the run's last word — delivered by applyDoneEffect into the
 // conversation transcript (the toast/status bar stay as-is).
-export function promptLoopComplete(
-  specPath: string,
-  disputes: number,
-  cleanerFailed: boolean,
-): string {
-  if (cleanerFailed) {
-    return `Loop complete — spec ${specPath}. Phase C failed; the original code is kept. Disputes raised: ${disputes}.`;
-  }
-  return `Loop complete — spec ${specPath}. All phases passed the gate. Disputes raised: ${disputes}.`;
+export function promptLoopReport(report: string): string {
+  return report;
 }
 
 export function promptNegotiateProposalForReview(plan: string): string {

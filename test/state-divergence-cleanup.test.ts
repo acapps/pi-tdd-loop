@@ -61,7 +61,6 @@ describe("dead module files deleted", () => {
     "test/state-factory.test.ts",
     "test/state-migration.test.ts",
     "test/transient-flags.test.ts",
-    "test/metrics.test.ts",
     "test/make-state-helper.test.ts",
   ])("%s does not exist", (p) => {
     expect(existsSync(resolve(ROOT, p))).toBe(false);

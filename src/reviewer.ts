@@ -79,12 +79,81 @@ function getRunnerValidationCommand(language: LanguageKey): string {
 
 /**
  * Analyze a spec document and return structured findings.
- * Each finding surfaces an ambiguity, missing edge case, or underspecified behavior.
+ * Structural findings (missing sections) come first, then heuristic findings.
  * Phase 0 always activates — every spec benefits from review.
  */
 export function analyzeSpec(specText: string): SpecAnalysis {
-  const findings = findIssues(specText);
+  const structural = validateSpecStructure(specText);
+  const heuristic = findIssues(specText);
+  // Re-number: structural findings get ids 1..N, heuristic findings continue
+  const findings: Finding[] = [];
+  let id = 0;
+  for (const f of structural) {
+    findings.push({ ...f, id: ++id });
+  }
+  for (const f of heuristic) {
+    findings.push({ ...f, id: ++id });
+  }
   return { findings, reasons: ["Phase 0 is the baseline"] };
+}
+
+// --- Structural validation ---
+
+const REQUIRED_SECTIONS = [
+  "Target",
+  "Behavior",
+  "Inventory",
+  "Test Strategy",
+  "Scope lines",
+  "Acceptance Criteria",
+  "Dependencies",
+  "Findings log",
+] as const;
+
+/**
+ * Check that the spec contains the required section headers.
+ * Returns one finding per missing section (title + H2s).
+ * Empty text returns [] (let findIssues handle it).
+ */
+export function validateSpecStructure(specText: string): Omit<Finding, "id">[] {
+  if (!specText.trim()) return [];
+
+  const findings: Omit<Finding, "id">[] = [];
+
+  // Strip code blocks so headers inside ``` are not counted
+  const stripped = specText.replace(/```[\s\S]*?```/g, "");
+  const lines = stripped.split("\n");
+
+  // Check title: first non-empty line must start with "# "
+  const firstLine = lines.find(l => l.trim().length > 0) ?? "";
+  if (!firstLine.trimStart().startsWith("# ")) {
+    findings.push({
+      category: "Missing section",
+      title: "Missing title",
+      ambiguity: "The spec does not start with a '# ' title line. The template requires it.",
+      interpretations: [],
+      recommendation: "Add a '# <verb>-<object>' title line at the top of the spec.",
+    });
+  }
+
+  // Check each required H2 section (case-insensitive)
+  for (const section of REQUIRED_SECTIONS) {
+    const found = lines.some(line => {
+      const trimmed = line.trim();
+      return trimmed.toLowerCase() === `## ${section.toLowerCase()}`;
+    });
+    if (!found) {
+      findings.push({
+        category: "Missing section",
+        title: `Missing required section: ${section}`,
+        ambiguity: `The spec does not contain a '${section}' section. The template requires it.`,
+        interpretations: [],
+        recommendation: `Add a '## ${section}' section to the spec.`,
+      });
+    }
+  }
+
+  return findings;
 }
 
 /**
