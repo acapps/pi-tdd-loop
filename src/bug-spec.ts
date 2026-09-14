@@ -60,44 +60,51 @@ function entryTs(
  */
 export function extractLoopLogs(entries: unknown[]): string[] {
   return entries
-    .filter((raw): raw is Record<string, unknown> => {
-      if (raw == null || typeof raw !== "object") return false;
-      const e = raw as Record<string, unknown>;
-      return (
-        e["type"] === "custom" &&
-        (EMITTED_TYPES as readonly string[]).includes(e["customType"] as string)
-      );
-    })
+    .filter(isEmittedTypeEntry)
     .map((e) => {
       const payload = entryPayload(e);
       const ts = entryTs(e, payload);
-      switch (e["customType"]) {
-        case "loop-debug":
-          return `[${ts}] [debug] ${payload["msg"]}`;
-        case "loop-state":
-          return `[${ts}] [state] phase=${payload["phase"]} round=${payload["round"]}`;
-        case "loop-refusal":
-          return payload["path"] != null
-            ? `[${ts}] [refusal] ${payload["phase"]}: blocked write to ${payload["path"]}`
-            : `[${ts}] [refusal] ${payload["phase"]}: blocked ${payload["tool"]}`;
-        case "loop-negotiate":
-          return `[${ts}] [negotiate] ${payload["action"]}: ${String(
-            payload["text"] ?? "",
-          ).slice(0, 80)}`;
-        case "loop-dispute":
-          if (payload["claim"] != null) {
-            return `[${ts}] [dispute] #${payload["disputeCount"]}: ${String(
-              payload["claim"],
-            ).slice(0, 80)}`;
-          }
-          if (payload["action"] != null) {
-            return `[${ts}] [dispute] ${payload["action"]}`;
-          }
-          return `[${ts}] [dispute] ${JSON.stringify(payload).slice(0, 100)}`;
-        default:
-          return ""; // unreachable — the filter admits only the 5 emitted types
-      }
+      return formatEmittedEntry(e["customType"] as string, ts, payload);
     });
+}
+
+function isEmittedTypeEntry(raw: unknown): raw is Record<string, unknown> {
+  if (raw == null || typeof raw !== "object") return false;
+  const e = raw as Record<string, unknown>;
+  return (
+    e["type"] === "custom" &&
+    (EMITTED_TYPES as readonly string[]).includes(e["customType"] as string)
+  );
+}
+
+/** One formatted line for an emitted-type payload (formats pinned in the spec). */
+function formatEmittedEntry(customType: string, ts: string, payload: Record<string, unknown>): string {
+  switch (customType) {
+    case "loop-debug":
+      return `[${ts}] [debug] ${payload["msg"]}`;
+    case "loop-state":
+      return `[${ts}] [state] phase=${payload["phase"]} round=${payload["round"]}`;
+    case "loop-refusal":
+      return payload["path"] != null
+        ? `[${ts}] [refusal] ${payload["phase"]}: blocked write to ${payload["path"]}`
+        : `[${ts}] [refusal] ${payload["phase"]}: blocked ${payload["tool"]}`;
+    case "loop-negotiate":
+      return `[${ts}] [negotiate] ${payload["action"]}: ${String(
+        payload["text"] ?? "",
+      ).slice(0, 80)}`;
+    case "loop-dispute":
+      if (payload["claim"] != null) {
+        return `[${ts}] [dispute] #${payload["disputeCount"]}: ${String(
+          payload["claim"],
+        ).slice(0, 80)}`;
+      }
+      if (payload["action"] != null) {
+        return `[${ts}] [dispute] ${payload["action"]}`;
+      }
+      return `[${ts}] [dispute] ${JSON.stringify(payload).slice(0, 100)}`;
+    default:
+      return ""; // unreachable — the filter admits only the 5 emitted types
+  }
 }
 
 export interface BugSpecInput {

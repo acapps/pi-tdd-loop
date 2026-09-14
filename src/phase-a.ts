@@ -17,6 +17,18 @@ interface PhaseACtx {
   };
 }
 
+/**
+ * The Phase-0 → Phase-A field writes. Shared by every entry point that
+ * starts Phase A (startPhaseA, the Phase 0 auto-approve in review.ts) so
+ * the field set can never drift.
+ */
+export function applyPhaseAFields(s: LoopState): void {
+  s.phase = "A";
+  s.round = 1;
+  s.awaitingReview = false;
+  s.turnsThisPhase = 1;
+}
+
 export function startPhaseA(
   state: { current: LoopState },
   pi: ExtensionAPI,
@@ -25,10 +37,7 @@ export function startPhaseA(
 ): void {
   debug("Phase 0 approve → Phase A, round 1");
   const s = state.current;
-  s.phase = "A";
-  s.round = 1;
-  s.awaitingReview = false;
-  s.turnsThisPhase = 1;
+  applyPhaseAFields(s);
 
   const lang = getLanguageConfig(s.language);
   ctx.ui.notify("Spec review approved. Phase A: Tester writes contract.", "info");

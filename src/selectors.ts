@@ -2,7 +2,9 @@
 
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { homedir } from "node:os";
 import { formatFailures } from "./gates";
+import { parseTokens } from "./args";
 import type { LoopState } from "./types";
 
 // --- Format status for UI ---
@@ -70,42 +72,15 @@ export interface LoopArgs {
 }
 
 export function parseLoopArgs(args: string): LoopArgs {
-  const parts = args.trim().split(/\s+/);
-  const flags: Record<string, string | undefined> = {};
-  const positional: string[] = [];
-
-  for (let i = 0; i < parts.length; i++) {
-    const part = parts[i];
-    if (part === "--coverage" && i + 1 < parts.length) {
-      flags.coverage = parts[++i];
-    } else if (part.startsWith("--coverage=")) {
-      flags.coverage = part.split("=")[1];
-    } else if (part === "--language" && i + 1 < parts.length) {
-      flags.language = parts[++i];
-    } else if (part.startsWith("--language=")) {
-      flags.language = part.split("=")[1];
-    } else if (part === "--branch" && i + 1 < parts.length) {
-      flags.branch = parts[++i];
-    } else if (part.startsWith("--branch=")) {
-      flags.branch = part.split("=").slice(1).join("=");
-    } else if (part === "--timeout" && i + 1 < parts.length) {
-      flags.timeout = parts[++i];
-    } else if (part.startsWith("--timeout=")) {
-      flags.timeout = part.split("=")[1];
-    } else if (part === "--no-auto-approve") {
-      flags.noAutoApprove = "true";
-    } else if (!part.startsWith("--")) {
-      positional.push(part);
-    }
-  }
+  const { flags, positional } = parseTokens(args, new Set(["no-auto-approve"]));
 
   return {
     specPath: normalizeSpecPath(positional[0] ?? ""),
-    coverage: flags.coverage !== undefined ? parseFloat(flags.coverage) : undefined,
-    language: flags.language,
-    branch: flags.branch,
-    timeout: flags.timeout !== undefined ? parseInt(flags.timeout, 10) : undefined,
-    autoApprove: flags.noAutoApprove === "true" ? false : true,
+    coverage: flags.get("coverage") !== undefined ? parseFloat(flags.get("coverage")!) : undefined,
+    language: flags.get("language"),
+    branch: flags.has("branch") ? (flags.get("branch") ?? "") : undefined,
+    timeout: flags.get("timeout") !== undefined ? parseInt(flags.get("timeout")!, 10) : undefined,
+    autoApprove: flags.has("no-auto-approve") ? false : true,
   };
 }
 
@@ -116,8 +91,7 @@ export function normalizeSpecPath(specPath: string): string {
     specPath = specPath.slice(1);
   }
   if (specPath.startsWith("~")) {
-    const os = require("node:os");
-    specPath = specPath.replace("~", os.homedir());
+    specPath = specPath.replace("~", homedir());
   }
   return specPath;
 }

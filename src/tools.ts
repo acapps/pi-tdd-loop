@@ -290,6 +290,31 @@ function handlePropose(
   }
 }
 
+function handleReview(
+  state: StateRef,
+  pi: ExtensionAPI,
+  debug: Debug,
+  ctx: ToolCtx,
+  decision: string,
+): ToolResult {
+  const phase = state.current.phase;
+  debug(`negotiate_review: decision=${decision.slice(0, 80)}... phase=${phase}`);
+
+  switch (REVIEW_POLICY[phase]) {
+    case "negotiate":
+      return handleNegotiateReview(state, pi, debug, ctx, decision);
+    case "dispute":
+      return handleBDisputeReview(state, pi, debug, ctx, decision);
+    case "phase0":
+      if (isApproval(decision)) {
+        return executePhase0Approve(state, pi, ctx, debug);
+      }
+      return executePhase0Feedback(state, pi, ctx, debug, decision);
+    case "reject":
+      return executeReject(state, pi, debug, "negotiate_review", REVIEW_REJECT_TEXT);
+  }
+}
+
 function handleNegotiatePropose(
   state: StateRef,
   pi: ExtensionAPI,
@@ -417,31 +442,6 @@ export function negotiateReview(
       return handleReview(state, pi, debug, toolCtx, args.decision);
     },
   };
-}
-
-function handleReview(
-  state: StateRef,
-  pi: ExtensionAPI,
-  debug: Debug,
-  ctx: ToolCtx,
-  decision: string,
-): ToolResult {
-  const phase = state.current.phase;
-  debug(`negotiate_review: decision=${decision.slice(0, 80)}... phase=${phase}`);
-
-  switch (REVIEW_POLICY[phase]) {
-    case "negotiate":
-      return handleNegotiateReview(state, pi, debug, ctx, decision);
-    case "dispute":
-      return handleBDisputeReview(state, pi, debug, ctx, decision);
-    case "phase0":
-      if (isApproval(decision)) {
-        return executePhase0Approve(state, pi, ctx, debug);
-      }
-      return executePhase0Feedback(state, pi, ctx, debug, decision);
-    case "reject":
-      return executeReject(state, pi, debug, "negotiate_review", REVIEW_REJECT_TEXT);
-  }
 }
 
 function handleNegotiateReview(

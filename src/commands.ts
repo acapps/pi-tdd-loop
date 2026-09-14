@@ -5,6 +5,8 @@ import type { Phase, LoopState, LanguageKey, BuildTool, SpecAnalysis } from "./t
 import { getWorkspaceRoot } from "./types";
 import type { DebugFn } from "./events";
 import { formatStatus, parseLoopArgs, loadLoopConfig, mergeLoopArgs, normalizeSpecPath } from "./selectors";
+import { parseTokens } from "./args";
+import { resolveExistingSpec } from "./spec-path";
 import { getPhaseMax } from "./phase-max";
 import { formatFailures } from "./gates";
 import * as GP from "./generic-prompts";
@@ -143,7 +145,88 @@ function createInitialState(
   };
 }
 
-// --- Commands ---
+// --- /loop ---
+
+interface LoopStartArgs {
+  specPath: string;
+  coverage?: number;
+  language?: string;
+  branch?: string;
+  timeout?: number;
+  autoApprove?: boolean;
+  maxA?: number;
+  maxNegotiate?: number;
+  maxB?: number;
+  maxC?: number;
+  maxDispute?: number;
+  maxTurnsPerPhase?: number;
+}
+
+/**
+ * Golden projects: the baseline runs in the workspace root, not ctx.cwd.
+ * Self-refactor: workspaceRoot is "." → same as ctx.cwd.
+ */
+function resolveProjectCwd(specPath: string, cwd: string): string {
+  const ws = getWorkspaceRoot(specPath);
+  return ws === "." ? cwd : ws;
+}
+
+/**
+ * Phase 0 baseline: the existing test suite must be green (or absent)
+ * before the loop starts. On failure the loop does not start.
+ */
+function runPhase0Baseline(
+  projectCwd: string,
+  language: LanguageKey,
+  buildTool: BuildTool,
+  ctx: CommandContext,
+  debug: DebugFn,
+): boolean {
+  const baseline = runBaseline(projectCwd, language, buildTool);
+  if (!baseline.ok) {
+    rejectLoopStart(ctx, debug, baseline);
+    return false;
+  }
+  ctx.ui.notify(
+    baseline.noTests
+      ? "Baseline: no existing tests — starting from a clean slate."
+      : "Baseline: existing test suite is green.",
+    "info",
+  );
+  debug(`Phase 0 baseline: OK (${baseline.noTests ? "no existing tests" : "suite green"})`);
+  return true;
+}
+
+/**
+ * Git branch workflow (opt-in via --branch): create the feature branch off
+ * the mainline before Phase 0. Returns false when setup failed — the loop
+ * does not start. `--branch` with no value → default name from the spec path.
+ */
+async function applyBranchSetup(
+  state: { current: LoopState },
+  ctx: CommandContext,
+  debug: DebugFn,
+  cwd: string,
+  specPath: string,
+  branchArg: string,
+): Promise<boolean> {
+  const setup = await setupBranch(cwd, specPath, branchArg || undefined);
+  if (setup.kind === "error") {
+    ctx.ui.notify(`Branch setup failed: ${setup.error}`, "error");
+    ctx.ui.setStatus("loop", "branch setup failed — loop not started");
+    debug(`--branch setup: FAIL (${setup.error})`);
+    return false;
+  }
+  state.current.branch = setup.branch;
+  ctx.ui.notify(
+    `Branch: created '${setup.branch.name}' off '${setup.branch.base}'. The loop will merge it back on completion.`,
+    "info",
+  );
+  debug(`--branch setup: OK (${setup.branch.name} off ${setup.branch.base})`);
+  return true;
+}
+
+/** Phase 0: Spec Review (always runs) — enter the review phase and prompt. */
 
 export function cmdLoop(
   state: { current: LoopState },
@@ -158,8 +241,8 @@ export function cmdLoop(
       for (const w of config.warnings) {
         ctx.ui.notify(w, "warning");
       }
-      const { specPath, coverage, language: argLanguage, branch: branchArg, timeout: timeoutArg, autoApprove, maxA, maxNegotiate, maxB, maxC, maxDispute, maxTurnsPerPhase } = mergeLoopArgs(cliArgs, config.args);
-      if (!specPath) {
+      const merged = mergeLoopArgs(cliArgs, config.args);
+      if (!merged.specPath) {
         ctx.ui.notify(
           "Usage: /loop [--language go|java|typescript] [--coverage N] [--branch [name]] <spec-path>",
           "warning",
@@ -168,71 +251,52 @@ export function cmdLoop(
       }
 
       // Validate spec file exists
-      const specText = R.readSpec(specPath, ctx.cwd);
+      const specText = R.readSpec(merged.specPath, ctx.cwd);
       if (specText === null) {
-        ctx.ui.notify(`Spec file not found: ${specPath}`, "error");
+        ctx.ui.notify(`Spec file not found: ${merged.specPath}`, "error");
         return;
       }
 
-      // Golden projects: detect and run baseline in the workspace root,
-      // not ctx.cwd. Self-refactor: workspaceRoot is "." → same as ctx.cwd.
-      const projectCwd = getWorkspaceRoot(specPath);
-      const detected = detectProject(projectCwd === "." ? ctx.cwd : projectCwd);
-      const language = (argLanguage || detected?.language || "go") as LanguageKey;
+      const projectCwd = resolveProjectCwd(merged.specPath, ctx.cwd);
+      const detected = detectProject(projectCwd);
+      const language = (merged.language || detected?.language || "go") as LanguageKey;
       const buildTool = (detected?.buildTool || "maven") as BuildTool;
+      if (!runPhase0Baseline(projectCwd, language, buildTool, ctx, debug)) return;
 
-      // Phase 0 baseline: the existing test suite must be green (or absent)
-      // before the loop starts. On failure, state stays idle — the loop
-      // does not start.
-      const baselineCwd = projectCwd === "." ? ctx.cwd : projectCwd;
-      const baseline = runBaseline(baselineCwd, language, buildTool);
-      if (!baseline.ok) {
-        rejectLoopStart(ctx, debug, baseline);
-        return;
-      }
-      ctx.ui.notify(
-        baseline.noTests
-          ? "Baseline: no existing tests — starting from a clean slate."
-          : "Baseline: existing test suite is green.",
-        "info",
+      state.current = createInitialState(
+        merged.specPath, language, buildTool, merged.coverage, merged.timeout,
+        merged.autoApprove, merged.maxA, merged.maxNegotiate, merged.maxB,
+        merged.maxC, merged.maxDispute, merged.maxTurnsPerPhase,
       );
-      debug(`Phase 0 baseline: OK (${baseline.noTests ? "no existing tests" : "suite green"})`);
+      initLiveMetrics({ specPath: merged.specPath, language, phase: "review" });
 
-      state.current = createInitialState(specPath, language, buildTool, coverage, timeoutArg, autoApprove, maxA, maxNegotiate, maxB, maxC, maxDispute, maxTurnsPerPhase);
-      initLiveMetrics({ specPath, language, phase: "review" });
-
-      // Git branch workflow (opt-in via --branch): create the feature branch
-      // off the mainline before Phase 0. On failure the loop does not start.
-      // `--branch` with no value → default name derived from the spec path.
-      if (branchArg !== undefined) {
-        const setup = await setupBranch(ctx.cwd, specPath, branchArg || undefined);
-        if (setup.kind === "error") {
-          ctx.ui.notify(`Branch setup failed: ${setup.error}`, "error");
-          ctx.ui.setStatus("loop", "branch setup failed — loop not started");
-          debug(`--branch setup: FAIL (${setup.error})`);
-          return;
-        }
-        applyBranchSetup(state, ctx, debug, setup.branch);
+      if (merged.branch !== undefined) {
+        if (!await applyBranchSetup(state, ctx, debug, ctx.cwd, merged.specPath, merged.branch)) return;
       }
 
-      // Phase 0: Spec Review (always runs)
-      const analysis = R.analyzeSpec(specText);
-      debug(`Phase 0: reviewing spec (${analysis.findings.length} findings)`);
-      state.current.phase = "review";
-      state.current.specFindings = analysis.findings;
-      state.current.awaitingReview = true;
-
-      const reviewPrompt = buildPhaseZeroPrompt(specText, analysis);
-      ctx.ui.notify(
-        `Phase 0: Review findings before starting.`,
-        "info",
-      );
-      ctx.ui.setStatus("loop", "Phase 0 — review pending");
-      commit(state.current, pi, debug);
-      sendPrompt(pi, reviewPrompt, state.current, debug);
-      return;
+      enterPhase0Review(state, pi, ctx, debug, specText);
     },
   };
+}
+
+function enterPhase0Review(
+  state: { current: LoopState },
+  pi: ExtensionAPI,
+  ctx: CommandContext,
+  debug: DebugFn,
+  specText: string,
+): void {
+  const analysis = R.analyzeSpec(specText);
+  debug(`Phase 0: reviewing spec (${analysis.findings.length} findings)`);
+  state.current.phase = "review";
+  state.current.specFindings = analysis.findings;
+  state.current.awaitingReview = true;
+
+  const reviewPrompt = buildPhaseZeroPrompt(specText, analysis);
+  ctx.ui.notify("Phase 0: Review findings before starting.", "info");
+  ctx.ui.setStatus("loop", "Phase 0 — review pending");
+  commit(state.current, pi, debug);
+  sendPrompt(pi, reviewPrompt, state.current, debug);
 }
 
 function rejectLoopStart(
@@ -247,20 +311,6 @@ function rejectLoopStart(
   );
   ctx.ui.setStatus("loop", "baseline failed — fix the test suite, then re-run /loop");
   debug(`Phase 0 baseline: FAIL (${baseline.failures.length} failing) — loop not started`);
-}
-
-function applyBranchSetup(
-  state: { current: LoopState },
-  ctx: CommandContext,
-  debug: DebugFn,
-  branch: { name: string; base: string; merged: boolean },
-): void {
-  state.current.branch = branch;
-  ctx.ui.notify(
-    `Branch: created '${branch.name}' off '${branch.base}'. The loop will merge it back on completion.`,
-    "info",
-  );
-  debug(`--branch setup: OK (${branch.name} off ${branch.base})`);
 }
 
 function buildPhaseZeroPrompt(specText: string, analysis: SpecAnalysis): string {
@@ -474,7 +524,15 @@ function runLogBug(
     lines: extractLoopLogs(ctx.sessionManager.getEntries()),
     now: new Date(),
   });
-  const result = writeBugSpec(ctx.cwd, slug, markdown);
+  notifyBugSpecResult(ctx, debug, writeBugSpec(ctx.cwd, slug, markdown), slug);
+}
+
+function notifyBugSpecResult(
+  ctx: CommandContext,
+  debug: DebugFn,
+  result: ReturnType<typeof writeBugSpec>,
+  slug: string,
+): void {
   if (result.ok) {
     debug(`log-bug: wrote ${result.path}`);
     ctx.ui.notify(
@@ -484,16 +542,10 @@ function runLogBug(
     return;
   }
   if (result.reason === "exists") {
-    ctx.ui.notify(
-      `bug-fix-${slug}.md already exists. Pick a different name.`,
-      "error",
-    );
+    ctx.ui.notify(`bug-fix-${slug}.md already exists. Pick a different name.`, "error");
     return;
   }
-  ctx.ui.notify(
-    `Failed to write bug-fix-${slug}.md: ${result.message}`,
-    "error",
-  );
+  ctx.ui.notify(`Failed to write bug-fix-${slug}.md: ${result.message}`, "error");
 }
 
 interface SessionEntry {
@@ -593,6 +645,41 @@ export function cmdStop(
   };
 }
 
+// --- /loop-patch ---
+
+interface PatchArgs {
+  specPath: string;
+  fromPhase?: Phase;
+  invalidFrom?: string;
+}
+
+function parsePatchArgs(args: string, currentSpecPath: string): PatchArgs {
+  const { flags, positional } = parseTokens(args);
+  let specPath = currentSpecPath;
+  if (positional.length > 0) {
+    specPath = normalizeSpecPath(positional[positional.length - 1]);
+  }
+
+  let fromPhase: Phase | undefined;
+  let invalidFrom: string | undefined;
+  if (flags.has("from")) {
+    const target = (flags.get("from") ?? "").trim().toLowerCase();
+    if (["a", "negotiate", "b", "c"].includes(target)) {
+      fromPhase = target === "negotiate" ? "negotiate" : (target.toUpperCase() as Phase);
+    } else {
+      invalidFrom = flags.get("from") ?? "";
+    }
+  }
+
+  return { specPath, fromPhase, invalidFrom };
+}
+
+function resolvePatchTargetPhase(state: { current: LoopState }, fromPhase: Phase | undefined): Phase {
+  if (fromPhase) return fromPhase;
+  if (state.current.phase === "escalated") return state.current.lastPhase;
+  return "A";
+}
+
 export function cmdPatch(
   state: { current: LoopState },
   pi: ExtensionAPI,
@@ -601,22 +688,10 @@ export function cmdPatch(
   return {
     description: "Patch the spec and restart from a phase: [spec-path] [--from <phase>]",
     handler: async (args: string, ctx: CommandContext) => {
-      const parts = args.trim().split(/\s+/).filter(Boolean);
-      let specPath = state.current.specPath;
-      let fromPhase: Phase | undefined;
-
-      for (let i = 0; i < parts.length; i++) {
-        if (parts[i] === "--from" && i + 1 < parts.length) {
-          const target = parts[++i].trim().toLowerCase();
-          if (["a", "negotiate", "b", "c"].includes(target)) {
-            fromPhase = target === "negotiate" ? "negotiate" : (target.toUpperCase() as Phase);
-          } else {
-            ctx.ui.notify(`Invalid --from value: ${parts[i]}. Use A, negotiate, B, or C.`, "warning");
-            return;
-          }
-        } else if (!parts[i].startsWith("--")) {
-          specPath = normalizeSpecPath(parts[i]);
-        }
+      const parsed = parsePatchArgs(args, state.current.specPath);
+      if (parsed.invalidFrom !== undefined) {
+        ctx.ui.notify(`Invalid --from value: ${parsed.invalidFrom}. Use A, negotiate, B, or C.`, "warning");
+        return;
       }
 
       // Decision table
@@ -631,21 +706,18 @@ export function cmdPatch(
       }
 
       // Validate spec file exists
-      const { existsSync } = await import("node:fs");
-      const { resolve } = await import("node:path");
-      const fullSpecPath = resolve(ctx.cwd, specPath);
-      if (!existsSync(fullSpecPath)) {
-        ctx.ui.notify(`Spec file not found: ${specPath}`, "error");
+      if (resolveExistingSpec(parsed.specPath, ctx.cwd) === null) {
+        ctx.ui.notify(`Spec file not found: ${parsed.specPath}`, "error");
         return;
       }
 
       const oldPhase = state.current.phase;
-      const targetPhase = fromPhase ?? (state.current.phase === "escalated" ? (state.current.lastPhase as Phase) : "A");
+      const targetPhase = resolvePatchTargetPhase(state, parsed.fromPhase);
 
       // Record the patch event
       try {
         pi.appendEntry("loop-spec-patch", {
-          specPath,
+          specPath: parsed.specPath,
           fromPhase: oldPhase,
           toPhase: targetPhase,
           ts: new Date().toISOString(),
@@ -655,7 +727,7 @@ export function cmdPatch(
       }
 
       // Mutate state
-      state.current.specPath = specPath;
+      state.current.specPath = parsed.specPath;
       state.current.phase = targetPhase;
       state.current.lastPhase = oldPhase;
       resetPhaseState(state.current);
@@ -664,11 +736,11 @@ export function cmdPatch(
       commit(state.current, pi, debug);
       ctx.ui.notify(`Spec patched. Restarting from Phase ${targetPhase}, round 1.`, "info");
       ctx.ui.setStatus("loop", `Phase ${targetPhase} — round 1 (patched)`);
-      debug(`Command: /loop-patch → ${oldPhase} → ${targetPhase} (spec: ${specPath})`);
+      debug(`Command: /loop-patch → ${oldPhase} → ${targetPhase} (spec: ${parsed.specPath})`);
 
       sendPrompt(
         pi,
-        `The spec at ${specPath} has been patched. Re-read it carefully.\nRestarting from Phase ${targetPhase} (round 1).\nFocus on the changes — the previous tests/implementation may encode the old behavior.`,
+        `The spec at ${parsed.specPath} has been patched. Re-read it carefully.\nRestarting from Phase ${targetPhase} (round 1).\nFocus on the changes — the previous tests/implementation may encode the old behavior.`,
         state.current,
         debug,
       );
@@ -676,56 +748,30 @@ export function cmdPatch(
   };
 }
 
-export function cmdDecompose(
-  state: { current: LoopState },
-  pi: ExtensionAPI,
-  debug: DebugFn,
-) {
+// --- /loop-decompose ---
+
+interface DecomposeArgs {
+  specPath: string;
+  outDir: string;
+  prefix: string;
+}
+
+function parseDecomposeArgs(args: string): DecomposeArgs {
+  const { flags, positional } = parseTokens(args);
   return {
-    description: "Decompose a spec into sub-specs: <spec-path> [--out <dir>] [--prefix <slug>]",
-    handler: async (args: string, ctx: CommandContext) => {
-      const parts = args.trim().split(/\s+/).filter(Boolean);
-      let specPath = "";
-      let outDir = "internal";
-      let prefix = "";
+    specPath: normalizeSpecPath(positional[0] ?? ""),
+    outDir: flags.get("out") ?? "internal",
+    prefix: flags.get("prefix") ?? "",
+  };
+}
 
-      for (let i = 0; i < parts.length; i++) {
-        if (parts[i] === "--out" && i + 1 < parts.length) {
-          outDir = parts[++i];
-        } else if (parts[i].startsWith("--out=")) {
-          outDir = parts[i].split("=").slice(1).join("=");
-        } else if (parts[i] === "--prefix" && i + 1 < parts.length) {
-          prefix = parts[++i];
-        } else if (parts[i].startsWith("--prefix=")) {
-          prefix = parts[i].split("=").slice(1).join("=");
-        } else if (!parts[i].startsWith("--")) {
-          specPath = normalizeSpecPath(parts[i]);
-        }
-      }
+function derivePrefix(specPath: string): string {
+  const basename = specPath.split("/").pop()?.replace(/\.md$/, "") ?? "spec";
+  return basename.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+}
 
-      // Row 0: no args
-      if (!specPath) {
-        ctx.ui.notify("Usage: /loop-decompose <spec-path> [--out <dir>] [--prefix <slug>]", "warning");
-        return;
-      }
-
-      // Row 1: spec file not found
-      const { existsSync } = await import("node:fs");
-      const { resolve } = await import("node:path");
-      const fullSpecPath = resolve(ctx.cwd, specPath);
-      if (!existsSync(fullSpecPath)) {
-        ctx.ui.notify(`Spec not found: ${specPath}`, "error");
-        return;
-      }
-
-      // Derive prefix from spec filename if not given
-      if (!prefix) {
-        const basename = specPath.split("/").pop()?.replace(/\.md$/, "") ?? "spec";
-        prefix = basename.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
-      }
-
-      // Row 2: build prompt and send
-      const prompt = `Read the spec at ${specPath}. Break it into independently-testable units.
+function buildDecomposePrompt(specPath: string, outDir: string, prefix: string): string {
+  return `Read the spec at ${specPath}. Break it into independently-testable units.
 Each unit must:
 1. Be implementable and testable in a single /loop run
 2. Have a clear, self-contained scope (no "and other related things")
@@ -740,12 +786,39 @@ Rules:
 - Each unit's "Dependencies" section lists the units it depends on.
 - The last unit may be an "integration" unit that tests the whole system.
 - Do NOT modify the parent spec.`;
+}
 
-      debug(`Command: /loop-decompose ${specPath} → ${outDir}/${prefix}-*`);
-      ctx.ui.notify(`Decomposing ${specPath} into ${outDir}/${prefix}-* ...`, "info");
-      ctx.ui.setStatus("loop", `decomposing: ${specPath}`);
+export function cmdDecompose(
+  state: { current: LoopState },
+  pi: ExtensionAPI,
+  debug: DebugFn,
+) {
+  return {
+    description: "Decompose a spec into sub-specs: <spec-path> [--out <dir>] [--prefix <slug>]",
+    handler: async (args: string, ctx: CommandContext) => {
+      const parsed = parseDecomposeArgs(args);
 
-      sendPrompt(pi, prompt, state.current, debug);
+      // Row 0: no args
+      if (!parsed.specPath) {
+        ctx.ui.notify("Usage: /loop-decompose <spec-path> [--out <dir>] [--prefix <slug>]", "warning");
+        return;
+      }
+
+      // Row 1: spec file not found
+      if (resolveExistingSpec(parsed.specPath, ctx.cwd) === null) {
+        ctx.ui.notify(`Spec not found: ${parsed.specPath}`, "error");
+        return;
+      }
+
+      // Derive prefix from spec filename if not given
+      const prefix = parsed.prefix || derivePrefix(parsed.specPath);
+
+      // Row 2: build prompt and send
+      debug(`Command: /loop-decompose ${parsed.specPath} → ${parsed.outDir}/${prefix}-*`);
+      ctx.ui.notify(`Decomposing ${parsed.specPath} into ${parsed.outDir}/${prefix}-* ...`, "info");
+      ctx.ui.setStatus("loop", `decomposing: ${parsed.specPath}`);
+
+      sendPrompt(pi, buildDecomposePrompt(parsed.specPath, parsed.outDir, prefix), state.current, debug);
     },
   };
 }

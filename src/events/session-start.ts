@@ -129,9 +129,21 @@ export function handleSessionStart(input: SessionStartHandlerInput): void {
     return;
   }
 
-  // Call site 2 (refactor-state-model-divergence.md): validate the restored
-  // entry; on failure quarantine — do NOT load the broken state.
-  const raw = entry.data as Record<string, unknown>;
+  restoreState(state, ctx, debug, entry.data);
+}
+
+/**
+ * Validate, migrate and load the restored loop-state entry.
+ * On validation failure: quarantine — do NOT load the broken state
+ * (call site 2, refactor-state-model-divergence.md).
+ */
+function restoreState(
+  state: { current: LoopState },
+  ctx: EventCtx,
+  debug: (msg: string) => void,
+  data: unknown,
+): void {
+  const raw = data as Record<string, unknown>;
   if (!validateLoopState(raw)) {
     quarantine(ctx, debug);
     return;

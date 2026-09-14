@@ -95,8 +95,13 @@ export function validationErrors(data: unknown): string[] {
   if (!isPlainObject(data)) {
     return ["not an object"];
   }
+  checkShape(errors, data);
+  checkInvariants(errors, data);
+  return errors;
+}
 
-  // --- Shape check ---
+/** Shape check: enums + the flat field specs. */
+function checkShape(errors: string[], data: Record<string, unknown>): void {
   checkEnum(errors, "phase", data.phase, PHASES as readonly string[]);
   checkEnum(errors, "language", data.language, LANGUAGES as readonly string[]);
   checkEnum(errors, "buildTool", data.buildTool, BUILD_TOOLS as readonly string[]);
@@ -105,7 +110,28 @@ export function validationErrors(data: unknown): string[] {
     checkField(errors, data, field, spec);
   }
 
-  // --- Invariant check (the live machine's actual invariants) ---
+  // Optional nested field: lastGateResult must be an object when present.
+  const gate = data.lastGateResult;
+  if (gate !== undefined && gate !== null && typeof gate !== "object") {
+    errors.push("field lastGateResult must be an object");
+  }
+
+  // Dispute lifecycle (bug-dispute-reload-evaporation): optional at the
+  // shape level — pre-fix entries carry no `dispute` object (the session-start
+  // migration synthesizes it); when present it must be an object whose status
+  // is one of the 6 lifecycle members.
+  const dispute = data.dispute;
+  if (dispute !== undefined && dispute !== null) {
+    if (typeof dispute !== "object" || Array.isArray(dispute)) {
+      errors.push("field dispute must be an object");
+    } else {
+      checkEnum(errors, "dispute.status", (dispute as Record<string, unknown>).status, ["none", "filed", "in-review", "conceded", "defended", "closed"]);
+    }
+  }
+}
+
+/** Invariant check: the live state machine's actual invariants. */
+function checkInvariants(errors: string[], data: Record<string, unknown>): void {
   const phase = data.phase as Phase;
   const round = typeof data.round === "number" ? data.round : NaN;
   const turns = typeof data.turnsThisPhase === "number" ? data.turnsThisPhase : NaN;
@@ -129,27 +155,6 @@ export function validationErrors(data: unknown): string[] {
   if (!(Number.isNaN(disputeCount) || Number.isNaN(maxDispute)) && disputeCount > maxDispute) {
     errors.push(`disputeCount must be <= maxDispute (got ${disputeCount} > ${maxDispute})`);
   }
-
-  // Optional nested field: lastGateResult must be an object when present.
-  const gate = data.lastGateResult;
-  if (gate !== undefined && gate !== null && typeof gate !== "object") {
-    errors.push("field lastGateResult must be an object");
-  }
-
-  // Dispute lifecycle (bug-dispute-reload-evaporation): optional at the
-  // shape level — pre-fix entries carry no `dispute` object (the session-start
-  // migration synthesizes it); when present it must be an object whose status
-  // is one of the 6 lifecycle members.
-  const dispute = data.dispute;
-  if (dispute !== undefined && dispute !== null) {
-    if (typeof dispute !== "object" || Array.isArray(dispute)) {
-      errors.push("field dispute must be an object");
-    } else {
-      checkEnum(errors, "dispute.status", (dispute as Record<string, unknown>).status, ["none", "filed", "in-review", "conceded", "defended", "closed"]);
-    }
-  }
-
-  return errors;
 }
 
 // turnsThisPhase floors: >= 0 everywhere; >= 1 in the active phases

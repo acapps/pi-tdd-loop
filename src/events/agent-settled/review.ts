@@ -11,6 +11,7 @@ import type { EventCtx } from "../index";
 import type { LanguageConfig } from "../../languages";
 import { commit } from "../../commit";
 import { sendPrompt } from "../../prompt";
+import { applyPhaseAFields } from "../../phase-a";
 
 // --- Types ---
 
@@ -36,48 +37,59 @@ export function handleReviewSettled(
 
   // Row 2: --no-auto-approve → always wait for human.
   if (state.current.autoApprove === false) {
-    debug("Phase 0 review: auto-approve disabled, awaiting human /loop-approve");
-    ctx.ui.notify("Phase 0: Review findings. Use /loop-approve to proceed.", "info");
-    ctx.ui.setStatus("loop", "Phase 0 — review pending");
-    commit(state.current, pi, debug);
-    return { handled: true };
+    return awaitHuman(input, "auto-approve disabled", "Phase 0: Review findings. Use /loop-approve to proceed.", "Phase 0 — review pending");
   }
 
   // Row 3: feedback was recorded → wait for human.
   if (state.current.lastProposal) {
-    debug("Phase 0 review: feedback recorded, awaiting human /loop-approve");
-    ctx.ui.notify("Phase 0: Feedback recorded. Use /loop-approve to proceed.", "info");
-    ctx.ui.setStatus("loop", "Phase 0 — review pending");
-    commit(state.current, pi, debug);
-    return { handled: true };
+    return awaitHuman(input, "feedback recorded", "Phase 0: Feedback recorded. Use /loop-approve to proceed.", "Phase 0 — review pending");
   }
 
   // Row 4: dispute is pending → wait for human.
   const disputeStatus = state.current.dispute?.status;
   if (disputeStatus === "filed" || disputeStatus === "in-review") {
-    debug("Phase 0 review: dispute pending, awaiting human /loop-approve");
-    ctx.ui.notify("Phase 0: Dispute pending. Use /loop-approve to proceed.", "info");
-    ctx.ui.setStatus("loop", "Phase 0 — review pending");
-    commit(state.current, pi, debug);
-    return { handled: true };
+    return awaitHuman(input, "dispute pending", "Phase 0: Dispute pending. Use /loop-approve to proceed.", "Phase 0 — review pending");
   }
 
   // Row 4b: blocker findings present → wait for human.
   const blockers = (state.current.specFindings ?? []).filter(f => f.severity === "blocker");
   if (blockers.length > 0) {
-    debug(`Phase 0 review: ${blockers.length} blocker finding(s), awaiting human /loop-approve`);
-    ctx.ui.notify(`Phase 0: ${blockers.length} blocker finding(s). Use /loop-approve to proceed or fix the spec.`, "info");
-    ctx.ui.setStatus("loop", "Phase 0 — review pending (blockers)");
-    commit(state.current, pi, debug);
-    return { handled: true };
+    return awaitHuman(
+      input,
+      `${blockers.length} blocker finding(s)`,
+      `Phase 0: ${blockers.length} blocker finding(s). Use /loop-approve to proceed or fix the spec.`,
+      "Phase 0 — review pending (blockers)",
+    );
   }
 
   // Row 5: clean review, auto-approve on → advance to Phase A.
+  autoApproveToPhaseA(input, lang);
+  return { handled: true };
+}
+
+/**
+ * The "wait for human /loop-approve" outcome: notify + status + persist.
+ * One shared shape for every pending row (2, 3, 4, 4b).
+ */
+function awaitHuman(
+  input: ReviewHandlerInput,
+  reason: string,
+  notifyMessage: string,
+  statusText: string,
+): ReviewHandlerOutput {
+  const { state, pi, ctx, debug } = input;
+  debug(`Phase 0 review: ${reason}, awaiting human /loop-approve`);
+  ctx.ui.notify(notifyMessage, "info");
+  ctx.ui.setStatus("loop", statusText);
+  commit(state.current, pi, debug);
+  return { handled: true };
+}
+
+/** Row 5: clean review with auto-approve → Phase A, round 1. */
+function autoApproveToPhaseA(input: ReviewHandlerInput, lang: LanguageConfig): void {
+  const { state, pi, ctx, debug } = input;
   debug("Phase 0 auto-approve → Phase A, round 1");
-  state.current.phase = "A";
-  state.current.round = 1;
-  state.current.awaitingReview = false;
-  state.current.turnsThisPhase = 1;
+  applyPhaseAFields(state.current);
 
   ctx.ui.notify("Phase 0: Clean review — auto-advancing to Phase A.", "info");
   ctx.ui.setStatus("loop", "Phase A — round 1");
@@ -90,5 +102,4 @@ export function handleReviewSettled(
     state.current,
     debug,
   );
-  return { handled: true };
 }

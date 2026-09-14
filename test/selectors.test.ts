@@ -172,6 +172,32 @@ describe("parseLoopArgs", () => {
     expect(result.language).toBe("java");
     expect(result.autoApprove).toBe(false);
   });
+
+  it("bare --coverage at end → undefined (not NaN)", () => {
+    const result = parseLoopArgs("spec.md --coverage");
+    expect(result.coverage).toBeUndefined();
+  });
+
+  it("bare --timeout at end → undefined (not NaN)", () => {
+    const result = parseLoopArgs("spec.md --timeout");
+    expect(result.timeout).toBeUndefined();
+  });
+
+  it("bare --branch at end → empty string (default name)", () => {
+    const result = parseLoopArgs("spec.md --branch");
+    expect(result.branch).toBe("");
+  });
+
+  it("--branch=feat/x → value preserved", () => {
+    const result = parseLoopArgs("spec.md --branch=feat/x");
+    expect(result.branch).toBe("feat/x");
+  });
+
+  it("--branch --coverage 90 → branch bare, coverage gets value", () => {
+    const result = parseLoopArgs("spec.md --branch --coverage 90");
+    expect(result.branch).toBe("");
+    expect(result.coverage).toBe(90);
+  });
 });
 
 // ================================================================
