@@ -33,14 +33,15 @@ src/commands.ts
 ### Target Structure
 
 ```
+src/state-helpers.ts  — resetPhaseState, isIdleOrDone, resolvePhaseArg
+                        (shared by loop, status, lifecycle, patch)
 src/commands/
 ├── index.ts          — re-exports all cmd* functions (public API unchanged)
 ├── loop.ts           — cmdLoop + helpers (resolveProjectCwd, runPhase0Baseline,
 │                       applyBranchSetup, enterPhase0Review, rejectLoopStart,
-│                       buildPhaseZeroPrompt, createInitialState, resetPhaseState,
-│                       resolvePhaseArg)
+│                       buildPhaseZeroPrompt, createInitialState)
 ├── status.ts         — cmdStatus, cmdContinue, cmdRestart + helpers
-│                       (isIdleOrDone, formatStatusLines, handlePhaseRestart,
+│                       (formatStatusLines, handlePhaseRestart,
 │                       buildContinuePrompt, buildRestartPrompt)
 ├── debug.ts          — cmdDebug + log-bug sub-command (parseLogBugArgs,
 │                       showDebugLog, runLogBug, notifyBugSpecResult,
@@ -55,19 +56,23 @@ src/commands/
 ### Module Dependencies
 
 ```
-src/commands/index.ts  →  re-exports from loop, status, debug, lifecycle, patch, decompose
-src/commands/loop.ts   →  types, selectors, args, spec-path, phase-max, gates,
-                          generic-prompts, reviewer, baseline, git-workflow,
-                          languages, commit, prompt, phase-a, metrics
-src/commands/status.ts →  types, generic-prompts, phase-max
-src/commands/debug.ts  →  types, bug-spec
-src/commands/lifecycle.ts → types, phase-a, commit, prompt, generic-prompts
-src/commands/patch.ts  →  types, args, spec-path, commit, prompt, selectors
+src/state-helpers.ts     →  types (leaf; resetPhaseState, isIdleOrDone, resolvePhaseArg)
+src/commands/index.ts    →  re-exports from loop, status, debug, lifecycle, patch, decompose
+src/commands/loop.ts     →  types, selectors, args, spec-path, phase-max, gates,
+                            generic-prompts, reviewer, baseline, git-workflow,
+                            languages, commit, prompt, phase-a, metrics,
+                            state-helpers
+src/commands/status.ts   →  types, generic-prompts, phase-max, state-helpers
+src/commands/debug.ts    →  types, bug-spec
+src/commands/lifecycle.ts → types, phase-a, commit, prompt, generic-prompts,
+                            state-helpers
+src/commands/patch.ts    →  types, args, spec-path, commit, prompt, selectors,
+                            state-helpers
 src/commands/decompose.ts → types, args, spec-path, prompt, selectors
 ```
 
 No circular dependencies: each module imports only from leaf modules (types,
-selectors, etc.) and never from sibling command modules.
+selectors, state-helpers, etc.) and never from sibling command modules.
 
 ## Inventory
 
@@ -81,12 +86,15 @@ selectors, etc.) and never from sibling command modules.
 | `src/commands/lifecycle.ts` | **Create** — cmdCancel/cmdApprove/cmdStop (~60 lines) |
 | `src/commands/patch.ts` | **Create** — cmdPatch + helpers (~100 lines) |
 | `src/commands/decompose.ts` | **Create** — cmdDecompose + helpers (~50 lines) |
-| `index.ts` | **Modify** — change import from `./src/commands` to `./src/commands` (path unchanged, directory module) |
+| `src/state-helpers.ts` | **Create** — `resetPhaseState`, `isIdleOrDone`, `resolvePhaseArg` (shared by loop, status, lifecycle, patch) |
+| `index.ts` | **Verify** — import path unchanged (directory resolution) |
+| `src/tools.ts` | **Modify** — update comment at line 187 (`src/commands.ts` → `src/commands/`) |
+| `test/state-validation.test.ts` | **Modify** — update comment at line 20 (`commands.ts` → `src/state-helpers.ts`) |
 | `test/extension.test.ts` | **Verify** — command count and registration unchanged |
-| `test/patch.test.ts` | **Modify** — import path if needed |
-| `test/decompose.test.ts` | **Modify** — import path if needed |
-| `test/state-divergence-cleanup.test.ts` | **Modify** — file list if it references `src/commands.ts` |
-| `test/events/registration-surface.test.ts` | **Verify** — SHA-256 hash of `index.ts` (should be unchanged) |
+| `test/patch.test.ts` | **Verify** — import path if needed |
+| `test/decompose.test.ts` | **Verify** — import path if needed |
+| `test/state-divergence-cleanup.test.ts` | **Verify** — does not list `src/commands.ts` in existence lists (confirmed 2026-09-10) |
+| `test/events/registration-surface.test.ts` | **Verify** — SHA-256 hash of root `index.ts` (unchanged) |
 
 ## Test Strategy
 
@@ -96,20 +104,39 @@ selectors, etc.) and never from sibling command modules.
 4. Run `npx tsc --noEmit` to verify no broken imports.
 5. Run `npx vitest run` — all 1340 tests must pass.
 
+## Scope lines
+
+| Touched file | Removed | Kept | Added |
+|---|---|---|---|
+| `src/commands.ts` | All 824 lines | — (file deleted) | — |
+| `src/commands/index.ts` | — | — | Re-exports of all 10 `cmd*` functions |
+| `src/commands/loop.ts` | — | `cmdLoop` + helpers (moved verbatim) | Import statements |
+| `src/commands/status.ts` | — | `cmdStatus`/`cmdContinue`/`cmdRestart` + helpers (moved verbatim) | Import statements |
+| `src/commands/debug.ts` | — | `cmdDebug` + log-bug helpers (moved verbatim) | Import statements |
+| `src/commands/lifecycle.ts` | — | `cmdCancel`/`cmdApprove`/`cmdStop` (moved verbatim) | Import statements |
+| `src/commands/patch.ts` | — | `cmdPatch` + helpers (moved verbatim) | Import statements |
+| `src/commands/decompose.ts` | — | `cmdDecompose` + helpers (moved verbatim) | Import statements |
+| `src/state-helpers.ts` | — | — | `resetPhaseState`, `isIdleOrDone`, `resolvePhaseArg` (extracted from commands.ts) |
+| `index.ts` | — | `import * as Cmd from "./src/commands"` (unchanged) | — |
+| `src/tools.ts` | — | — | Update comment at line 187: `src/commands.ts` → `src/commands/` |
+| `test/state-validation.test.ts` | — | — | Update comment at line 20: `commands.ts` → `src/state-helpers.ts` |
+
 ## Scope
 
-- **IN:** File split, import path updates, test fixture path updates.
+- **IN:** File split, import path updates, comment reference updates.
 - **OUT:** Changing any command's behavior, adding new commands, changing the public API.
 
 ## Acceptance Criteria
 
 1. `src/commands.ts` no longer exists.
-2. `src/commands/index.ts` re-exports all 10 `cmd*` functions.
-3. Each command module is under 200 lines.
-4. `index.ts` (root) imports `* as Cmd from "./src/commands"` — unchanged.
-5. `npx tsc --noEmit` passes.
-6. `npx vitest run` — all tests pass.
-7. No new dependencies introduced.
+2. `grep -rn "commands\.ts" src/ test/ --include="*.ts"` returns 0 hits (no stale textual references).
+3. `grep -rn "from.*['\"]\.\.?/commands['\"]" src/ test/ --include="*.ts"` returns 0 hits (no old import paths).
+4. `src/commands/index.ts` re-exports all 10 `cmd*` functions.
+5. Each command module is under 200 lines.
+6. `index.ts` (root) imports `* as Cmd from "./src/commands"` — unchanged.
+7. `npx tsc --noEmit` passes.
+8. `npx vitest run` — all tests pass.
+9. No new dependencies introduced.
 
 ## Dependencies
 
@@ -119,9 +146,12 @@ None. Pure refactor.
 
 - The `cmdDebug` + log-bug sub-command (~120 lines) is the largest extraction
   candidate and has the least coupling to other commands.
-- `cmdLoop` helpers (`createInitialState`, `resetPhaseState`, `resolvePhaseArg`)
-  are also used by `cmdPatch` — they should live in a shared location
-  (`src/commands/loop.ts` exports them, `src/commands/patch.ts` imports them).
-  Alternatively, move them to `src/types.ts` or a new `src/state-helpers.ts`.
+- `resetPhaseState`, `isIdleOrDone`, and `resolvePhaseArg` are used by multiple
+  command modules (loop, status, lifecycle, patch). They are extracted to
+  `src/state-helpers.ts` (leaf module, imports only `types`) to avoid
+  sibling-command imports.
 - The `SessionEntry` interface and `DEBUG_LOG_TYPES` constant are only used by
   the debug/log-bug code — they move to `src/commands/debug.ts`.
+- Two stale textual references to `src/commands.ts` exist outside the file:
+  `src/tools.ts:187` (comment) and `test/state-validation.test.ts:20` (comment).
+  Both must be updated. Acceptance criterion #2 (grep sweep) catches any others.
