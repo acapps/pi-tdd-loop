@@ -8,6 +8,8 @@ Conventions for specs in this directory: [docs/spec-authoring.md](../docs/spec-a
 
 | Spec | Type | Status | Dependencies (hard → soft) |
 |---|---|---|---|
+| [refactor-commands-split.md](refactor-commands-split.md) | refactor | **open** | Split `src/commands.ts` (824 lines) into `src/commands/` directory (6 modules). Pure file reorganization, no behavioral change. |
+| [refactor-tools-split.md](refactor-tools-split.md) | refactor | **open** | Split `src/tools.ts` (549 lines) into `src/tools/` directory (6 modules). Pure file reorganization, no behavioral change. Independent of commands-split. |
 | [done-spec-format-validation.md](done-spec-format-validation.md) | feature | **done** (2026-09-10) | `validateSpecStructure` in `reviewer.ts`; structural findings (missing sections) prepended to heuristic findings; `"Missing section"` category; 12 new tests. |
 | [done-loop-completion-report.md](done-loop-completion-report.md) | feature | **done** (2026-09-10) | `formatReport` + live metrics singleton in `metrics.ts`; `promptLoopReport` replaces `promptLoopComplete`; accumulation wired into gate/phase/turn/dispute events; 26 new tests. |
 | [done-loop-config-file.md](done-loop-config-file.md) | feature | **done** (2026-09-10) | `loop.config.json` project-level defaults; `loadLoopConfig` + `mergeLoopArgs` in `selectors.ts`; CLI overrides config; 6 new optional fields on `LoopArgs`; 10 new tests. |
