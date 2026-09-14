@@ -157,6 +157,19 @@ export interface ClarificationAddendum {
   appliedInterpretations: string[];
 }
 
+// --- Command context (shared by all command handlers) ---
+
+export interface CommandContext {
+  ui: {
+    notify: (message: string, level: string) => void;
+    setStatus: (key: string, text: string) => void;
+  };
+  sessionManager: {
+    getEntries: () => unknown[];
+  };
+  cwd: string;
+}
+
 // --- Debug helpers ---
 
 export function stateSummary(s: LoopState): string {

@@ -124,7 +124,7 @@ function autoAdvanceToPhaseB(state: LoopState): { state: LoopState; effect: Tran
       phase: "B",
       status: "Phase B — round 1",
       notify: "Advancing to Phase B without explicit proposal.",
-      prompt: "cleaner_phase_c",
+      prompt: ADVANCE_PROMPTS.WRITER_PHASE_B,
     },
   };
 }

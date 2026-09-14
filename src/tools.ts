@@ -5,6 +5,7 @@ import type { LoopState, Phase } from "./types";
 import { getWorkspaceRoot } from "./types";
 import * as T from "./transitions";
 import * as GP from "./generic-prompts";
+import { ADVANCE_PROMPTS } from "./constants";
 import { getLanguageConfig } from "./languages";
 import { commit } from "./commit";
 import { sendPrompt } from "./prompt";
@@ -98,6 +99,7 @@ function transitionToPhaseB(state: StateRef, pi: ExtensionAPI, ctx: ToolCtx, deb
     phase: "B",
     status: "Phase B — round 1",
     notify: "Approved — moving to Phase B.",
+    prompt: ADVANCE_PROMPTS.WRITER_PHASE_B,
   });
 }
 

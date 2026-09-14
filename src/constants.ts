@@ -23,6 +23,7 @@ export type RetryPromptType = typeof RETRY_PROMPTS[keyof typeof RETRY_PROMPTS];
 
 export const ADVANCE_PROMPTS = {
   WRITER_NEGOTIATE: "writer_negotiate",
+  WRITER_PHASE_B: "writer_phase_b",
   CLEANER_PHASE_C: "cleaner_phase_c",
 } as const;
 

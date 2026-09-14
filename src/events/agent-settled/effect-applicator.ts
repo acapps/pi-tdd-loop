@@ -289,6 +289,8 @@ export function buildAdvancePrompt(
   switch (promptType) {
     case ADVANCE_PROMPTS.WRITER_NEGOTIATE:
       return GP.promptWriterNegotiate(state.specPath, lang.testFilePattern);
+    case ADVANCE_PROMPTS.WRITER_PHASE_B:
+      return lang.prompts.promptWriterPhaseB(ws);
     case ADVANCE_PROMPTS.CLEANER_PHASE_C:
       return lang.prompts.promptCleanerPhaseC(ws);
     default:

@@ -95,6 +95,7 @@ function makeMockLang(): any {
     isTestFile: (path: string) => path.endsWith("_test.go"),
     prompts: {
       promptTesterCompileRetry: vi.fn((err: string) => `Compile error: ${err}`),
+      promptWriterPhaseB: vi.fn(() => "Phase B"),
       promptWriterPhaseBContinue: vi.fn((summary: string, count: number) => `Continue: ${count} failures\n${summary}`),
       promptCleanerRetry: vi.fn((summary: string, count: number) => `Cleaner retry: ${count} failures\n${summary}`),
       promptCleanerPhaseC: vi.fn(() => "Phase C")}};
@@ -810,6 +811,13 @@ describe("buildAdvancePrompt (G1)", () => {
     const out = buildAdvancePrompt(ADVANCE_PROMPTS.CLEANER_PHASE_C, makeState(), lang as any);
     expect(lang.prompts.promptCleanerPhaseC).toHaveBeenCalled();
     expect(out).toBe("Phase C");
+  });
+
+  it("writer_phase_b → lang.prompts.promptWriterPhaseB(ws)", () => {
+    const lang = makeMockLang();
+    const out = buildAdvancePrompt(ADVANCE_PROMPTS.WRITER_PHASE_B, makeState({ specPath: "spec.md" }), lang as any);
+    expect(lang.prompts.promptWriterPhaseB).toHaveBeenCalled();
+    expect(out).toBe("Phase B");
   });
 
   it("unknown key → returns the raw key verbatim (fallback, do not 'fix')", () => {
