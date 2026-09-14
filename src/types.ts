@@ -136,6 +136,7 @@ export interface Finding {
   ambiguity: string;
   interpretations: Interpretation[];
   recommendation: string;
+  severity?: "blocker" | "warning";
 }
 
 export interface Clarification {

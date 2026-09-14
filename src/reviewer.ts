@@ -133,6 +133,7 @@ export function validateSpecStructure(specText: string): Omit<Finding, "id">[] {
       ambiguity: "The spec does not start with a '# ' title line. The template requires it.",
       interpretations: [],
       recommendation: "Add a '# <verb>-<object>' title line at the top of the spec.",
+      severity: "blocker",
     });
   }
 
@@ -149,6 +150,7 @@ export function validateSpecStructure(specText: string): Omit<Finding, "id">[] {
         ambiguity: `The spec does not contain a '${section}' section. The template requires it.`,
         interpretations: [],
         recommendation: `Add a '## ${section}' section to the spec.`,
+        severity: "blocker",
       });
     }
   }
@@ -249,13 +251,14 @@ export function buildSummaryTable(findings: Finding[]): string {
   const lines = [
     "### Summary",
     "",
-    "| # | Category | Function/Feature | Recommendation |",
-    "|---|----------|------------------|----------------|",
+    "| # | Severity | Category | Function/Feature | Recommendation |",
+    "|---|----------|----------|------------------|----------------|",
   ];
 
   for (const f of findings) {
     const funcFeature = f.title.replace(new RegExp(`^${f.category.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*—\\s*`), "");
-    lines.push(`| ${f.id} | ${f.category} | ${funcFeature} | ${f.recommendation} |`);
+    const sev = f.severity ?? "";
+    lines.push(`| ${f.id} | ${sev} | ${f.category} | ${funcFeature} | ${f.recommendation} |`);
   }
 
   return lines.join("\n");

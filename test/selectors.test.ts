@@ -182,11 +182,12 @@ describe("loadLoopConfig", () => {
   let tmpDir: string;
 
   // Use real fs in a temp dir (not mocked) for file I/O tests
-  it("returns {} when no config file exists", () => {
+  it("returns empty args when no config file exists", () => {
     tmpDir = mkdtempSync(join(tmpdir(), "loop-cfg-"));
     try {
       const result = loadLoopConfig(tmpDir);
-      expect(result).toEqual({});
+      expect(result.args).toEqual({});
+      expect(result.warnings).toEqual([]);
     } finally {
       rmSync(tmpDir, { recursive: true, force: true });
     }
@@ -197,8 +198,9 @@ describe("loadLoopConfig", () => {
     try {
       writeFileSync(join(tmpDir, "loop.config.json"), JSON.stringify({ coverage: 90, timeout: 120 }));
       const result = loadLoopConfig(tmpDir);
-      expect(result.coverage).toBe(90);
-      expect(result.timeout).toBe(120);
+      expect(result.args.coverage).toBe(90);
+      expect(result.args.timeout).toBe(120);
+      expect(result.warnings).toEqual([]);
     } finally {
       rmSync(tmpDir, { recursive: true, force: true });
     }
@@ -210,7 +212,7 @@ describe("loadLoopConfig", () => {
       mkdirSync(join(tmpDir, ".pi"), { recursive: true });
       writeFileSync(join(tmpDir, ".pi", "loop.config.json"), JSON.stringify({ language: "java" }));
       const result = loadLoopConfig(tmpDir);
-      expect(result.language).toBe("java");
+      expect(result.args.language).toBe("java");
     } finally {
       rmSync(tmpDir, { recursive: true, force: true });
     }
@@ -223,22 +225,21 @@ describe("loadLoopConfig", () => {
       mkdirSync(join(tmpDir, ".pi"), { recursive: true });
       writeFileSync(join(tmpDir, ".pi", "loop.config.json"), JSON.stringify({ coverage: 90 }));
       const result = loadLoopConfig(tmpDir);
-      expect(result.coverage).toBe(80);
+      expect(result.args.coverage).toBe(80);
     } finally {
       rmSync(tmpDir, { recursive: true, force: true });
     }
   });
 
-  it("returns {} for invalid JSON", () => {
+  it("returns warnings for invalid JSON", () => {
     tmpDir = mkdtempSync(join(tmpdir(), "loop-cfg-"));
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
       writeFileSync(join(tmpDir, "loop.config.json"), "{ invalid json");
       const result = loadLoopConfig(tmpDir);
-      expect(result).toEqual({});
-      expect(warnSpy).toHaveBeenCalled();
+      expect(result.args).toEqual({});
+      expect(result.warnings).toHaveLength(1);
+      expect(result.warnings[0]).toContain("invalid JSON");
     } finally {
-      warnSpy.mockRestore();
       rmSync(tmpDir, { recursive: true, force: true });
     }
   });
@@ -248,8 +249,8 @@ describe("loadLoopConfig", () => {
     try {
       writeFileSync(join(tmpDir, "loop.config.json"), JSON.stringify({ coverage: 85, unknownField: "hello" }));
       const result = loadLoopConfig(tmpDir);
-      expect(result.coverage).toBe(85);
-      expect((result as any).unknownField).toBeUndefined();
+      expect(result.args.coverage).toBe(85);
+      expect((result.args as any).unknownField).toBeUndefined();
     } finally {
       rmSync(tmpDir, { recursive: true, force: true });
     }
@@ -260,8 +261,8 @@ describe("loadLoopConfig", () => {
     try {
       writeFileSync(join(tmpDir, "loop.config.json"), JSON.stringify({ coverage: "high", timeout: 120 }));
       const result = loadLoopConfig(tmpDir);
-      expect(result.coverage).toBeUndefined();
-      expect(result.timeout).toBe(120);
+      expect(result.args.coverage).toBeUndefined();
+      expect(result.args.timeout).toBe(120);
     } finally {
       rmSync(tmpDir, { recursive: true, force: true });
     }
@@ -272,7 +273,7 @@ describe("loadLoopConfig", () => {
     try {
       writeFileSync(join(tmpDir, "loop.config.json"), JSON.stringify({ branch: true }));
       const result = loadLoopConfig(tmpDir);
-      expect(result.branch).toBe("");
+      expect(result.args.branch).toBe("");
     } finally {
       rmSync(tmpDir, { recursive: true, force: true });
     }
@@ -283,9 +284,9 @@ describe("loadLoopConfig", () => {
     try {
       writeFileSync(join(tmpDir, "loop.config.json"), JSON.stringify({ maxA: 5, maxB: 10, maxDispute: 2 }));
       const result = loadLoopConfig(tmpDir);
-      expect(result.maxA).toBe(5);
-      expect(result.maxB).toBe(10);
-      expect(result.maxDispute).toBe(2);
+      expect(result.args.maxA).toBe(5);
+      expect(result.args.maxB).toBe(10);
+      expect(result.args.maxDispute).toBe(2);
     } finally {
       rmSync(tmpDir, { recursive: true, force: true });
     }

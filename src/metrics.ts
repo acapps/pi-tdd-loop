@@ -44,13 +44,6 @@ export interface LoopMetrics {
   finalized: boolean;
 }
 
-export interface ScoreboardEntry {
-  label: string;
-  ts: string;
-  filePath: string;
-  metrics: LoopMetrics;
-}
-
 // --- Accumulators (golden/e2e harness) ---
 
 const ALL_PHASES = ["idle", "A", "negotiate", "B", "C", "done", "escalated"];

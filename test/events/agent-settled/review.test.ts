@@ -210,6 +210,54 @@ describe("handleReviewSettled — row 4: dispute pending", () => {
   });
 });
 
+// --- Row 4b: blocker findings present ---
+
+describe("handleReviewSettled — row 4b: blocker findings", () => {
+  it("blocker findings present → notify + wait, no phase change", () => {
+    const state = makeState({
+      awaitingReview: true,
+      specFindings: [
+        { id: 1, category: "Missing section", title: "Missing required section: Target", ambiguity: "x", interpretations: [], recommendation: "Add it", severity: "blocker" },
+        { id: 2, category: "Ambiguous phrase", title: "Unclear scope", ambiguity: "y", interpretations: [{ label: "A", description: "d", testCases: [] }], recommendation: "Clarify" },
+      ],
+    });
+    const before = cloneState(state);
+    const { input, pi, ctx, debug } = makeInput({ state: { current: state } });
+    const result = handleReviewSettled(input);
+
+    expect(result.handled).toBe(true);
+    expect(debug).toHaveBeenCalledWith("Phase 0 review: 1 blocker finding(s), awaiting human /loop-approve");
+    expect(ctx.ui.notify).toHaveBeenCalledWith(expect.stringContaining("blocker"), "info");
+    expect(ctx.ui.setStatus).toHaveBeenCalledWith("loop", "Phase 0 — review pending (blockers)");
+    expect(pi.appendedEntries).toHaveLength(1);
+    expect(pi.sentMessages).toHaveLength(0);
+    expect(state).toEqual(before); // no mutation
+  });
+
+  it("no blocker findings (only warnings) → falls through to row 5", () => {
+    const state = makeState({
+      awaitingReview: true,
+      specFindings: [
+        { id: 1, category: "Ambiguous phrase", title: "Unclear scope", ambiguity: "y", interpretations: [{ label: "A", description: "d", testCases: [] }], recommendation: "Clarify" },
+      ],
+    });
+    const { input, pi, ctx } = makeInput({ state: { current: state } });
+    const result = handleReviewSettled(input);
+
+    expect(result.handled).toBe(true);
+    expect(state.phase).toBe("A"); // auto-advanced
+  });
+
+  it("specFindings undefined → falls through to row 5", () => {
+    const state = makeState({ awaitingReview: true });
+    const { input } = makeInput({ state: { current: state } });
+    const result = handleReviewSettled(input);
+
+    expect(result.handled).toBe(true);
+    expect(state.phase).toBe("A");
+  });
+});
+
 // --- Row 5: clean review, auto-approve on ---
 
 describe("handleReviewSettled — row 5: auto-advance", () => {

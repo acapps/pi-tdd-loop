@@ -155,7 +155,10 @@ export function cmdLoop(
     handler: async (args: string, ctx: CommandContext) => {
       const cliArgs = parseLoopArgs(args);
       const config = loadLoopConfig(ctx.cwd);
-      const { specPath, coverage, language: argLanguage, branch: branchArg, timeout: timeoutArg, autoApprove, maxA, maxNegotiate, maxB, maxC, maxDispute, maxTurnsPerPhase } = mergeLoopArgs(cliArgs, config);
+      for (const w of config.warnings) {
+        ctx.ui.notify(w, "warning");
+      }
+      const { specPath, coverage, language: argLanguage, branch: branchArg, timeout: timeoutArg, autoApprove, maxA, maxNegotiate, maxB, maxC, maxDispute, maxTurnsPerPhase } = mergeLoopArgs(cliArgs, config.args);
       if (!specPath) {
         ctx.ui.notify(
           "Usage: /loop [--language go|java|typescript] [--coverage N] [--branch [name]] <spec-path>",
@@ -627,6 +630,15 @@ export function cmdPatch(
         return;
       }
 
+      // Validate spec file exists
+      const { existsSync } = await import("node:fs");
+      const { resolve } = await import("node:path");
+      const fullSpecPath = resolve(ctx.cwd, specPath);
+      if (!existsSync(fullSpecPath)) {
+        ctx.ui.notify(`Spec file not found: ${specPath}`, "error");
+        return;
+      }
+
       const oldPhase = state.current.phase;
       const targetPhase = fromPhase ?? (state.current.phase === "escalated" ? (state.current.lastPhase as Phase) : "A");
 
@@ -718,7 +730,7 @@ Each unit must:
 1. Be implementable and testable in a single /loop run
 2. Have a clear, self-contained scope (no "and other related things")
 3. Reference the parent spec and its position in the sequence
-4. Pass the spec template (all required sections present)
+4. Include all required sections: Target, Behavior, Inventory, Test Strategy, Scope lines, Acceptance Criteria, Dependencies, Findings log
 
 Write each unit as ${outDir}/${prefix}-<N>.md.
 Write a summary at ${outDir}/${prefix}-index.md with the table above.

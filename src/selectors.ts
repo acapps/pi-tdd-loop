@@ -128,7 +128,12 @@ export function normalizeSpecPath(specPath: string): string {
  * Load loop config from `loop.config.json` or `.pi/loop.config.json`.
  * Returns {} if the file doesn't exist or is invalid.
  */
-export function loadLoopConfig(cwd: string): Partial<LoopArgs> {
+export interface LoopConfigResult {
+  args: Partial<LoopArgs>;
+  warnings: string[];
+}
+
+export function loadLoopConfig(cwd: string): LoopConfigResult {
   const candidates = [
     join(cwd, "loop.config.json"),
     join(cwd, ".pi", "loop.config.json"),
@@ -140,8 +145,7 @@ export function loadLoopConfig(cwd: string): Partial<LoopArgs> {
       const raw = readFileSync(path, "utf-8");
       const parsed = JSON.parse(raw);
       if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-        console.warn(`loop.config.json: expected an object — using defaults`);
-        return {};
+        return { args: {}, warnings: ["loop.config.json: expected an object — using defaults"] };
       }
       // Filter to known fields with correct types
       const result: Partial<LoopArgs> = {};
@@ -156,14 +160,13 @@ export function loadLoopConfig(cwd: string): Partial<LoopArgs> {
       if (typeof parsed.maxC === "number") result.maxC = parsed.maxC;
       if (typeof parsed.maxDispute === "number") result.maxDispute = parsed.maxDispute;
       if (typeof parsed.maxTurnsPerPhase === "number") result.maxTurnsPerPhase = parsed.maxTurnsPerPhase;
-      return result;
+      return { args: result, warnings: [] };
     } catch {
-      console.warn(`loop.config.json: invalid JSON — using defaults`);
-      return {};
+      return { args: {}, warnings: ["loop.config.json: invalid JSON — using defaults"] };
     }
   }
 
-  return {};
+  return { args: {}, warnings: [] };
 }
 
 /**

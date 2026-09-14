@@ -62,6 +62,16 @@ export function handleReviewSettled(
     return { handled: true };
   }
 
+  // Row 4b: blocker findings present → wait for human.
+  const blockers = (state.current.specFindings ?? []).filter(f => f.severity === "blocker");
+  if (blockers.length > 0) {
+    debug(`Phase 0 review: ${blockers.length} blocker finding(s), awaiting human /loop-approve`);
+    ctx.ui.notify(`Phase 0: ${blockers.length} blocker finding(s). Use /loop-approve to proceed or fix the spec.`, "info");
+    ctx.ui.setStatus("loop", "Phase 0 — review pending (blockers)");
+    commit(state.current, pi, debug);
+    return { handled: true };
+  }
+
   // Row 5: clean review, auto-approve on → advance to Phase A.
   debug("Phase 0 auto-approve → Phase A, round 1");
   state.current.phase = "A";

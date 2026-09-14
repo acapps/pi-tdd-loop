@@ -397,7 +397,7 @@ describe("buildSummaryTable", () => {
     const output = buildSummaryTable(findings);
 
     expect(output).toContain("### Summary");
-    expect(output).toContain("| # | Category | Function/Feature | Recommendation |");
+    expect(output).toContain("| # | Severity | Category | Function/Feature | Recommendation |");
     expect(output).toContain("|---|");
   });
 
