@@ -4,8 +4,8 @@ import type { LanguageConfig } from "./index";
 
 const CONVENTIONS = `
 Java conventions:
-- Use ${""}mvn test${""} for test output
-- Use ${""}mvn compile${""} for compilation check
+- Use \`mvn test\` for test output
+- Use \`mvn compile\` for compilation check
 - Package names use lowercase with dots
 - Class names use PascalCase
 - Prefer AssertJ assertions over JUnit assert methods
@@ -60,14 +60,6 @@ When done, stop producing tool calls.`,
 `Compilation failed. Fix the compilation errors.
 
 ${compileError}
-
-When done, stop producing tool calls.`,
-
-    promptNegotiateApproved: (workspaceRoot?: string) =>
-`Phase B approved. Write Java source files to pass all tests.
-
-${ws(workspaceRoot)}Read *Test.java and *.java stubs. Implement the logic. Preserve stub signatures.
-Do not modify *Test.java. Dispute wrong tests via negotiate_propose.
 
 When done, stop producing tool calls.`,
 

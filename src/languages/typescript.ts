@@ -4,8 +4,8 @@ import type { LanguageConfig } from "./index";
 
 const CONVENTIONS = `
 TypeScript conventions:
-- Use ${""}npx vitest run${""} for test output
-- Use ${""}npx tsc --noEmit${""} for type checking
+- Use \`npx vitest run\` for test output
+- Use \`npx tsc --noEmit\` for type checking
 - Package exports use export keyword
 - Function names use camelCase
 - Prefer strict types (no any), use const declarations
@@ -59,14 +59,6 @@ When done, stop producing tool calls.`,
 `Compilation failed. Fix the compilation errors.
 
 ${compileError}
-
-When done, stop producing tool calls.`,
-
-    promptNegotiateApproved: (workspaceRoot?: string) =>
-`Phase B approved. Write TypeScript source files to pass all tests.
-
-${ws(workspaceRoot)}Read *.test.ts and *.ts stubs. Implement the logic. Preserve stub signatures.
-Do not modify *.test.ts. Dispute wrong tests via negotiate_propose.
 
 When done, stop producing tool calls.`,
 

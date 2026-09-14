@@ -64,14 +64,6 @@ ${compileError}
 
 When done, stop producing tool calls.`,
 
-    promptNegotiateApproved: (workspaceRoot?: string) =>
-`Phase B approved. Write Go source files to pass all tests.
-
-${ws(workspaceRoot)}Read *_test.go and *.go stubs. Implement the logic. Preserve stub signatures.
-Do not modify *_test.go. Dispute wrong tests via negotiate_propose.
-
-When done, stop producing tool calls.`,
-
     promptNegotiateAutoAdvance: (workspaceRoot?: string) =>
 `Advancing to Phase B without explicit approval. Write Go source files.
 
