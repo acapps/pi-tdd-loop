@@ -11,7 +11,7 @@
 // and spawn nothing.
 
 import { describe, it, expect } from "vitest";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { execSync } from "node:child_process";
 
@@ -68,8 +68,15 @@ describe("AC2 — src/ has zero import references to commands.ts", () => {
     expect(out.trim()).toBe("");
   });
 
-  it("src/tools.ts comment no longer names src/commands.ts", () => {
-    expect(read("src/tools.ts")).not.toMatch(/commands\\.ts/);
+  // refactor-tools-split: the flat src/tools.ts is now src/tools/ (a directory
+  // module). The stale-reference concern (a leftover comment naming the old
+  // flat commands.ts) is generalized to any src/tools/ module.
+  it("no src/tools/ module names the old flat commands.ts", () => {
+    const toolsDir = join(ROOT, "src", "tools");
+    const files = readdirSync(toolsDir).filter((f) => f.endsWith(".ts"));
+    for (const f of files) {
+      expect(read(join("src", "tools", f))).not.toMatch(/commands\.ts/);
+    }
   });
 });
 

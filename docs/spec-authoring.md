@@ -131,6 +131,39 @@ checker — whichever can actually see it.
   or must appear exactly N times.
 - One criterion per pinned item above; no vague "clean code"
 
+### Soft vs hard acceptance criteria
+
+A **hard** AC is a binary pass/fail with a precise checker (grep, test run,
+type-checker). A **soft** AC is a guideline that requires judgment ("modules
+should be focused," "code should be readable").
+
+Use hard ACs for things that can be checked mechanically without judgment:
+- "`grep -rn 'oldName' src/` returns 0 hits" (functional reference sweep)
+- "`npx tsc --noEmit` is clean" (type-checker)
+- "`npx vitest run` passes" (test run)
+
+Use soft ACs for things that require judgment and cannot be reduced to a
+binary check without forcing a brittle proxy:
+- "Each module should be focused and under ~200 lines" (soft — a module
+  may exceed 200 lines if it is genuinely one concern; the split is judged
+  by SRP, not line count)
+- "The public API is preserved" (soft — verified by the existing test suite
+  passing, not by a line-by-line diff)
+
+**Why this matters:** a hard line-count AC ("each module MUST be under 200
+lines") forces the implementer to count lines instead of judging the split
+by its merits. The `refactor-tools-split` spec pinned 6 modules at ≤200
+lines; the clean split needed a 7th module (`policy.ts`) to keep
+`negotiate.ts` focused. The hard AC forced the extraction for the wrong
+reason (line count) and then required a spec update to justify it. A soft
+AC ("modules should be focused and under ~200 lines") would have allowed
+the `policy.ts` extraction as a design decision, not a line-count concession.
+
+**Rule of thumb:** if the AC requires counting lines, measuring bytes, or
+matching an exact number of items, it is probably a hard proxy for a soft
+judgment. Ask: "Can I check this with a single grep or test run?" If yes,
+hard. If no, soft — and name the judgment criterion explicitly.
+
 ## Dependencies
 Upstream units and their completion state — and what that state means for
 the current code (e.g. "spec 04 is implemented; that is why the source file

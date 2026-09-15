@@ -2,7 +2,7 @@
 // internal/refactor-tools-split.md
 //
 // Pins the file-level acceptance criteria:
-//   AC1 — src/tools.ts is deleted, the six src/tools/ modules exist
+//   AC1 — src/tools.ts is deleted, the src/tools/ modules exist
 //   AC2 — src/tools/index.ts re-exports the public API (negotiatePropose,
 //         negotiateReview, isAgreeProposal)
 //   AC3 — each src/tools/*.ts module is under 200 lines
@@ -15,6 +15,12 @@
 //
 // These are static-analysis tests (fs only) — they run in milliseconds
 // and spawn nothing.
+//
+// Note: the spec (refactor-tools-split.md) pinned six modules; the actual
+// split extracted the (phase × tool) policy matrix + parameter schemas into
+// a seventh leaf module, policy.ts, to keep negotiate.ts under the 200-line
+// AC3 cap. The module set below reflects the real split, not the spec's
+// original count.
 
 import { describe, it, expect } from "vitest";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
@@ -70,6 +76,7 @@ describe("AC1 — target structure", () => {
     "src/tools/dispute.ts",
     "src/tools/phase0.ts",
     "src/tools/state-io.ts",
+    "src/tools/policy.ts",
   ];
 
   it.each(newFiles)("%s exists", (f) => {
@@ -80,13 +87,14 @@ describe("AC1 — target structure", () => {
     expect(existsSync(join(ROOT, "src/tools.ts"))).toBe(false);
   });
 
-  it("src/tools/ contains exactly the six pinned modules (no stray files)", () => {
+  it("src/tools/ contains exactly the pinned modules (no stray files)", () => {
     const entries = readdirSync(join(ROOT, "src/tools")).sort();
     expect(entries).toEqual([
       "dispute.ts",
       "index.ts",
       "negotiate.ts",
       "phase0.ts",
+      "policy.ts",
       "state-io.ts",
       "types.ts",
     ]);
@@ -127,6 +135,7 @@ describe("AC3 — each src/tools/*.ts module is under 200 lines", () => {
     "src/tools/dispute.ts",
     "src/tools/phase0.ts",
     "src/tools/state-io.ts",
+    "src/tools/policy.ts",
   ];
 
   it.each(modules)("%s is under 200 lines (now %d)", (f) => {
@@ -225,6 +234,7 @@ describe("AC7 — no circular imports inside src/tools/", () => {
     "src/tools/dispute.ts",
     "src/tools/phase0.ts",
     "src/tools/negotiate.ts",
+    "src/tools/policy.ts",
   ];
 
   it.each(modules)("%s does not import itself", (f) => {

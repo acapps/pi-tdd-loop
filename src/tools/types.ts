@@ -1,9 +1,7 @@
-// Stub — the Writer replaces this with the real shared types + result builders.
-// Expected contents (internal/refactor-tools-split.md): StateRef, ToolCtx,
-// ToolResult, Debug, buildProposeResult, buildReviewResult,
-// isNegotiatePhase, isPhaseB, isApproval.
+// --- Shared types + result builders + phase checks + concession helpers ---
+// Leaf module: imports only src/types. No sibling src/tools/* imports.
 
-export type Debug = (msg: string) => void;
+import type { LoopState, Phase } from "../types";
 
 export interface ToolCtx {
   ui: {
@@ -14,35 +12,55 @@ export interface ToolCtx {
   hasUI: boolean;
 }
 
-export interface ToolResult {
-  content: { text: string }[];
-}
+export type ToolResult = { content: { text: string }[] };
+
+export type Debug = (msg: string) => void;
 
 export interface StateRef {
-  current: import("../types").LoopState;
+  current: LoopState;
 }
+
+// --- Result builders ---
 
 export function buildProposeResult(): ToolResult {
-  throw new Error("not implemented");
+  return { content: [{ text: "Proposal recorded. Awaiting review." }] };
 }
 
-export function buildReviewResult(phase: string, action: string): ToolResult {
-  void phase;
-  void action;
-  throw new Error("not implemented");
+export function buildReviewResult(phase: Phase, action: string): ToolResult {
+  if (isApproval(action)) {
+    return { content: [{ text: "Approved." }] };
+  }
+  return { content: [{ text: "Feedback recorded." }] };
 }
 
-export function isNegotiatePhase(phase: string): boolean {
-  void phase;
-  throw new Error("not implemented");
+// --- Phase checks ---
+
+export function isNegotiatePhase(phase: string): phase is "negotiate" {
+  return phase === "negotiate";
 }
 
-export function isPhaseB(phase: string): boolean {
-  void phase;
-  throw new Error("not implemented");
+export function isPhaseB(phase: string): phase is "B" {
+  return phase === "B";
 }
 
 export function isApproval(decision: string): boolean {
-  void decision;
-  throw new Error("not implemented");
+  return decision === "approve" || decision === "approved";
+}
+
+/**
+ * fix-negotiate-confirm-approval-loop §1: a Writer proposal is a
+ * confirmation iff it is lexically "agree" (any case, trimmed) or starts
+ * with one of the closed tail forms — "agree:" or "agree —" (em dash) or
+ * "agree -" (ASCII dash). Word-boundary: "agreement reached" is NOT a match.
+ */
+export function isAgreeProposal(lastProposal: string): boolean {
+  return startsWithAgreeToken(lastProposal.trim().toLowerCase());
+}
+
+/** The closed prefix set: the bare token plus the three pinned tail forms. */
+const AGREE_PREFIXES = ["agree:", "agree —", "agree -"];
+
+function startsWithAgreeToken(normalized: string): boolean {
+  if (normalized === "agree") return true;
+  return AGREE_PREFIXES.some((prefix) => normalized.startsWith(prefix));
 }

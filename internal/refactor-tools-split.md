@@ -119,7 +119,10 @@ No circular dependencies: `types.ts` is a leaf; `state-io.ts` depends only on
 
 1. `src/tools.ts` no longer exists.
 2. `src/tools/index.ts` re-exports `negotiatePropose`, `negotiateReview`, `isAgreeProposal`.
-3. Each tool module is under 200 lines.
+3. Each tool module should be focused and under ~200 lines (soft — see
+   `docs/spec-authoring.md` §"Soft vs hard acceptance criteria"). The actual
+   split produces 7 modules; the 7th (`policy.ts`) was extracted to keep
+   `negotiate.ts` focused.
 4. `index.ts` (root) imports `* as Tool from "./src/tools"` — unchanged.
 5. `npx tsc --noEmit` passes.
 6. `npx vitest run` — all tests pass.

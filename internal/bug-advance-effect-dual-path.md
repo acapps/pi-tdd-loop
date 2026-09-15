@@ -18,8 +18,8 @@ first fix addressed the wrong path.
 Reached via `applyEffect` → `gate-transition.ts:98` when a gate passes and
 the loop advances through the settle handler.
 
-**Path 2 — tool-call** (`src/tools.ts:155` `applyTransitionEffect`): reached
-via `transitionToPhaseB` (`src/tools.ts:98`) when the Writer calls
+**Path 2 — tool-call** (`src/tools/state-io.ts` `applyTransitionEffect`): reached
+via `transitionToPhaseB` (`src/tools/state-io.ts`) when the Writer calls
 `negotiate_propose("agree")` or the reviewer calls
 `negotiate_review("approve")`. Before this spec's fix it set the UI status
 and persisted state but **never sent the prompt**. The `effect.prompt` field
@@ -52,15 +52,16 @@ send prompt. `applyTransitionEffect` does: persist state, set status, (now)
 send prompt. Any future change to "what an advance does" must be made in
 two places, and forgetting one is exactly this bug.
 
-**Compounding: a half-finished refactor is on `main`.** The
+**Compounding: a half-finished refactor was on `main`.** The
 `refactor-tools-split` work (spec `internal/refactor-tools-split.md`) left
 `src/tools/` (6 files, 21 `throw new Error("not implemented")` stubs)
 committed to `main` while `src/tools.ts` (559 lines, the live monolith)
-remains the file everything imports. `src/tools/` is imported by nothing —
-it is dead code that would throw if ever called. This is the intermediate
-state a refactor must not leave on the default branch: the deletion of
-`src/tools.ts` and the replacement of the stubs with real modules must land
-atomically, or not at all.
+remained the file everything imports. `src/tools/` is imported by nothing —
+it is dead code that would throw if ever called. This was the intermediate
+state a refactor must not leave on the default branch. **Resolved:** the
+`refactor-tools-split` is now done — `src/tools.ts` is deleted and
+`src/tools/` contains the real modules. The `applyTransitionEffect` that
+this spec targets now lives in `src/tools/state-io.ts`.
 
 ## Target
 
@@ -85,7 +86,7 @@ No public signature change. The change is internal to the two appliers.
 `buildAdvancePrompt(promptType, state, lang): string`
 (`src/events/agent-settled/effect-applicator.ts:283`) is the existing single
 prompt builder for advance effects; both appliers call it. This spec does
-not change its signature. It is already imported by `src/tools.ts:14`.
+not change its signature. It is already imported by `src/tools/state-io.ts`.
 
 The shared helper this spec introduces:
 
@@ -102,7 +103,8 @@ export function deliverAdvancePrompt(
 
 Body: `if (effect.prompt) sendPrompt(pi, buildAdvancePrompt(effect.prompt, state, lang), state, debug);`
 — i.e. the exact prompt-send logic currently duplicated at
-`effect-applicator.ts:117` and `tools.ts:168-171`. Both appliers call it.
+`effect-applicator.ts:117` and `src/tools/state-io.ts` (the ad-hoc block in
+`applyTransitionEffect`). Both appliers call it.
 
 Persisted state: unchanged. The advance effect does not change the saved
 `loop-state` shape; `justTransitioned`, `phase`, `round`, `turnsThisPhase`
@@ -146,17 +148,17 @@ Quirks (current behavior, do not fix in this spec):
 
 Intended shifts:
 - Before: the tool-call path sends the Phase B prompt only because of the
-  ad-hoc `if (effect.type === "advance" && effect.prompt)` block added in
-  `d268f72`/`41c20e0`. After: it sends it because it calls the same helper
-  the agent-settled path calls. Removing the ad-hoc block and calling
-  `deliverAdvancePrompt` is behavior-preserving but removes the divergence
-  risk.
+  ad-hoc `if (effect.type === "advance" && effect.prompt)` block in
+  `src/tools/state-io.ts` (added in `d268f72`/`41c20e0`). After: it sends
+  it because it calls the same helper the agent-settled path calls. Removing
+  the ad-hoc block and calling `deliverAdvancePrompt` is behavior-preserving
+  but removes the divergence risk.
 
 Ownership: `src/events/agent-settled/effect-applicator.ts` owns
 `deliverAdvancePrompt` and `buildAdvancePrompt` (effect semantics live with
-the effect applicator). `src/tools.ts` owns `applyTransitionEffect` (tool-call
-persistence + status). `test/tools-negotiate-re-review.test.ts` asserts the
-tool-call path sends the prompt; `test/events/agent-settled/effect-applicator.test.ts`
+the effect applicator). `src/tools/state-io.ts` owns `applyTransitionEffect`
+(tool-call persistence + status). `test/tools-negotiate-re-review.test.ts`
+asserts the tool-call path sends the prompt; `test/events/agent-settled/effect-applicator.test.ts`
 asserts the agent-settled path and the `buildAdvancePrompt` mapping.
 
 ## Inventory
@@ -165,26 +167,21 @@ Files:
 - `src/events/agent-settled/effect-applicator.ts` — **keep**; extract the
   prompt-send at line 117 into `export function deliverAdvancePrompt`;
   `applyAdvanceEffect` calls it. `buildAdvancePrompt` (line 283) unchanged.
-- `src/tools.ts` — **keep** (until `refactor-tools-split` lands); replace the
-  ad-hoc prompt block (lines 168-171) with a call to `deliverAdvancePrompt`;
-  drop the now-unused local `getLanguageConfig` lookup if it becomes
-  redundant (verify caller count before removing — `tools.ts` may use it
-  elsewhere).
-- `src/tools/` (6 stub files) — **remove from `main`** OR complete per
-  `refactor-tools-split.md`. This spec requires the dead-stub state to not
-  persist on `main`; which of the two resolutions happens is owned by
-  `refactor-tools-split.md`. The 21 `throw new Error("not implemented")`
-  stubs are the deletion evidence.
+- `src/tools/state-io.ts` — **keep**; replace the ad-hoc prompt block in
+  `applyTransitionEffect` with a call to `deliverAdvancePrompt`; drop the
+  now-redundant local `getLanguageConfig` lookup if it becomes unused
+  (verify caller count before removing — `state-io.ts` may use it elsewhere).
 
 Imports:
-- `src/tools.ts:14` already imports `buildAdvancePrompt`; this spec changes
-  it to import `deliverAdvancePrompt` instead (or both, if `buildAdvancePrompt`
-  is still used elsewhere in `tools.ts` — verify).
+- `src/tools/state-io.ts` already imports `buildAdvancePrompt`; this spec
+  changes it to import `deliverAdvancePrompt` instead (or both, if
+  `buildAdvancePrompt` is still used elsewhere in `state-io.ts` — verify).
 - No new imports in `effect-applicator.ts` (it already has `sendPrompt`,
   `buildAdvancePrompt`, `LanguageConfig`).
 
 Call sites of the advance effect (closed list, grep-proven):
-- `src/tools.ts:98` — `transitionToPhaseB` → `applyTransitionEffect` (tool-call)
+- `src/tools/state-io.ts` — `transitionToPhaseB` → `applyTransitionEffect`
+  (tool-call)
 - `src/events/agent-settled/gate-transition.ts:98` — `applyEffect` →
   `applyAdvanceEffect` (agent-settled)
 - `src/events/agent-settled/effect-applicator.ts:62` — `applyEffect` dispatch
@@ -192,10 +189,9 @@ Call sites of the advance effect (closed list, grep-proven):
 
 ## Test Strategy
 
-Baseline: 1605 passing / 4 failing on `main` (the 4 are
-`test/tools-split/structure.test.ts` asserting `src/tools.ts` is deleted —
-the in-progress `refactor-tools-split`; they are expected red until that
-spec lands and are NOT part of this spec's green bar).
+Baseline: all tests passing on `main` (the `refactor-tools-split` is done;
+the 4 `test/tools-split/structure.test.ts` tests that were red while the
+split was in progress now pass).
 
 Per-test disposition:
 - `test/tools-negotiate-re-review.test.ts` — **keep + strengthen**. The two
@@ -231,11 +227,9 @@ assertions are on the mock `ExtensionAPI` (`pi.sentMessages`) and on
 - `src/events/agent-settled/effect-applicator.ts` — **added**: `deliverAdvancePrompt`;
   **kept**: `applyAdvanceEffect` (now calls the helper), `buildAdvancePrompt`,
   all other effect appliers.
-- `src/tools.ts` — **removed**: the ad-hoc `if (effect.type === "advance" &&
-  effect.prompt)` block (lines 168-171); **kept**: `applyTransitionEffect`
+- `src/tools/state-io.ts` — **removed**: the ad-hoc `if (effect.type ===
+  "advance" && effect.prompt)` block; **kept**: `applyTransitionEffect`
   (now calls `deliverAdvancePrompt`), everything else.
-- `src/tools/` — **removed** from `main` (or completed, owned by
-  `refactor-tools-split.md`); the dead stubs do not persist.
 - `test/events/agent-settled/effect-applicator.test.ts` — **added**: helper
   unit test.
 - `test/tools-negotiate-re-review.test.ts` — **kept** (already asserts the
@@ -243,18 +237,11 @@ assertions are on the mock `ExtensionAPI` (`pi.sentMessages`) and on
 
 ## Acceptance Criteria
 
-- Full test run: 1605+ passing, 0 failing **except** the 4
-  `test/tools-split/structure.test.ts` deletions that belong to
-  `refactor-tools-split.md` (name them; they turn green when that spec
-  lands). Checker: `npx vitest run`.
+- Full test run: 0 failing. Checker: `npx vitest run`.
 - Type-checker clean. Checker: `npx tsc --noEmit`.
-- Grep sweep 1 (functional): `grep -rn "sendPrompt(pi, buildAdvancePrompt"
+- Grep sweep (functional): `grep -rn "sendPrompt(pi, buildAdvancePrompt"
   src/ --include="*.ts"` returns **0** hits — the prompt send is no longer
   inlined in two places; both appliers call `deliverAdvancePrompt`.
-- Grep sweep 2 (dead stubs): `grep -rn "not implemented" src/tools/ 
-  --include="*.ts"` returns **0** hits on `main` (the stubs are gone or
-  replaced). If `refactor-tools-split.md` has not landed, this criterion
-  blocks that spec's merge, not this one — record which.
 - Regression: the tool-call negotiate→B test
   (`test/tools-negotiate-re-review.test.ts`) fails when the
   `deliverAdvancePrompt` call is removed from `applyTransitionEffect`
@@ -264,11 +251,9 @@ assertions are on the mock `ExtensionAPI` (`pi.sentMessages`) and on
 
 ## Dependencies
 
-- `refactor-tools-split.md` (open): owns the deletion of `src/tools.ts` and
-  the real `src/tools/` modules. This spec's "remove the dead stubs"
-  criterion overlaps with it; the two must not both half-land. This spec
-  can land first by removing the dead `src/tools/` stubs and keeping
-  `src/tools.ts`, deferring the real split to `refactor-tools-split.md`.
+- `refactor-tools-split.md` (done): the `src/tools/` split is complete.
+  This spec's `applyTransitionEffect` now lives in `src/tools/state-io.ts`.
+  No overlap remains.
 - `d268f72` / `41c20e0` (committed): the ad-hoc prompt fix this spec
   consolidates. This spec does not revert them; it generalizes them.
 

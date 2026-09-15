@@ -1,24 +1,7 @@
-// Stub — the Writer replaces this with the real re-exports.
-// Public API (internal/refactor-tools-split.md): negotiatePropose,
-// negotiateReview, isAgreeProposal.
+// Public API barrel for the tools module.
+// index.ts (root) imports * as Tool from "./src/tools" — this directory module
+// resolves to this file. The public surface is unchanged from the old flat
+// src/tools.ts: negotiatePropose, negotiateReview, isAgreeProposal.
 
-export async function negotiatePropose(
-  state: unknown,
-  pi: unknown,
-  debug: unknown,
-): Promise<unknown> {
-  throw new Error("not implemented");
-}
-
-export async function negotiateReview(
-  state: unknown,
-  pi: unknown,
-  debug: unknown,
-): Promise<unknown> {
-  throw new Error("not implemented");
-}
-
-export function isAgreeProposal(lastProposal: string): boolean {
-  void lastProposal;
-  throw new Error("not implemented");
-}
+export { negotiatePropose, negotiateReview } from "./negotiate";
+export { isAgreeProposal } from "./types";
