@@ -8,7 +8,7 @@ Conventions for specs in this directory: [docs/spec-authoring.md](../docs/spec-a
 
 | Spec | Type | Status | Dependencies (hard → soft) |
 |---|---|---|---|
-| [refactor-commands-split.md](refactor-commands-split.md) | refactor | **open** | Split `src/commands.ts` (824 lines) into `src/commands/` directory (6 modules). Pure file reorganization, no behavioral change. |
+| [done-refactor-commands-split.md](done-refactor-commands-split.md) | refactor | **done** | Split `src/commands.ts` (824 lines) into `src/commands/` directory (6 modules) + `src/state-helpers.ts`. |
 | [refactor-tools-split.md](refactor-tools-split.md) | refactor | **open** | Split `src/tools.ts` (549 lines) into `src/tools/` directory (6 modules). Pure file reorganization, no behavioral change. Independent of commands-split. |
 | [done-spec-format-validation.md](done-spec-format-validation.md) | feature | **done** (2026-09-10) | `validateSpecStructure` in `reviewer.ts`; structural findings (missing sections) prepended to heuristic findings; `"Missing section"` category; 12 new tests. |
 | [done-loop-completion-report.md](done-loop-completion-report.md) | feature | **done** (2026-09-10) | `formatReport` + live metrics singleton in `metrics.ts`; `promptLoopReport` replaces `promptLoopComplete`; accumulation wired into gate/phase/turn/dispute events; 26 new tests. |

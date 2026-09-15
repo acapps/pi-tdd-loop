@@ -1,6 +1,6 @@
 # Refactor: Split src/commands.ts into Focused Modules
 
-## Status: open
+## Status: done
 
 ## Target
 
