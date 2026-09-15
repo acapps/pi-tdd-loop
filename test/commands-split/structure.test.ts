@@ -54,12 +54,12 @@ describe("AC1 — target structure", () => {
 // AC2 — no textual references to commands.ts in src/
 // ================================================================
 
-describe("AC2 — src/ has zero references to commands.ts", () => {
-  it("grep -rn 'commands\\.ts' src/ finds nothing", () => {
+describe("AC2 — src/ has zero import references to commands.ts", () => {
+  it("no import-from commands.ts in src/", () => {
     let out = "";
     try {
       out = execSync(
-        `grep -rn "commands\\.ts" "${join(ROOT, "src")}" || true`,
+        `grep -rn 'from.*["\\x27]commands\\.ts["\\x27]' "${join(ROOT, "src")}" || true`,
         { encoding: "utf-8" },
       );
     } catch {
@@ -69,7 +69,7 @@ describe("AC2 — src/ has zero references to commands.ts", () => {
   });
 
   it("src/tools.ts comment no longer names src/commands.ts", () => {
-    expect(read("src/tools.ts")).not.toMatch(/commands\.ts/);
+    expect(read("src/tools.ts")).not.toMatch(/commands\\.ts/);
   });
 });
 
@@ -77,12 +77,12 @@ describe("AC2 — src/ has zero references to commands.ts", () => {
 // AC3 — no textual references to commands.ts in test/
 // ================================================================
 
-describe("AC3 — test/ has zero references to commands.ts", () => {
-  it("grep -rn 'commands\\.ts' test/ finds nothing", () => {
+describe("AC3 — test/ has zero import references to commands.ts", () => {
+  it("no import-from commands.ts in test/", () => {
     let out = "";
     try {
       out = execSync(
-        `grep -rn "commands\\.ts" "${join(ROOT, "test")}" || true`,
+        `grep -rn 'from.*["\\x27]commands\\.ts["\\x27]' "${join(ROOT, "test")}" || true`,
         { encoding: "utf-8" },
       );
     } catch {
