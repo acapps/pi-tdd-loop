@@ -114,9 +114,28 @@ export function applyAdvanceEffect(input: EffectInput): EffectResult {
     }
   }
   if (effect.prompt) {
-    sendPrompt(pi, buildAdvancePrompt(effect.prompt, state, lang), state, debug);
+    deliverAdvancePrompt(pi, state, lang, effect, debug);
   }
   return { applied: true };
+}
+
+// --- Shared advance-prompt delivery (spec internal/bug-advance-effect-dual-path.md) ---
+// The single place that delivers an advance effect's prompt. BOTH the
+// agent-settled applier (applyAdvanceEffect) and the tool-call applier
+// (src/tools/state-io.ts applyTransitionEffect) must call this so "what an
+// advance does" (deliver the next phase's prompt) cannot diverge across the
+// two entry points again. Prompt delivery ONLY: no state mutation, no direct
+// pi.sendUserMessage — sendPrompt is the single delivery point.
+export function deliverAdvancePrompt(
+  pi: ExtensionAPI,
+  state: LoopState,
+  lang: LanguageConfig,
+  effect: AdvanceEffect,
+  debug: (msg: string) => void,
+): void {
+  if (effect.prompt) {
+    sendPrompt(pi, buildAdvancePrompt(effect.prompt, state, lang), state, debug);
+  }
 }
 
 export function applyDoneEffect(input: EffectInput): EffectResult {

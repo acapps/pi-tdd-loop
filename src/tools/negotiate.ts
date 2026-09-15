@@ -66,7 +66,7 @@ function handleNegotiatePropose(
   debug(`Writer proposes`);
   logNegotiateEntry(state, pi, debug, "propose", plan);
 
-  if (plan === "agree") {
+  if (isAgreeProposal(plan)) {
     return executeNegotiateAgree(state, pi, debug, ctx);
   }
   return executeNegotiateProposal(state, pi, debug);

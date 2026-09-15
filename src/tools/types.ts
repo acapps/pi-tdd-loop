@@ -48,19 +48,12 @@ export function isApproval(decision: string): boolean {
 }
 
 /**
- * fix-negotiate-confirm-approval-loop §1: a Writer proposal is a
- * confirmation iff it is lexically "agree" (any case, trimmed) or starts
- * with one of the closed tail forms — "agree:" or "agree —" (em dash) or
- * "agree -" (ASCII dash). Word-boundary: "agreement reached" is NOT a match.
+ * fix-negotiate-confirm-approval-loop §1 + session 01a0a668: a Writer
+ * proposal is a confirmation iff the first word is "agree" (case-
+ * insensitive, trimmed). Trailing text is explanation, not a condition:
+ * "agree\n\nTests match..." is an agreement. "agreed" or "agree with
+ * conditions" is NOT (different first word / word boundary).
  */
 export function isAgreeProposal(lastProposal: string): boolean {
-  return startsWithAgreeToken(lastProposal.trim().toLowerCase());
-}
-
-/** The closed prefix set: the bare token plus the three pinned tail forms. */
-const AGREE_PREFIXES = ["agree:", "agree —", "agree -"];
-
-function startsWithAgreeToken(normalized: string): boolean {
-  if (normalized === "agree") return true;
-  return AGREE_PREFIXES.some((prefix) => normalized.startsWith(prefix));
+  return /^agree(?![a-z])/.test(lastProposal.trim().toLowerCase());
 }

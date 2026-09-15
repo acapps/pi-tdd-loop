@@ -6,8 +6,7 @@ import * as T from "../transitions";
 import { ADVANCE_PROMPTS } from "../constants";
 import { getLanguageConfig } from "../languages";
 import { commit } from "../commit";
-import { sendPrompt } from "../prompt";
-import { buildAdvancePrompt } from "../events/agent-settled/effect-applicator";
+import { deliverAdvancePrompt } from "../events/agent-settled/effect-applicator";
 import type { StateRef, ToolCtx, Debug } from "./types";
 
 /** Snapshot the current state into the session log (single commit point). */
@@ -78,6 +77,6 @@ export function applyTransitionEffect(
   // agent-settled applier — buildAdvancePrompt is the single builder.)
   if (effect.type === "advance" && effect.prompt) {
     const lang = getLanguageConfig(state.current.language);
-    sendPrompt(pi, buildAdvancePrompt(effect.prompt, state.current, lang), state.current, debug);
+    deliverAdvancePrompt(pi, state.current, lang, effect, debug);
   }
 }

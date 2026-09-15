@@ -724,6 +724,9 @@ describe("isAgreeProposal — public contract (importable from src/tools)", () =
     ["agreed", false],
     ["disagree", false],
     ["", false],
+    // Session 01a0a668: trailing explanation is still agree
+    ["agree\n\nTests match the spec", true],
+    ["agree. Tests match", true],
   ])("isAgreeProposal(%j) → %s", (input, expected) => {
     expect(Tool.isAgreeProposal(input)).toBe(expected);
   });

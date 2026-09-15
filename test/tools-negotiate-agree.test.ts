@@ -51,15 +51,33 @@ describe("isAgreeProposal", () => {
     expect(isAgreeProposal("   ")).toBe(false);
   });
 
-  it("'agreed' (past tense, not in the closed set) → false", () => {
-    expect(isAgreeProposal("agreed")).toBe(false);
-  });
-
   it("'i agree' (not starting with the token) → false", () => {
     expect(isAgreeProposal("i agree")).toBe(false);
   });
 
   it("case-insensitive tail form: 'AGREE: yes' → true", () => {
     expect(isAgreeProposal("AGREE: yes")).toBe(true);
+  });
+
+  // Session 01a0a668: Writer sent "agree\n\nTests match the spec..." —
+  // trailing explanation, not a condition. Must be treated as agree.
+  it("'agree\\n\\nTests match the spec' → true (trailing explanation)", () => {
+    expect(isAgreeProposal("agree\n\nTests match the spec. Implementation plan: ...")).toBe(true);
+  });
+
+  it("'agree. Tests match' → true (period separator)", () => {
+    expect(isAgreeProposal("agree. Tests match")).toBe(true);
+  });
+
+  it("'agree, and here is why' → true (comma separator)", () => {
+    expect(isAgreeProposal("agree, and here is why")).toBe(true);
+  });
+
+  it("'agreed' → false (word boundary: 'e' after 'agree')", () => {
+    expect(isAgreeProposal("agreed")).toBe(false);
+  });
+
+  it("'agreement' → false (word boundary)", () => {
+    expect(isAgreeProposal("agreement")).toBe(false);
   });
 });
