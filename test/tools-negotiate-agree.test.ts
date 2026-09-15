@@ -1,15 +1,16 @@
 // Contract tests for isAgreeProposal.
-// Spec: internal/bug-negotiate-confirm-approval-loop.md §1 (Behavior §1).
+// Spec: internal/bug-negotiate-confirm-approval-loop.md §1 + session 01a0a668.
 //
-// Pinned contract: a Writer proposal is a confirmation iff it is lexically
-// "agree" (any case, trimmed) or starts with one of the closed tail forms
-// "agree:" / "agree —" (em dash) / "agree -" (ASCII dash). Word-boundary:
-// "agreement reached" is NOT a match.
+// Pinned contract: a Writer proposal is a confirmation iff the first word
+// (after optional leading fillers like "i", "yes", "ok") is "agree" or
+// "agreed". Trailing text is explanation, not a condition.
 
 import { describe, it, expect } from "vitest";
 import { isAgreeProposal } from "../src/tools";
 
 describe("isAgreeProposal", () => {
+  // --- Core matches ---
+
   it("lexically 'agree' → true", () => {
     expect(isAgreeProposal("agree")).toBe(true);
   });
@@ -23,7 +24,55 @@ describe("isAgreeProposal", () => {
     expect(isAgreeProposal("  agree  ")).toBe(true);
   });
 
-  it("'agree: confirmed' → true (closed tail form, colon)", () => {
+  it("'agreed' → true (past tense is still agreement)", () => {
+    expect(isAgreeProposal("agreed")).toBe(true);
+  });
+
+  it("'agreed — tests match' → true", () => {
+    expect(isAgreeProposal("agreed — tests match")).toBe(true);
+  });
+
+  // --- Leading fillers ---
+
+  it("'i agree' → true (leading filler stripped)", () => {
+    expect(isAgreeProposal("i agree")).toBe(true);
+  });
+
+  it("'i agree with the tests' → true", () => {
+    expect(isAgreeProposal("i agree with the tests")).toBe(true);
+  });
+
+  it("'yes, agree' → true (leading filler + comma)", () => {
+    expect(isAgreeProposal("yes, agree")).toBe(true);
+  });
+
+  it("'ok, agreed' → true (leading filler)", () => {
+    expect(isAgreeProposal("ok, agreed")).toBe(true);
+  });
+
+  it("'sure, agree' → true (leading filler)", () => {
+    expect(isAgreeProposal("sure, agree")).toBe(true);
+  });
+
+  it("'yeah, i agree' → true (double filler)", () => {
+    expect(isAgreeProposal("yeah, i agree")).toBe(true);
+  });
+
+  // --- Trailing explanation (session 01a0a668) ---
+
+  it("'agree\\n\\nTests match the spec' → true (trailing explanation)", () => {
+    expect(isAgreeProposal("agree\n\nTests match the spec. Implementation plan: ...")).toBe(true);
+  });
+
+  it("'agree. Tests match' → true (period separator)", () => {
+    expect(isAgreeProposal("agree. Tests match")).toBe(true);
+  });
+
+  it("'agree, and here is why' → true (comma separator)", () => {
+    expect(isAgreeProposal("agree, and here is why")).toBe(true);
+  });
+
+  it("'agree: confirmed' → true (colon separator)", () => {
     expect(isAgreeProposal("agree: confirmed")).toBe(true);
   });
 
@@ -31,11 +80,9 @@ describe("isAgreeProposal", () => {
     expect(isAgreeProposal("agree — confirmed")).toBe(true);
   });
 
-  it("'agree - confirmed' (ASCII dash) → true", () => {
-    expect(isAgreeProposal("agree - confirmed")).toBe(true);
-  });
+  // --- Non-matches ---
 
-  it("'agreement reached' → false (word boundary — the bug case)", () => {
+  it("'agreement reached' → false (different first word)", () => {
     expect(isAgreeProposal("agreement reached")).toBe(false);
   });
 
@@ -51,33 +98,23 @@ describe("isAgreeProposal", () => {
     expect(isAgreeProposal("   ")).toBe(false);
   });
 
-  it("'i agree' (not starting with the token) → false", () => {
-    expect(isAgreeProposal("i agree")).toBe(false);
+  it("'I disagree' → false", () => {
+    expect(isAgreeProposal("I disagree")).toBe(false);
   });
 
-  it("case-insensitive tail form: 'AGREE: yes' → true", () => {
-    expect(isAgreeProposal("AGREE: yes")).toBe(true);
+  it("'I agree, but only if we change X' → true (filler stripped, 'agree' is first word after)", () => {
+    // After stripping "i", the first word is "agree". The "but only if"
+    // is a condition, but the Writer is still expressing agreement with
+    // the overall direction. The negotiate loop handles conditions via
+    // the Tester's review, not via the agree check.
+    expect(isAgreeProposal("I agree, but only if we change X")).toBe(true);
   });
 
-  // Session 01a0a668: Writer sent "agree\n\nTests match the spec..." —
-  // trailing explanation, not a condition. Must be treated as agree.
-  it("'agree\\n\\nTests match the spec' → true (trailing explanation)", () => {
-    expect(isAgreeProposal("agree\n\nTests match the spec. Implementation plan: ...")).toBe(true);
+  it("case-insensitive: 'AGREED' → true", () => {
+    expect(isAgreeProposal("AGREED")).toBe(true);
   });
 
-  it("'agree. Tests match' → true (period separator)", () => {
-    expect(isAgreeProposal("agree. Tests match")).toBe(true);
-  });
-
-  it("'agree, and here is why' → true (comma separator)", () => {
-    expect(isAgreeProposal("agree, and here is why")).toBe(true);
-  });
-
-  it("'agreed' → false (word boundary: 'e' after 'agree')", () => {
-    expect(isAgreeProposal("agreed")).toBe(false);
-  });
-
-  it("'agreement' → false (word boundary)", () => {
-    expect(isAgreeProposal("agreement")).toBe(false);
+  it("case-insensitive: 'Yes, AGREE' → true", () => {
+    expect(isAgreeProposal("Yes, AGREE")).toBe(true);
   });
 });

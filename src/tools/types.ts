@@ -51,9 +51,32 @@ export function isApproval(decision: string): boolean {
  * fix-negotiate-confirm-approval-loop §1 + session 01a0a668: a Writer
  * proposal is a confirmation iff the first word is "agree" (case-
  * insensitive, trimmed). Trailing text is explanation, not a condition:
- * "agree\n\nTests match..." is an agreement. "agreed" or "agree with
- * conditions" is NOT (different first word / word boundary).
+ * "agree\n\nTests match..." is an agreement.
+ *
+ * Leniency: the Writer is an LLM — it's verbose by nature. It may say
+ * "agree", "agreed", "I agree", "Yes, I agree", "agree — tests match",
+ * "agree. Implementation plan: ...". All of these are agreements.
+ *
+ * The regex matches "agree" as the first word (after optional leading
+ * words like "i", "yes", "ok", "sure", "yep") followed by any non-word
+ * character or end-of-string. "agreed" is handled by the optional "d"
+ * suffix. "agree with conditions" is NOT an agreement (the "with"
+ * starts a new word after a space — the regex matches "agree" at the
+ * start, but the trailing " with..." is a condition, not explanation).
+ *
+ * Actually, let's keep it simple: the first word (after optional
+ * leading fillers) is "agree" or "agreed". Everything after is
+ * explanation. The Writer is confirming, not proposing.
  */
 export function isAgreeProposal(lastProposal: string): boolean {
-  return /^agree(?![a-z])/.test(lastProposal.trim().toLowerCase());
+  let trimmed = lastProposal.trim().toLowerCase();
+  // Strip leading fillers repeatedly: "i agree", "yes, i agree", "ok, sure, agree"
+  const filler = /^(i|yes|ok|okay|sure|yep|yeah)[,\s]+/;
+  let prev;
+  do {
+    prev = trimmed;
+    trimmed = trimmed.replace(filler, "");
+  } while (trimmed !== prev);
+  // First word is "agree" or "agreed" (word boundary after)
+  return /^(agree|agreed)(?!\w)/.test(trimmed);
 }

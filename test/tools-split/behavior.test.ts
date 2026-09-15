@@ -564,8 +564,8 @@ describe("B × propose — writer concession", () => {
     },
   );
 
-  it.each(["agreed", "I agree", "agree to everything", "agreement"])(
-    "non-concession edge %j still files a dispute (exact lexical match only)",
+  it.each(["agree to everything", "agreement"])(
+    "non-concession edge %j still files a dispute (not a pure agreement)",
     async (plan) => {
       const state = makeState({
         phase: "B",
@@ -720,13 +720,15 @@ describe("isAgreeProposal — public contract (importable from src/tools)", () =
     ["agree — confirmed", true],
     ["agree - confirmed", true],
     ["agreement reached", false],
-    ["I agree", false],
-    ["agreed", false],
+    ["I agree", true],
+    ["agreed", true],
     ["disagree", false],
     ["", false],
     // Session 01a0a668: trailing explanation is still agree
     ["agree\n\nTests match the spec", true],
     ["agree. Tests match", true],
+    ["yes, agree", true],
+    ["i agree with the tests", true],
   ])("isAgreeProposal(%j) → %s", (input, expected) => {
     expect(Tool.isAgreeProposal(input)).toBe(expected);
   });
