@@ -58,6 +58,11 @@ export function getLanguageConfig(key: LanguageKey): LanguageConfig {
   throw new Error(`Language not available: ${key}`);
 }
 
+/** Check whether a string is a valid language key (for early CLI validation). */
+export function isValidLanguage(key: string): key is LanguageKey {
+  return registry.has(key as LanguageKey);
+}
+
 export interface DetectedProject {
   language: LanguageKey;
   buildTool?: BuildTool;

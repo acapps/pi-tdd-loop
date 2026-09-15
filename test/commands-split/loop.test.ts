@@ -24,7 +24,7 @@ vi.mock("../../src/baseline", () => ({
   formatBaselineFailure: vi.fn((r: unknown) => JSON.stringify(r)),
 }));
 vi.mock("../../src/git-workflow", () => ({ setupBranch: vi.fn() }));
-vi.mock("../../src/languages", () => ({ detectProject: vi.fn() }));
+vi.mock("../../src/languages", () => ({ detectProject: vi.fn(), isValidLanguage: vi.fn((k: string) => ["go","java","typescript"].includes(k)) }));
 vi.mock("../../src/commit", () => ({ commit: vi.fn() }));
 vi.mock("../../src/prompt", () => ({ sendPrompt: vi.fn() }));
 vi.mock("../../src/metrics", () => ({ initLiveMetrics: vi.fn() }));
@@ -304,5 +304,34 @@ describe("cmdLoop", () => {
     });
     await cmdLoop(state, makeApi(), debug).handler("", makeCtx());
     expect(state.current.language).toBe("java");
+  });
+
+  it("invalid --language → error, loop not started (no commit, no baseline)", async () => {
+    const { state, ctx } = setup();
+    (Selectors.mergeLoopArgs as ReturnType<typeof vi.fn>).mockReturnValue({
+      specPath: "s.md", language: "tyepscript", coverage: 80, timeout: 60,
+      branch: undefined, autoApprove: undefined,
+      maxA: 3, maxNegotiate: 3, maxB: 5, maxC: 3, maxDispute: 3, maxTurnsPerPhase: 5,
+    });
+    await cmdLoop(state, makeApi(), debug).handler("", ctx);
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("Invalid language: 'tyepscript'"), "error");
+    expect(Baseline.runBaseline).not.toHaveBeenCalled();
+    expect(Commit.commit).not.toHaveBeenCalled();
+    expect(state.current.phase).toBe("idle");
+  });
+
+  it("valid --language → no error, loop proceeds", async () => {
+    const { state, ctx } = setup();
+    (Selectors.mergeLoopArgs as ReturnType<typeof vi.fn>).mockReturnValue({
+      specPath: "s.md", language: "typescript", coverage: 80, timeout: 60,
+      branch: undefined, autoApprove: undefined,
+      maxA: 3, maxNegotiate: 3, maxB: 5, maxC: 3, maxDispute: 3, maxTurnsPerPhase: 5,
+    });
+    await cmdLoop(state, makeApi(), debug).handler("", ctx);
+    expect(ctx.ui.notify).not.toHaveBeenCalledWith(
+      expect.stringContaining("Invalid language"), "error");
+    expect(state.current.language).toBe("typescript");
+    expect(state.current.phase).toBe("review");
   });
 });

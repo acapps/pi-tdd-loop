@@ -10,7 +10,7 @@ import { getWorkspaceRoot } from "../types";
 import * as R from "../reviewer";
 import { runBaseline, formatBaselineFailure } from "../baseline";
 import { setupBranch } from "../git-workflow";
-import { detectProject } from "../languages";
+import { detectProject, isValidLanguage } from "../languages";
 import { commit } from "../commit";
 import { sendPrompt } from "../prompt";
 import { initLiveMetrics } from "../metrics";
@@ -112,6 +112,13 @@ export function cmdLoop(
 
       const projectCwd = resolveProjectCwd(merged.specPath, ctx.cwd);
       const detected = detectProject(projectCwd);
+      if (merged.language && !isValidLanguage(merged.language)) {
+        ctx.ui.notify(
+          `Invalid language: '${merged.language}'. Valid options: go, java, typescript.`,
+          "error",
+        );
+        return;
+      }
       const language = (merged.language || detected?.language || "go") as LanguageKey;
       const buildTool = (detected?.buildTool || "maven") as BuildTool;
       if (!runPhase0Baseline(projectCwd, language, buildTool, ctx, debug)) return;
