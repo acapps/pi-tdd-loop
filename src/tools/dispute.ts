@@ -49,6 +49,14 @@ export function executeWriterConcedeDispute(
   debug("Writer conceded — dispute closed");
   state.current.dispute = { status: "closed" };
   state.current.negotiateFeedback = "";
+  // The Writer did work after the phase transition (the dispute was filed
+  // mid-turn). The justTransitioned flag from the original transition must
+  // be cleared so the next settle runs the gate instead of being consumed
+  // by handleJustTransitioned (which skips the gate).
+  if (state.current.justTransitioned) {
+    debug("Writer concede: clearing justTransitioned (Writer did work after transition)");
+    state.current.justTransitioned = false;
+  }
   persistState(state, pi, debug);
   return {
     content: [{ text: "Dispute closed. The tests stand. Continue Phase B; the gate runs when your turn ends." }],
@@ -77,6 +85,13 @@ export function handleBDisputePropose(
     claim: plan,
     filedRound: state.current.round,
   };
+  // The dispute interrupts the normal flow. Clear justTransitioned so the
+  // next settle runs the gate (the Writer/Tester did work after the phase
+  // transition — the gate must verify it).
+  if (state.current.justTransitioned) {
+    debug("Dispute filed: clearing justTransitioned (gate must run after resolution)");
+    state.current.justTransitioned = false;
+  }
   const metrics = getLiveMetrics();
   if (metrics) accumulateDispute(metrics, "raised");
   debug(`Dispute filed: ${plan.slice(0, 60)}`);

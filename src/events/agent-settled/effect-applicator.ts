@@ -104,19 +104,27 @@ export function applyAdvanceEffect(input: EffectInput): EffectResult {
   ctx.ui.notify(effect.notify, "info");
   ctx.ui.setStatus("loop", effect.status);
   if (effect.phase === "C") {
-    // The implementation is complete and the gate is green: archive the spec
-    // now, before Phase C, so a crash in Phase C still leaves the work marked
-    // done- (Phase C is a nice-to-have pass, not the delivery point).
-    const archived = archiveSpecFile(state.specPath, ctx.cwd);
-    if (archived) {
-      ctx.ui.notify(`Spec archived: ${archived}`, "info");
-      debug(`Spec archived: ${archived}`);
-    }
+    archiveSpecBeforePhaseC(state, ctx, debug);
   }
   if (effect.prompt) {
     deliverAdvancePrompt(pi, state, lang, effect, debug);
   }
   return { applied: true };
+}
+
+// Archive the spec file before Phase C starts: the implementation is complete
+// and the gate is green, so mark the work done- now. A crash in Phase C (a
+// nice-to-have pass, not the delivery point) still leaves the spec archived.
+function archiveSpecBeforePhaseC(
+  state: LoopState,
+  ctx: EventCtx,
+  debug: (msg: string) => void,
+): void {
+  const archived = archiveSpecFile(state.specPath, ctx.cwd);
+  if (archived) {
+    ctx.ui.notify(`Spec archived: ${archived}`, "info");
+    debug(`Spec archived: ${archived}`);
+  }
 }
 
 // --- Shared advance-prompt delivery (spec internal/bug-advance-effect-dual-path.md) ---
@@ -212,13 +220,7 @@ export async function mergeBranchBack(
     return "merged";
   }
   if (outcome.kind === "conflict") {
-    debug(`--branch merge: CONFLICT (${outcome.files.length} files)`);
-    ctx.ui.notify(
-      `Merge conflict merging '${branch.name}' into '${branch.base}' — the Writer gets one turn to resolve it.`,
-      "warning",
-    );
-    ctx.ui.setStatus("loop", `merge conflict — Writer resolving (${branch.name})`);
-    sendPrompt(pi, promptMergeConflict(outcome.files), state.current, debug);
+    handleMergeConflict(outcome, branch, state.current, pi, ctx, debug);
     return "conflict";
   }
   debug(`--branch merge: ERROR (${outcome.error})`);
@@ -227,6 +229,26 @@ export async function mergeBranchBack(
     "warning",
   );
   return "error";
+}
+
+// A merge conflict was detected: notify the user, set the UI status, and give
+// the Writer one turn to resolve it. The merge is left in progress (MERGE_HEAD
+// set); the next settle verifies the outcome via verifyBranchMerge.
+function handleMergeConflict(
+  outcome: { files: string[] },
+  branch: { name: string; base: string },
+  state: LoopState,
+  pi: ExtensionAPI,
+  ctx: EventCtx,
+  debug: (msg: string) => void,
+): void {
+  debug(`--branch merge: CONFLICT (${outcome.files.length} files)`);
+  ctx.ui.notify(
+    `Merge conflict merging '${branch.name}' into '${branch.base}' — the Writer gets one turn to resolve it.`,
+    "warning",
+  );
+  ctx.ui.setStatus("loop", `merge conflict — Writer resolving (${branch.name})`);
+  sendPrompt(pi, promptMergeConflict(outcome.files), state, debug);
 }
 
 // Verify the Writer's single conflict-resolution attempt. Called from the

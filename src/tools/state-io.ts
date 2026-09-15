@@ -16,6 +16,18 @@ export function persistState(state: StateRef, pi: ExtensionAPI, debug: Debug): v
 
 /** Shared negotiate → Phase B transition: reset transient flags, then apply the effect. */
 export function transitionToPhaseB(state: StateRef, pi: ExtensionAPI, ctx: ToolCtx, debug: Debug): void {
+  resetForPhaseB(state);
+  applyTransitionEffect(state, pi, ctx, debug, {
+    type: "advance",
+    phase: "B",
+    status: "Phase B — round 1",
+    notify: "Approved — moving to Phase B.",
+    prompt: ADVANCE_PROMPTS.WRITER_PHASE_B,
+  });
+}
+
+/** Reset transient negotiate/dispute fields when entering Phase B. */
+function resetForPhaseB(state: StateRef): void {
   state.current.phase = "B";
   state.current.lastPhase = "negotiate";
   state.current.round = 1;
@@ -25,13 +37,6 @@ export function transitionToPhaseB(state: StateRef, pi: ExtensionAPI, ctx: ToolC
   state.current.negotiateReprompted = false;
   state.current.negotiateProposed = false;
   state.current.negotiateFeedback = "";
-  applyTransitionEffect(state, pi, ctx, debug, {
-    type: "advance",
-    phase: "B",
-    status: "Phase B — round 1",
-    notify: "Approved — moving to Phase B.",
-    prompt: ADVANCE_PROMPTS.WRITER_PHASE_B,
-  });
 }
 
 /** Entry logging: the negotiate action entry. */
@@ -70,11 +75,8 @@ export function applyTransitionEffect(
   debug(`applying transition: ${effect.type}`);
   persistState(state, pi, debug);
   ctx.ui.setStatus("loop", "status" in effect ? effect.status : "Phase B — round 1");
-  // Send the advance prompt (e.g. Phase B writer prompt). Without this the
-  // Writer is never told to write the implementation — the followUp is queued
-  // during the tool-call turn and the settle is consumed by justTransitioned.
-  // (bug-advance-effect-dual-path: the prompt send must stay in sync with the
-  // agent-settled applier — buildAdvancePrompt is the single builder.)
+  // Deliver the advance prompt via the shared helper so the tool-call path
+  // stays in sync with the agent-settled applier (bug-advance-effect-dual-path).
   if (effect.type === "advance" && effect.prompt) {
     const lang = getLanguageConfig(state.current.language);
     deliverAdvancePrompt(pi, state.current, lang, effect, debug);

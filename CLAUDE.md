@@ -53,3 +53,22 @@ The default `vitest run` must stay in the seconds-to-~20s range (~1,000 tests in
 - Real end-to-end toolchain verification lives in test/e2e/ (quality.test.ts) and runs explicitly, not in the default loop.
 - Debug/investigation test files (names like `hang*`, `*-tmp`, `gsi-*`) are deleted when the investigation closes — they duplicate the permanent regression file and double the spawn cost.
 - One regression file per bug spec. If a new file repeats tests from an existing file, merge, don't duplicate.
+
+## DEBUGGING SESSIONS
+
+When diagnosing a live loop session (stall, wrong transition, gate failure):
+
+1. **Use `scripts/extract-session.sh`** — it extracts the full event flow (state transitions, debug logs, negotiate, disputes, refusals, messages, tool calls) sorted by timestamp. Designed for LLM agent consumption, not human reading.
+   ```bash
+   ./scripts/extract-session.sh <session-id-prefix>   # e.g. 01a0a668
+   ./scripts/extract-session.sh                        # most recent session
+   ./scripts/extract-session.sh /path/to/session.jsonl # explicit file
+   ```
+2. **Key patterns to grep in the output:**
+   - `[STATE]` — phase/round/turns/dispute transitions (the spine of the loop)
+   - `[DEBUG]` — event trace (gate results, transitions, dispute lifecycle)
+   - `[NEGOTIATE]` / `[DISPUTE]` — negotiation and dispute events
+   - `[MSG]` / `[TOOLCALL]` / `[TOOL]` — what the LLM said and did
+   - `[COMPACTION]` — context compaction boundaries
+3. **Session files live in:** `~/.pi/agent/sessions/--Users-alancapps-.pi-agent-extensions-loop-go-bak--/`
+4. **Do NOT parse raw JSONL directly** — use the script. It normalizes timestamps, truncates long content, and separates event types.
