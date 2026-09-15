@@ -114,8 +114,9 @@ describe("negotiate_review — row 3 (advance to B)", () => {
     expect(state.current.phase).toBe("B");
     expect(state.current.round).toBe(1);
     expect(state.current.justTransitioned).toBe(true);
-    // No re-review prompt on the advancing approve.
-    expect(pi.sentMessages).toHaveLength(0);
+    // Phase B prompt is sent (the Writer needs instructions).
+    expect(pi.sentMessages).toHaveLength(1);
+    expect(pi.sentMessages[0].content).toContain("Phase B");
   });
 
   it("'agree' proposal + even round + approve → advance directly (re-review skipped)", async () => {
@@ -125,7 +126,8 @@ describe("negotiate_review — row 3 (advance to B)", () => {
     expect(result.content[0].text).toBe("Approved.");
     expect(state.current.phase).toBe("B");
     expect(state.current.round).toBe(1);
-    expect(pi.sentMessages).toHaveLength(0);
+    expect(pi.sentMessages).toHaveLength(1);
+    expect(pi.sentMessages[0].content).toContain("Phase B");
   });
 });
 

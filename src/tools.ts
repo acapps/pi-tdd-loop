@@ -11,6 +11,7 @@ import { commit } from "./commit";
 import { sendPrompt } from "./prompt";
 import { startPhaseA } from "./phase-a";
 import { getLiveMetrics, accumulateDispute } from "./metrics";
+import { buildAdvancePrompt } from "./events/agent-settled/effect-applicator";
 
 // --- Types ---
 
@@ -161,6 +162,13 @@ function applyTransitionEffect(
   debug(`applying transition: ${effect.type}`);
   persistState(state, pi, debug);
   ctx.ui.setStatus("loop", "status" in effect ? effect.status : "Phase B — round 1");
+  // Send the advance prompt (e.g. Phase B writer prompt). Without this the
+  // Writer is never told to write the implementation — the followUp is queued
+  // during the tool-call turn and the settle is consumed by justTransitioned.
+  if (effect.type === "advance" && effect.prompt) {
+    const lang = getLanguageConfig(state.current.language);
+    sendPrompt(pi, buildAdvancePrompt(effect.prompt, state.current, lang), state.current, debug);
+  }
 }
 
 // --- Phase × Tool policy (bug-phase-0-approval-dead-end) ---
