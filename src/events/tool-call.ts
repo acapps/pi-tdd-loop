@@ -83,12 +83,14 @@ function blockWorkspaceWrite(input: EnforcementInput): ToolCallBlockResult | und
 // F2: debug only — no loop-refusal entry.
 // Keyed on the dispute status (bug-dispute-reload-evaporation): a writer-
 // filed dispute is "filed" until its settle schedules the review, so the
-// block covers both "filed" and "in-review" (was: awaitDisputeReview, which
-// was set only at filing — same window, new key).
+// block covers "filed" (the filer's turn is ending; no tools should be
+// called). Once the settle flips the status to "in-review", the reviewer
+// (Tester or Writer) is active and needs read/bash/negotiate_review to
+// investigate and resolve — Rule 3 handles write restrictions.
 function blockDisputeReview(input: EnforcementInput): ToolCallBlockResult | undefined {
   const { state, debug, toolName } = input;
   const status = state.dispute?.status;
-  if (status !== "filed" && status !== "in-review") return undefined;
+  if (status !== "filed") return undefined;
   debug(`Blocked: ${toolName} (awaiting dispute review)`);
   return { block: true, reason: DISPUTE_REVIEW_REASON };
 }

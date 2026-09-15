@@ -186,7 +186,7 @@ const REVIEW_REJECT_TEXT = "negotiate_review is not available in this phase.";
 // --- Phase 0 handlers (bug-phase-0-approval-dead-end) ---
 
 /**
- * Phase 0 approve: the same transition as cmdApprove (src/commands.ts).
+ * Phase 0 approve: the same transition as cmdApprove (src/commands/lifecycle.ts).
  * "Same transition, two entry points" — the agent's negotiate_propose("approve")
  * and the human's /loop-approve both call startPhaseA.
  */

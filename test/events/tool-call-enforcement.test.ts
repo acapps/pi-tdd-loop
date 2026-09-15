@@ -156,6 +156,33 @@ describe("Rule 2 — awaitDisputeReview blocks all tool calls", () => {
     expect(refusalData(pi)).toHaveLength(0);
     expect(debug).toHaveBeenCalledWith("Blocked: write (awaiting dispute review)");
   });
+
+  it("does NOT block during in-review (the reviewer is active and needs tools)", () => {
+    const { result } = call({
+      state: { phase: "B", dispute: { status: "in-review", filer: "writer" } },
+      toolName: "negotiate_review",
+      path: undefined,
+    });
+    expect(result).toBeUndefined();
+  });
+
+  it("does NOT block read during in-review (the reviewer needs to investigate)", () => {
+    const { result } = call({
+      state: { phase: "B", dispute: { status: "in-review", filer: "writer" } },
+      toolName: "read",
+      path: "src/main_test.go",
+    });
+    expect(result).toBeUndefined();
+  });
+
+  it("does NOT block bash during in-review (the reviewer needs to run tests)", () => {
+    const { result } = call({
+      state: { phase: "B", dispute: { status: "in-review", filer: "writer" } },
+      toolName: "bash",
+      path: undefined,
+    });
+    expect(result).toBeUndefined();
+  });
 });
 
 // ---------------------------------------------------------------------------
