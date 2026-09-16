@@ -9,7 +9,7 @@ Conventions for specs in this directory: [docs/spec-authoring.md](../docs/spec-a
 | Spec | Type | Status | Dependencies (hard → soft) |
 |---|---|---|---|
 | [done-refactor-commands-split.md](done-refactor-commands-split.md) | refactor | **done** | Split `src/commands.ts` (824 lines) into `src/commands/` directory (6 modules) + `src/state-helpers.ts`. |
-| [refactor-tools-split.md](refactor-tools-split.md) | refactor | **open** | Split `src/tools.ts` (549 lines) into `src/tools/` directory (6 modules). Pure file reorganization, no behavioral change. Independent of commands-split. |
+| [done-refactor-tools-split.md](done-refactor-tools-split.md) | refactor | **done** | Split `src/tools.ts` (549 lines) into `src/tools/` directory (7 modules). Pure file reorganization, no behavioral change. |
 | [done-bug-advance-effect-dual-path.md](done-bug-advance-effect-dual-path.md) | bug | **done** | Two appliers apply the same `advance` effect (agent-settled `applyAdvanceEffect` + tool-call `applyTransitionEffect`) and diverged — the tool-call path never sent the Phase B prompt, stalling the loop in two live sessions. Consolidated prompt delivery into `deliverAdvancePrompt` helper. Also widened `isAgreeProposal` to word-boundary regex (session 01a0a668: Writer sent "agree\n\nTests match..." which the old prefix-set check missed). |
 | [done-spec-format-validation.md](done-spec-format-validation.md) | feature | **done** (2026-09-10) | `validateSpecStructure` in `reviewer.ts`; structural findings (missing sections) prepended to heuristic findings; `"Missing section"` category; 12 new tests. |
 | [done-loop-completion-report.md](done-loop-completion-report.md) | feature | **done** (2026-09-10) | `formatReport` + live metrics singleton in `metrics.ts`; `promptLoopReport` replaces `promptLoopComplete`; accumulation wired into gate/phase/turn/dispute events; 26 new tests. |
@@ -28,7 +28,7 @@ Conventions for specs in this directory: [docs/spec-authoring.md](../docs/spec-a
 | [done-remove-dead-metrics.md](done-remove-dead-metrics.md) | cleanup | **done** (2026-09-09) | **Invalid spec** — `src/metrics.ts` is used by `test/golden/runner.ts` and `test/e2e/runner.ts`. Not dead code. No change. |
 | [done-gate-timeout-config.md](done-gate-timeout-config.md) | feature | **done** (2026-09-09) | `--timeout <N>` flag on `/loop`; `gateTimeoutSec` in `LoopState`; threaded through `runGates` → `execCommand`. 27 test fixtures updated. |
 | [done-loop-status-command.md](done-loop-status-command.md) | feature | **done** (2026-09-09) | Enhanced existing `/loop-status`: phase/round/turns/disputes/spec/language snapshot. Idle/done/escalated branches. |
-| [bug-golden-baseline-cwd.md](bug-golden-baseline-cwd.md) | bug | **done** (merged `03fb45c`) | Golden project baseline runs in workspace root; `sendUserMessage` → `deliverAs: "followUp"`; 33 test assertions updated. |
+| [done-bug-golden-baseline-cwd.md](done-bug-golden-baseline-cwd.md) | bug | **done** (merged `03fb45c`) | Golden project baseline runs in workspace root; `sendUserMessage` → `deliverAs: "followUp"`; 33 test assertions updated. |
 | [done-phase0-auto-approve.md](done-phase0-auto-approve.md) | feature | **done** (merged `4437904`) | Phase 0 auto-advance when review is clean (no feedback, no dispute); `--no-auto-approve` opt-out; 5-row decision table in `handleReviewSettled`; `lang` param becomes live. 14 tests in review.test.ts (was 3). |
 | [done-bug-phase-0-approval-dead-end.md](done-bug-phase-0-approval-dead-end.md) | bug | **done** | Phase × Tool policy matrix; Phase 0 approve/feedback handlers; `/loop-restart` extended. |
 
@@ -47,7 +47,7 @@ Conventions for specs in this directory: [docs/spec-authoring.md](../docs/spec-a
 
 | File | Kind | Note |
 |---|---|---|
-| [vitest5-upgrade.md](vitest5-upgrade.md) | reference doc | Vitest 5.0 migration guide (vendored), **not** a loop spec. Installed vitest is **4.1.11** (verified 2026-09-06) — a real upgrade would be its own spec. |
+| [done-vitest5-upgrade.md](done-vitest5-upgrade.md) | reference doc | **done** (decision: do not upgrade) | Vitest 5.0 migration guide (vendored), **not** a loop spec. Installed vitest is **4.1.11**. Decision: stay on 4.x. |
 
 ## Done
 
