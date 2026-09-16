@@ -18,7 +18,7 @@ Language is auto-detected from project files (`go.mod`, `pom.xml`, `package.json
 
 ```bash
 # Install from git
-pi install git:github.com/YOU/pi-tdd-loop@v1
+pi install git:github.com/acapps/pi-tdd-loop
 
 # Or run from source
 pi -e ./path/to/pi-tdd-loop
@@ -30,23 +30,57 @@ pi -e ./path/to/pi-tdd-loop
 
 # With options
 /loop --coverage 90 path/to/spec.md
-/loop --language java path/to/spec.md
+/loop --language java --timeout 120 path/to/spec.md
+/loop --no-auto-approve path/to/spec.md
+/loop --branch feature/my-change path/to/spec.md
 ```
 
 ## Commands
 
 | Command | Description |
 |---|---|
-| `/loop [options] <spec>` | Start the loop (baseline check, then Phase 0 review); `--branch [name]` runs it on a git feature branch |
+| `/loop [options] <spec>` | Start the loop (baseline check, then Phase 0 review) |
 | `/loop-approve` | Approve Phase 0 review and proceed to Phase A |
 | `/loop-status` | Show current phase, round, gate results |
 | `/loop-continue` | Resume from current phase after escalation |
 | `/loop-restart <phase>` | Jump to a specific phase |
 | `/loop-debug` | Show last 20 debug entries; `--log-bug <name>` writes `bug-fix-<name>.md` |
+| `/loop-patch <spec>` | Mid-loop spec correction: re-read spec, reset round, record patch entry |
+| `/loop-decompose <spec>` | Split a large spec into sub-specs (stateless, no loop state change) |
+| `/loop-stop` | Stop the loop, escalate to human |
 | `/loop-cancel` | Stop the loop, return to idle |
 | `/spec [options] <goal>` | One-shot Author: writes a /loop-ready spec into the backlog (no loop state) |
 
+### `/loop` options
+
+| Flag | Description |
+|---|---|
+| `--language go\|java\|typescript` | Override auto-detection |
+| `--coverage N` | Coverage threshold (default 80) |
+| `--timeout N` | Gate command timeout in seconds (default 60) |
+| `--branch [name]` | Run on a git feature branch (default: `loop/<spec-slug>`) |
+| `--no-auto-approve` | Disable Phase 0 auto-advance (default: auto-approve when review is clean) |
+
+### Project config
+
+Place a `loop.config.json` in your project root (or `.pi/loop.config.json`) to set defaults:
+
+```json
+{
+  "coverage": 90,
+  "language": "go",
+  "timeout": 120,
+  "autoApprove": true
+}
+```
+
+CLI flags override config file values.
+
+### `/spec`
+
 `/spec [--slug <name>] [--out <dir>] <goal...>` is the spec-writing half of the workflow: it runs one Author turn that reads your loose goal, verifies claims against the repo, and writes a tight spec file (default `internal/<slug>.md`) shaped to the [spec template](docs/spec-authoring.md). It is a separate, stateless command — no loop phases, no gates, no `LoopState` — so spec-writing and implementation can each take their own session. When the spec is ready, kick off the implementation half with `/loop internal/<slug>.md`.
+
+### `/loop-debug --log-bug`
 
 `/loop-debug --log-bug <name>` extracts the session's `loop-*` debug entries in-process and writes `bug-fix-<slug>.md` into the working directory — a self-contained, `/loop`-runnable bug spec with an auto-filled Context (phase/round/spec/language), placeholder Observed problem / Proposed fix sections, and the extracted log excerpt inlined. Fill the placeholders in, then run `/loop bug-fix-<slug>.md`.
 
@@ -74,6 +108,8 @@ Phase 0 (Baseline + Review) → Phase A (Tester) → Negotiate → Phase B (Writ
 
 First, the loop runs your existing test suite: all tests must pass, or you must have no tests yet. If the suite is red — or the test runner is unavailable — `/loop` stops with the failing tests and will not start a loop on top of a broken baseline. Then the Reviewer reads your spec and surfaces ambiguities, missing edge cases, and underspecified behavior. You approve, reject, or modify each finding before any code is written. This shifts you from firefighter (reacting to disputes mid-loop) to reviewer (approving clarifications up front). Specs written against the template in [docs/spec-authoring.md](docs/spec-authoring.md) tend to clear Phase 0 in a single pass.
 
+By default, a clean review (no feedback, no dispute) auto-advances to Phase A. Use `--no-auto-approve` to require an explicit `/loop-approve`.
+
 ### Phase A — Tester writes the contract
 
 Tester reads the spec, writes stub signatures and comprehensive test suites. Gate: code must compile.
@@ -94,7 +130,7 @@ At the B→C boundary — when the implementation is complete and the gate is gr
 
 ## Escalation
 
-If rounds are exhausted (compilation failures, negotiation impasse, implementation failures, dispute limits), the loop escalates to you. Use `/loop-continue` to resume or `/loop-restart <phase>` to jump.
+If rounds are exhausted (compilation failures, negotiation impasse, implementation failures, dispute limits), the loop escalates to you. Use `/loop-continue` to resume or `/loop-restart <phase>` to jump. `/loop-stop` explicitly escalates at any point.
 
 ## Works with Graphify
 
@@ -104,9 +140,10 @@ The loop pairs well with the [Graphify](https://github.com/pi-dev/pi-extensions/
 
 ```bash
 npm install
-npm test
+npm test          # unit tests (vitest, ~1600 tests, <20s)
+npx tsc --noEmit  # type check
 ```
 
 ## License
 
-TODO
+[MIT](LICENSE)
