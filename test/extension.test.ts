@@ -1937,7 +1937,7 @@ describe("agent_settled event (phase transitions)", () => {
           turnsThisPhase: 1,
           lastProposal: "",
           lastPhase: "A",
-          justTransitioned: true,
+          justTransitioned: false, // fix-session-restart: false so the settle runs the gate (not the resume-consumption path)
           negotiateReprompted: false}},
     ];
 

@@ -82,7 +82,11 @@ function migrateDispute(data: Record<string, unknown>): Record<string, unknown> 
 }
 
 function clearTransientFlags(s: LoopState): void {
-  s.justTransitioned = false;
+  // NOTE: `justTransitioned` is deliberately NOT cleared (fix-session-restart):
+  // it is the resume trigger — a reload landing right after a prompt delivery
+  // (saved true) must get the resume prompt from handleBeforeAgent, not the
+  // full phase-entry prompt. It is consumed (cleared) at the next settle
+  // (src/events/agent-settled/index.ts), the single consumption point.
   s.negotiateReprompted = false;
   // Heal pre-spec-07 entries: missing markers become defined (false / "") so
   // the `=== true` / `!== ""` checks see a definite value after restore.

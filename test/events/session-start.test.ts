@@ -159,4 +159,17 @@ describe("handleSessionStart", () => {
     expect(input.state.current.dispute?.status).toBe("conceded"); // preserved (spec 09)
     expect(input.state.current.dispute?.filer).toBe("writer"); // preserved
   });
+
+  it("restore preserves justTransitioned=true (resume survives reload)", () => {
+    const saved = makeState({ phase: "A", round: 1, turnsThisPhase: 1, justTransitioned: true });
+    const ctx = makeMockCtx([
+      { type: "custom", customType: "loop-state", data: saved },
+    ]);
+    const input = makeInput({ ctx });
+
+    handleSessionStart(input);
+
+    expect(input.state.current.phase).toBe("A");
+    expect(input.state.current.justTransitioned).toBe(true);
+  });
 });

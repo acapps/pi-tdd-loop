@@ -184,7 +184,9 @@ describe("state restoration on reload (no behavioral change)", () => {
     const { state, handler } = makeInput([entry]);
     await handler({}, makeCtx([entry]));
     expect(state.current.dispute?.status).toBe("conceded"); // preserved (spec 09)
-    expect(state.current.justTransitioned).toBe(false);
+    // fix-session-restart: justTransitioned is the resume trigger — it
+    // deliberately survives restore (consumed at the next settle).
+    expect(state.current.justTransitioned).toBe(true);
     expect(state.current.negotiateReprompted).toBe(false);
     // Persistent fields survive
     expect(state.current.disputeCount).toBe(2);
@@ -378,5 +380,58 @@ describe("extension entry point (index.ts) — session_start seam", () => {
     const api = createMockExtensionAPI();
     extensionFactory(api);
     expect(api.eventHandlers.get("session_start")?.length).toBe(1);
+  });
+
+  it("factory restores with justTransitioned=true and the next before_agent_start returns the resume prompt", async () => {
+    const api = createMockExtensionAPI();
+    extensionFactory(api);
+
+    const sessionHandlers = api.eventHandlers.get("session_start") ?? [];
+    const beforeAgentHandlers = api.eventHandlers.get("before_agent_start") ?? [];
+    expect(sessionHandlers.length).toBeGreaterThan(0);
+    expect(beforeAgentHandlers.length).toBeGreaterThan(0);
+
+    const ui = { notify: vi.fn(), setStatus: vi.fn() };
+    const entries = [
+      {
+        type: "custom",
+        customType: "loop-state",
+        data: {
+          phase: "A",
+          round: 1,
+          specPath: "spec.md",
+          language: "go",
+          buildTool: "maven",
+          maxA: 3,
+          maxNegotiate: 3,
+          maxB: 5,
+          maxC: 3,
+          maxDispute: 3,
+          maxTurnsPerPhase: 5,
+          coverageThreshold: 80,
+          gateTimeoutSec: 60,
+          dispute: { status: "none" },
+          disputeCount: 0,
+          turnsThisPhase: 1,
+          lastProposal: "",
+          lastPhase: "review",
+          justTransitioned: true, // survives restore (fix-session-restart)
+          negotiateReprompted: false,
+        },
+      },
+    ];
+    const ctx = {
+      ui,
+      sessionManager: { getEntries: () => entries },
+      cwd: "/tmp/test-project",
+    };
+
+    await sessionHandlers[0]({ type: "session_start", reason: "reload" }, ctx);
+
+    // The flag survived the reload; the next before_agent_start reads it.
+    const output = await beforeAgentHandlers[0]({ systemPrompt: "Base system prompt" });
+    expect(output).toBeDefined();
+    const content = (output as { message: { content: string } }).message.content;
+    expect(content.startsWith("RELOAD. You are mid-phase: Phase A, round 1.")).toBe(true);
   });
 });

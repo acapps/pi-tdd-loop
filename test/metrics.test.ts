@@ -213,6 +213,23 @@ describe("accumulators (regression)", () => {
     expect(m.testFails).toBe(1);
   });
 
+  it("accumulateGate clears failureDetails on a passing gate (session 01a0b7de)", () => {
+    const m = createMetrics({ specPath: "s.md", language: "go", phase: "A" });
+    accumulateGate(m, { compile: true, allPassed: false, coverage: 0, failures: [{ test: "T1", subtest: "", output: "x" }] });
+    expect(m.failureDetails).toHaveLength(1);
+    accumulateGate(m, { compile: true, allPassed: true, coverage: 0, failures: [] });
+    expect(m.failureDetails).toHaveLength(0);
+  });
+
+  it("a green final gate produces a clean completion report (session 01a0b7de)", () => {
+    const m = createMetrics({ specPath: "s.md", language: "go", phase: "A" });
+    accumulateGate(m, { compile: true, allPassed: false, coverage: 0, failures: [{ test: "T1", subtest: "", output: "x" }] });
+    accumulateGate(m, { compile: true, allPassed: true, coverage: 0, failures: [] });
+    const report = formatReport(finalize(m, "done"));
+    expect(report).toContain("Loop complete — spec s.md");
+    expect(report).not.toContain("Phase C failed");
+  });
+
   it("accumulateGate tracks max coverage", () => {
     const m = createMetrics({ specPath: "s.md", language: "go", phase: "A" });
     accumulateGate(m, { compile: true, allPassed: true, coverage: 70, failures: [] });

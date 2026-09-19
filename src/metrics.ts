@@ -100,6 +100,10 @@ export function accumulateGate(metrics: LoopMetrics, gate: GateLike): void {
     metrics.testFails++;
     metrics.totalFailures += gate.failures.length;
     metrics.failureDetails.push(...gate.failures);
+  } else {
+    // failureDetails reflects the LATEST gate (session 01a0b7de: stale Phase A
+    // failures made the final report claim "Phase C failed" after a green gate).
+    metrics.failureDetails = [];
   }
   if (gate.coverage > metrics.finalCoverage) metrics.finalCoverage = gate.coverage;
 }

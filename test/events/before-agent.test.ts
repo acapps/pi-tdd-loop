@@ -338,3 +338,102 @@ describe("no-throw and edge cases", () => {
     expect(() => handleBeforeAgent(input)).not.toThrow();
   });
 });
+
+// --- Resume prompt (fix-session-restart): justTransitioned → mid-phase reload ---
+//
+// The branch condition is `=== true` (never truthiness): existing fixtures
+// above omit or set `justTransitioned: false`, so row 2 never fires there.
+
+describe("resume prompt (justTransitioned)", () => {
+  // Verbatim strings from internal/fix-session-restart.md — the resume
+  // prompt is language-agnostic (no Go/Java/TS pattern interpolation).
+  const resumeContent = (phase: string, round: number, roleLine: string) =>
+    `RELOAD. You are mid-phase: Phase ${phase}, round ${round}.\n` +
+    "Your previous turn's work is already on disk — continue from where you stopped.\n" +
+    "Do not re-read the spec, re-derive the contract, or rewrite files from scratch.\n" +
+    `${roleLine}\n` +
+    "Stop when done.";
+
+  const resumeSP = `${BASE}\n\nSession reloaded mid-phase. Continue the current phase — do not restart it.`;
+
+  const ROLE_LINES: Record<string, string> = {
+    review: "Role: Reviewer (Phase 0). Use negotiate_propose or negotiate_review.",
+    A: "Role: Tester. Continue writing the contract tests.",
+    negotiate: "Role: Negotiator. Use negotiate_propose / negotiate_review.",
+    B: "Role: Writer. Continue implementing to pass the tests.",
+    C: "Role: Cleaner. Continue refactoring. All tests must pass.",
+  };
+
+  it("justTransitioned → resume prompt, all 5 non-idle phases (exact strings, round interpolated)", () => {
+    const cases: Array<{ phase: LoopState["phase"]; round: number }> = [
+      { phase: "review", round: 1 },
+      { phase: "A", round: 1 },
+      { phase: "negotiate", round: 2 },
+      { phase: "B", round: 3 }, // round 3 pins the interpolation
+      { phase: "C", round: 2 },
+    ];
+    for (const { phase, round } of cases) {
+      const input = makeInput({ state: { current: makeState({ phase, round, justTransitioned: true }) } });
+      expect(handleBeforeAgent(input), `phase ${phase}`).toEqual({
+        message: msg(resumeContent(phase, round, ROLE_LINES[phase])),
+        systemPrompt: resumeSP,
+      });
+    }
+  });
+
+  it("resume branch order: idle + justTransitioned → undefined (row 1 wins), no throw", () => {
+    const input = makeInput({ state: { current: makeState({ phase: "idle", justTransitioned: true }) } });
+    expect(() => handleBeforeAgent(input)).not.toThrow();
+    expect(handleBeforeAgent(input)).toBeUndefined();
+  });
+
+  it("resume branch before lang resolution: justTransitioned + corrupted language → resume output, no throw", () => {
+    const input = makeInput({
+      state: { current: makeState({ phase: "A", round: 1, justTransitioned: true, language: "bogus" as any }) },
+    });
+    expect(() => handleBeforeAgent(input)).not.toThrow();
+    expect(handleBeforeAgent(input)).toEqual({
+      message: msg(resumeContent("A", 1, ROLE_LINES["A"])),
+      systemPrompt: resumeSP,
+    });
+  });
+
+  it("justTransitioned + B + conceded dispute → resume (row 2 wins over dispute-fix), no commit (Q3 pin)", () => {
+    const pi = createMockExtensionAPI();
+    const state = makeState({
+      phase: "B",
+      round: 3,
+      justTransitioned: true,
+      dispute: { status: "conceded", filer: "writer" },
+    });
+    const input = { state: { current: state }, pi: pi as any, debug: vi.fn(), systemPrompt: BASE };
+    const output = handleBeforeAgent(input);
+    expect(output).toEqual({
+      message: msg(resumeContent("B", 3, ROLE_LINES["B"])),
+      systemPrompt: resumeSP,
+    });
+    // The dispute-fix branch must NOT have fired: no status change, no commit.
+    expect(state.dispute?.status).toBe("conceded");
+    expect(pi.appendedEntries).toEqual([]);
+  });
+
+  it("resume branch debug line: exactly one call, 'before_agent_start: resume prompt (Phase B round 3)'", () => {
+    const debug = vi.fn();
+    const input = makeInput({
+      state: { current: makeState({ phase: "B", round: 3, justTransitioned: true }) },
+      debug,
+    });
+    handleBeforeAgent(input);
+    expect(debug).toHaveBeenCalledTimes(1);
+    expect(debug).toHaveBeenCalledWith("before_agent_start: resume prompt (Phase B round 3)");
+  });
+
+  it("resume branch mutates nothing, persists nothing (phase A representative)", () => {
+    const state = makeState({ phase: "A", round: 1, justTransitioned: true });
+    const before = structuredClone(state);
+    const pi = createMockExtensionAPI();
+    handleBeforeAgent({ state: { current: state }, pi: pi as any, debug: vi.fn(), systemPrompt: BASE });
+    expect(state).toEqual(before);
+    expect(pi.appendedEntries).toEqual([]);
+  });
+});

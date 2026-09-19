@@ -206,7 +206,7 @@ describe("handleSessionStart — restore validation (quarantine)", () => {
       negotiateReprompted: true});
     const input = makeInput([stateEntry(saved)]);
     handleSessionStart(input);
-    expect(input.state.current.justTransitioned).toBe(false);
+    expect(input.state.current.justTransitioned).toBe(true); // fix-session-restart: resume trigger survives restore
     expect(input.state.current.negotiateReprompted).toBe(false);
     expect(input.state.current.dispute?.status === "conceded").toBe(false);
     expect(input.state.current.dispute?.status === "defended").toBe(false);

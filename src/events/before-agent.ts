@@ -6,6 +6,12 @@
 // dispatch. All helpers take the bare `LoopState` — in helper scope,
 // `state.round` / `state.dispute` refer to the current round/dispute status.
 // The wrapper exists only at the entry boundary.
+//
+// Resume path (fix-session-restart): a reload mid-phase (saved
+// `justTransitioned === true`) gets a short resume prompt instead of the
+// full phase-entry prompt — the work is already on disk. The flag survives
+// restore (session-start no longer zeros it) and is consumed at the next
+// settle (agent-settled/index.ts).
 
 import type { LoopState } from "../types";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -41,13 +47,61 @@ export function handleBeforeAgent(
   const { state, pi, debug, systemPrompt } = input;
   const s = state.current;
 
-  // Entry order (S1, pinned): 1) idle short-circuit BEFORE any lang
-  // resolution — idle + corrupted language returns undefined without
-  // throwing; 2) lang resolution — may throw on corrupted state for every
-  // other phase (terminal phases included); 3) phase dispatch.
+  // Entry order (pinned): 1) idle short-circuit BEFORE anything else —
+  // idle + corrupted language returns undefined without throwing, and
+  // idle never inspects justTransitioned; 2) resume branch —
+  // `justTransitioned === true` (any non-idle phase) returns the resume
+  // prompt BEFORE lang resolution, so a corrupted language does not throw
+  // on a mid-phase reload (the resume branch never touches lang);
+  // 3) lang resolution — may throw on corrupted state for every other
+  // non-idle phase (terminal phases included); 4) phase dispatch.
   if (s.phase === "idle") return undefined;
+  if (s.justTransitioned === true) return buildResumePrompt(s, debug, systemPrompt);
   const lang = getLanguageConfig(s.language);
   return buildPhasePrompt(s, pi, lang, debug, systemPrompt);
+}
+
+// --- Resume prompt (fix-session-restart) ---
+// Language-agnostic: no lang config, no file-pattern interpolation. Built
+// by buildContextMessage (same envelope as every other prompt). No side
+// effects — no commit, no state mutation, no ctx.ui; the settle handler's
+// existing clear+commit is the single consumption point.
+
+// Verbatim role lines (spec: internal/fix-session-restart.md). The resume
+// branch is only reached for the 5 non-idle, non-terminal phases (idle
+// short-circuits; done/escalated save with justTransitioned false), so the
+// default is unreachable — it exists to satisfy exhaustiveness.
+const RESUME_ROLE_LINES: Record<LoopState["phase"], string> = {
+  review: "Role: Reviewer (Phase 0). Use negotiate_propose or negotiate_review.",
+  A: "Role: Tester. Continue writing the contract tests.",
+  negotiate: "Role: Negotiator. Use negotiate_propose / negotiate_review.",
+  B: "Role: Writer. Continue implementing to pass the tests.",
+  C: "Role: Cleaner. Continue refactoring. All tests must pass.",
+  done: "",
+  escalated: "",
+  idle: "",
+};
+
+function buildResumePrompt(
+  state: LoopState,
+  debug: DebugFn,
+  systemPrompt: string,
+): BeforeAgentHandlerOutput {
+  debug(`before_agent_start: resume prompt (Phase ${state.phase} round ${state.round})`);
+  return {
+    message: buildContextMessage(resumeContent(state)),
+    systemPrompt: `${systemPrompt}\n\nSession reloaded mid-phase. Continue the current phase — do not restart it.`,
+  };
+}
+
+function resumeContent(state: LoopState): string {
+  return (
+    `RELOAD. You are mid-phase: Phase ${state.phase}, round ${state.round}.\n` +
+    "Your previous turn's work is already on disk — continue from where you stopped.\n" +
+    "Do not re-read the spec, re-derive the contract, or rewrite files from scratch.\n" +
+    `${RESUME_ROLE_LINES[state.phase]}\n` +
+    "Stop when done."
+  );
 }
 
 // --- Dispatch ---
