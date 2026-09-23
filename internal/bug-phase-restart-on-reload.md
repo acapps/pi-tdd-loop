@@ -1,5 +1,7 @@
 # Bug: Session reload mid-phase restarts the whole phase instead of resuming the turn
 
+> **Status: superseded (2026-09-19).** Fixed by `internal/done-fix-session-restart.md` (commit `46236a4`): the resume path is `justTransitioned` surviving restore (no longer zeroed by `clearTransientFlags`) + `buildResumePrompt` in `src/events/before-agent.ts`. The proposed `phaseCheckpoint` design below was rejected in favor of the existing flag — see Q5 in that spec. Retained as a historical record; do not spec from this file.
+
 ## Context
 
 Session `01a011fa` (spec 09), Phase A. The Tester was mid-phase (tests being written, 26 failures outstanding) when the session was reloaded at 04:27:19. State restored to `Phase A round 1` and the Tester was re-prompted from scratch — re-reading the spec, re-deriving the contract — instead of resuming where it stopped. Combined with a compaction event at 04:30:01, Phase A took ~40 minutes and the whole run 6+ hours.
