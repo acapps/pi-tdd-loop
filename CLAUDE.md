@@ -48,6 +48,7 @@ Then I decide. Point = choice on purpose, not by default.
 The default `vitest run` must stay in the seconds-to-~20s range (~1,000 tests in 20s is the reference).
 
 - Unit tests NEVER spawn real processes. If the code under test calls `execFile`/`execSync`/`spawn`, the test mocks that boundary (`vi.mock("node:child_process")` — note: `vi.spyOn` on ESM node builtins does not work) and asserts on the interpretation of exit codes / output, not on the toolchain actually running.
+- `vi.mock` + `mockReset()` wipes return values (unlike `mockClear()`). After a `mockReset()`, re-set `mockReturnValue`/`mockResolvedValue` before the next call — or use `mockClear()` if you only want to clear call history. (Observed: session 01a0bba2, Q2 pair-invariant test — `runGates` returned `undefined` after `mockReset()`, crashing the pipeline under test.)
 - No `npx` in unit tests: npx resolves/downloads packages into bare temp dirs = tens of seconds per call.
 - No temp-dir project scaffolding (`mkdtemp` + `go.mod`/`package.json` + real run) outside test/e2e/.
 - Real end-to-end toolchain verification lives in test/e2e/ (quality.test.ts) and runs explicitly, not in the default loop.
