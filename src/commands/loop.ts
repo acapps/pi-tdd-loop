@@ -32,7 +32,7 @@ export function createInitialState(
     maxA, maxNegotiate, maxB, maxC, maxDispute, maxTurnsPerPhase,
     coverageThreshold: coverage, gateTimeoutSec: timeout,
     dispute: { status: "none" }, disputeCount: 0, turnsThisPhase: 1,
-    lastProposal: "", lastPhase: "A", justTransitioned: false,
+    lastProposal: "", lastPhase: "A", justTransitioned: false, justTransitionedBySettle: false,
     negotiateReprompted: false, negotiateProposed: false,
     negotiateFeedback: "", autoApprove,
   };
