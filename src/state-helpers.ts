@@ -16,6 +16,7 @@ export function resetPhaseState(state: LoopState): void {
   state.negotiateProposed = false;
   state.negotiateFeedback = "";
   state.justTransitioned = false;
+  state.justTransitionedBySettle = false; // fix-just-transitioned-settle-drop S4: human restarts clear the pair
   state.turnsThisPhase = 1;
 }
 

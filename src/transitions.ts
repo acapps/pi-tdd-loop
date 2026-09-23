@@ -294,6 +294,7 @@ function advanceToPhaseB(state: LoopState): LoopState {
     round: 1,
     turnsThisPhase: 1,
     justTransitioned: true,
+    justTransitionedBySettle: true, // settle-path flag: the next settle is consumed (S1 entry 4)
     lastPhase: state.phase,
     dispute: { status: "none" },
   };

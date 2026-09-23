@@ -92,6 +92,13 @@ function clearTransientFlags(s: LoopState): void {
   // the `=== true` / `!== ""` checks see a definite value after restore.
   s.negotiateProposed = false;
   s.negotiateFeedback = "";
+  // fix-just-transitioned-settle-drop S4: heal pre-fix entries (field absent)
+  // → false, so a restored justTransitioned gates (tool-triggered default).
+  // NOTE: a persisted `true` is NOT touched — the marker must survive restore
+  // (S3); only `undefined` is healed.
+  if (s.justTransitionedBySettle === undefined) {
+    s.justTransitionedBySettle = false;
+  }
   // NOTE: `dispute` is deliberately NOT touched (the fix): filed / in-review /
   // conceded / defended survive restore and redeliver on the next settle.
   // A legacy entry with no dispute object (validator-accepted pre-migration

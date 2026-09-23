@@ -14,6 +14,7 @@
 // settle (agent-settled/index.ts).
 
 import type { LoopState } from "../types";
+import { getWorkspaceRoot } from "../types";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { DebugFn } from "./index";
 import { getLanguageConfig } from "../languages";
@@ -249,11 +250,19 @@ function buildCleanerPrompt(
   state: LoopState,
   systemPrompt: string,
 ): BeforeAgentHandlerOutput {
+  // fix-just-transitioned-settle-drop S3+TS6: the normal Phase C entry prompt
+  // is the language config's promptCleanerPhaseC (the same prompt the settle
+  // advance effect delivers) — before_agent_start must not re-derive a
+  // shorter variant, or the entry prompt diverges across the two delivery
+  // points. Round stays in the systemPrompt only.
+  const ws = getWorkspaceRoot(state.specPath);
+  const prompt = lang.prompts.promptCleanerPhaseC(ws);
   return {
     message: buildContextMessage(
-      "CLEANER. Refactor for readability:\n" +
+      `CLEANER. Refactor for readability:\n` +
       "- Return early. Extract helpers. Clear names.\n" +
-      `You may only write ${lang.sourceFilePattern}. Do not modify ${lang.testFilePattern}. All tests must pass.`,
+      `You may only write ${lang.sourceFilePattern}. Do not modify ${lang.testFilePattern}. All tests must pass.\n\n` +
+      prompt,
     ),
     systemPrompt: `${systemPrompt}\n\nPhase C (Cleaner), round ${state.round}. Refactor ${lang.sourceFilePattern} only. Do not modify ${lang.testFilePattern}.`,
   };

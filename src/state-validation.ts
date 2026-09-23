@@ -43,6 +43,7 @@ const FIELD_SPECS: Record<string, FieldSpec> = {
   gateTimeoutSec: { type: "number" },
   disputeCount: { type: "number" },
   justTransitioned: { type: "boolean" },
+  justTransitionedBySettle: { type: "boolean", optional: true },
   negotiateReprompted: { type: "boolean" },
   negotiateProposed: { type: "boolean", optional: true },
   negotiateFeedback: { type: "string", optional: true },

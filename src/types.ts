@@ -27,6 +27,13 @@ export interface LoopState {
   lastProposal: string;
   lastPhase: Phase;
   justTransitioned: boolean;
+  // fix-just-transitioned-settle-drop: distinguishes settle-path transitions
+  // (prompt delivered by the settle effect — the next settle is a
+  // prompt-delivery settle and must be CONSUMED) from tool-triggered
+  // transitions (prompt delivered synchronously in the tool call — the next
+  // settle is a work settle and must run the gate). Optional: pre-fix saved
+  // entries lack the field; clearTransientFlags heals absent → false.
+  justTransitionedBySettle?: boolean;
   negotiateReprompted: boolean;
   lastGateResult?: GateResult;
   // Negotiate round (spec 07): set by tools, consumed + cleared by the settle

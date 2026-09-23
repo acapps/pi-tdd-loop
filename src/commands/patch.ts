@@ -93,6 +93,7 @@ export function cmdPatch(
       state.current.lastPhase = oldPhase;
       resetPhaseState(state.current);
       state.current.justTransitioned = true;
+      state.current.justTransitionedBySettle = true; // settle-path flag: the re-entry settle is consumed (S1 entry 2)
 
       commit(state.current, pi, debug);
       ctx.ui.notify(`Spec patched. Restarting from Phase ${targetPhase}, round 1.`, "info");

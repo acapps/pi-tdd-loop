@@ -213,7 +213,7 @@ describe("step 3 — loop escalation", () => {
 
 describe("step 4 — justTransitioned", () => {
   it("B round 1 → clears in place, NO message (double-trigger deleted), undefined, no gate", async () => {
-    const state = makeState({ phase: "B", round: 1, justTransitioned: true });
+    const state = makeState({ phase: "B", round: 1, justTransitioned: true, justTransitionedBySettle: true });
     const { input, pi, debug } = makeInput({ state: { current: state } });
 
     expect(await handleAgentSettled(input)).toBeUndefined();
@@ -227,7 +227,7 @@ describe("step 4 — justTransitioned", () => {
   });
 
   it("B round 2 → clears, NO message (spot assert, round-2 variant)", async () => {
-    const state = makeState({ phase: "B", round: 2, justTransitioned: true });
+    const state = makeState({ phase: "B", round: 2, justTransitioned: true, justTransitionedBySettle: true });
     const { input, pi } = makeInput({ state: { current: state } });
 
     expect(await handleAgentSettled(input)).toBeUndefined();
@@ -236,7 +236,7 @@ describe("step 4 — justTransitioned", () => {
   });
 
   it("C round 1 → clears, no message (only B r1 triggers)", async () => {
-    const state = makeState({ phase: "C", round: 1, justTransitioned: true });
+    const state = makeState({ phase: "C", round: 1, justTransitioned: true, justTransitionedBySettle: true });
     const { input, pi } = makeInput({ state: { current: state } });
 
     expect(await handleAgentSettled(input)).toBeUndefined();

@@ -57,7 +57,24 @@ const DISPUTE_FIX_SP = `${BASE}\n\nYou are in Phase B dispute fix (Tester). You 
 const CLEANER_CONTENT =
   "CLEANER. Refactor for readability:\n" +
   "- Return early. Extract helpers. Clear names.\n" +
-  `You may only write ${GO_SOURCE}. Do not modify ${GO_TEST}. All tests must pass.`;
+  `You may only write ${GO_SOURCE}. Do not modify ${GO_TEST}. All tests must pass.\n\n` +
+  "Phase C (Cleaner). Refactor Go source files for readability:\n" +
+  "\n" +
+  "- Return early. Extract helpers. Clear names.\n" +
+  "- No method over 200 lines\n" +
+  "- You may only write *.go (non-test files). Do not modify *_test.go.\n" +
+  "- All tests must pass.\n" +
+  "\n" +
+  "Go conventions:\n" +
+  "- Use go test -json ./... for test output\n" +
+  "- Use go build ./... for compilation check\n" +
+  "- Use go test -cover ./... for coverage\n" +
+  "- Package name matches directory\n" +
+  "- Exported names use PascalCase\n" +
+  "- Error handling without explicit error types, prefer errors.Is and errors.As\n" +
+  "\n" +
+  "\n" +
+  "When done, stop producing tool calls.";
 const CLEANER_SP_ROUND = (round: number) =>
   `${BASE}\n\nPhase C (Cleaner), round ${round}. Refactor ${GO_SOURCE} only. Do not modify ${GO_TEST}.`;
 

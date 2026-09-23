@@ -69,8 +69,17 @@ function handleJustTransitioned(
   debug: (msg: string) => void,
 ): boolean {
   if (!state.current.justTransitioned) return false;
+  if (!state.current.justTransitionedBySettle) {
+    // fix-just-transitioned-settle-drop S2: a tool-triggered flag (entry points
+    // 1/3) whose WORK turn settled → the gate runs; only the flag is cleared
+    // (Q2 pair invariant), then the pipeline continues (dispute handlers, gate).
+    debug(`agent_settled: justTransitioned (tool-triggered) → clearing, gate runs (work settle) (${stateSummary(state.current)})`);
+    state.current.justTransitioned = false;
+    return false;
+  }
   debug(`agent_settled: justTransitioned → clearing (no second prompt — the advance effect already sent it) (${stateSummary(state.current)})`);
   state.current.justTransitioned = false;
+  state.current.justTransitionedBySettle = false; // Q2: the pair is cleared together
 
   // fix-negotiate-confirm-approval-loop §5: the former `phase === "B" &&
   // round === 1` branch re-sent promptNegotiateApproved — a double-trigger
