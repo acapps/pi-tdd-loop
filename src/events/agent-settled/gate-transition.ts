@@ -12,6 +12,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { EventCtx } from "../index";
 import type { LanguageConfig } from "../../languages";
 import { runGates } from "../../gates";
+import { checkScope, readSpecForScopeCheck } from "../../scope-check";
 import { getLiveMetrics, accumulateGate } from "../../metrics";
 import * as T from "../../transitions";
 import { applyEffect } from "./effect-applicator";
@@ -72,6 +73,25 @@ export async function handleGateTransition(
     const outcome = await runGates(gateCwd, coverageThreshold, language, buildTool, phase, gateTimeoutSec);
 
     const gate = outcome.kind === "result" ? outcome.result! : null;
+
+    // Scope check (cross-spec contamination): a green gate with dirty files
+    // outside the active spec's Inventory is a scope violation, not a pass.
+    // Skips cleanly when the check cannot run (non-git cwd, no Inventory).
+    if (gate && outcome.kind === "result" && (phase === "B" || phase === "C")) {
+      const specText = readSpecForScopeCheck(gateCwd, state.specPath);
+      const scope = checkScope(gateCwd, state.specPath, specText);
+      if (!scope.skipped && !scope.ok) {
+        gate.allPassed = false;
+        gate.failures = [{
+          test: "scope-check",
+          subtest: "out-of-scope files",
+          output: scope.outOfScope.join("\n"),
+        }];
+        debug(`Scope check FAILED: ${scope.outOfScope.length} file(s) outside Inventory: ${scope.outOfScope.join(", ")}`);
+      } else if (!scope.skipped) {
+        debug("Scope check passed");
+      }
+    }
 
     // Accumulate gate metrics for the completion report
     if (gate) {
