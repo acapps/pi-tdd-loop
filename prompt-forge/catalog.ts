@@ -170,20 +170,25 @@ export const forbidsFalseDone = (): Guarantee => ({
 export const noHardcodedData = (declaredData: string[]): Guarantee => ({
   id: "no-hardcoded-data",
   why: "Anti-overfit: the prompt must not embed a specific file/symbol beyond its " +
-    "declared inputs. A general prompt uses slots, not one session's data.",
-  weight: 2, // weighted heavier — this is the load-bearing anti-overfit check
+    "declared inputs, or state-derived literals (counts, gate outcomes). " +
+    "A general prompt uses slots, not one session's data.",
+  weight: 2,
   check: (p) => {
+    // Round 4: reject state-derived literals (counts, gate outcomes).
+    const stateLiterals = [
+      /\(\d+\s+potential\s+findings\)/i,
+      /threshold\s+met/i,
+      /\(\d+\s+findings\)/i,
+    ];
+    if (stateLiterals.some((r) => r.test(p))) return false;
     // Find backtick-quoted or path-like tokens.
     const tokens = new Set<string>();
     for (const m of p.matchAll(/`([^`]+)`/g)) tokens.add(m[1]);
     for (const m of p.matchAll(/\b[\w./-]+\.\w{1,5}(?:\.\w+)?\b/g)) tokens.add(m[0]);
     for (const t of tokens) {
-      // Allow generic patterns (contain * or are a declared value).
       if (t.includes("*")) continue;
       if (declaredData.some((d) => t.includes(d) || d.includes(t))) continue;
-      // Allow the prompt's own declared input names.
       if (declaredData.length === 0) continue;
-      // A specific path (has / and an extension) that isn't declared → overfit.
       if (/^[\w.-]+\/[\w./-]+\.\w{1,5}$/.test(t)) return false;
     }
     return true;
@@ -239,6 +244,73 @@ export const noStylePolicyBloat = (): Guarantee => ({
   },
 });
 
+// Round 4 (frontier): no-boundary-contradiction. No imperative may ask for an
+// action the boundary forbids. E.g., 'write stub .ts files' contradicts
+// 'CANNOT edit non-test files'. The boundary must be consistent with the
+// prompt's own instructions.
+export const noBoundaryContradiction = (forbidden: string, allowed: string): Guarantee => ({
+  id: `no-boundary-contradiction-${forbidden}`,
+  why: `No imperative may ask for an action the boundary forbids. ` +
+    `The boundary ('${forbidden}') must be consistent with the prompt's instructions.`,
+  weight: 2,
+  check: (p) => {
+    // Check if the prompt asks for an action that the boundary forbids.
+    // The forbidden action is described by `forbidden` (e.g., 'edit test files').
+    // The allowed action is described by `allowed` (e.g., 'write stub files').
+    // If the prompt asks for `allowed` AND states the boundary forbids `allowed`,
+    // that's a contradiction.
+    //
+    // Simplified check: if the boundary says 'CANNOT edit X' and the prompt
+    // also says 'write X' or 'create X', that's a contradiction.
+    const forbids = new RegExp(`cannot|can't|must not|do not|don't|may not|never`, "i");
+    const asks = new RegExp(`write|create|edit|modify|add`, "i");
+    const lines = p.split("\n");
+    for (const line of lines) {
+      if (forbids.test(line) && new RegExp(forbidden, "i").test(line)) {
+        // This line states the boundary. Check if another line asks for the forbidden action.
+        for (const other of lines) {
+          if (other !== line && asks.test(other) && new RegExp(allowed, "i").test(other)) {
+            return false; // contradiction: boundary forbids X, but prompt asks for X
+          }
+        }
+      }
+    }
+    return true;
+  },
+});
+
+// Round 4 (frontier): routes-blocked-work. When the task might require the
+// forbidden action, the prompt must say to do the permitted half and report
+// the other half as pending the owning role.
+export const routesBlockedWork = (owningRole: string): Guarantee => ({
+  id: `routes-blocked-work-${owningRole}`,
+  why: `When the task might require the forbidden action, the prompt must say to ` +
+    `do the permitted half and report the other half as pending ${owningRole}.`,
+  weight: 1,
+  check: (p) => {
+    // Check if the prompt has a 'pending' or 'report' + owning role pattern.
+    return new RegExp(`pending\\s+${owningRole}|report.*${owningRole}|${owningRole}\\s+owns`, "i").test(p);
+  },
+});
+
+// Round 4 (frontier): state-derived-literals. Reject counts, gate outcomes,
+// or any number that is really a runtime value baked into the template.
+export const noStateDerivedLiterals = (): Guarantee => ({
+  id: "no-state-derived-literals",
+  why: "State-derived literals (counts, gate outcomes, runtime values) must not be " +
+    "baked into the template. They belong in the renderer, not the prompt text.",
+  weight: 1,
+  check: (p) => {
+    // Flag specific state-derived literals.
+    const literals = [
+      /\(\d+\s+potential\s+findings\)/i,   // "(0 potential findings)"
+      /threshold\s+met/i,                   // "meets the threshold for review: threshold met"
+      /\(\d+\s+findings\)/i,                // "(3 findings)"
+    ];
+    return !literals.some((r) => r.test(p));
+  },
+});
+
 // A sentinel used to verify inputs flow through (carriesInput refinement).
 // NOTE (round 2): the distinct-sentinel check in score.ts is the PRIMARY
 // mechanism for carries-* guarantees. This shared SENTINEL is kept only for
@@ -253,21 +325,27 @@ export const SENTINEL = "__FORGE_INPUT__";
 // `testFilePattern` collapsing into one __FORGE_INPUT__.
 export const inputCoverage = (): Guarantee => ({
   id: "input-coverage",
-  why: "Each declared input must have its OWN slot. Two inputs rendering to the " +
-    "same slot token is a conflation bug (round 2 frontier finding).",
-  weight: 2, // weighted heavily — this is the anti-conflation guard
+  why: "Each declared input must have its OWN labeled slot. Two inputs sharing one " +
+    "slot is a conflation bug (round 2). Body-typed inputs must be preceded by a " +
+    "label line (round 4).",
+  weight: 2,
   check: (p, e) => {
-    if (e.inputs.length <= 1) return true; // single input: no conflation possible
-    // Count distinct slot tokens in the rendered prompt. A slot token is a
-    // __FORGE_*__ or {{*}} placeholder. If there are fewer distinct slots than
-    // declared inputs, at least two inputs share a slot.
-    const slots = new Set<string>();
-    for (const m of p.matchAll(/__FORGE_\w+__/g)) slots.add(m[0]);
-    for (const m of p.matchAll(/\{\{\w+\}\}/g)) slots.add(m[0]);
-    // If the prompt has fewer distinct slots than declared inputs, conflation.
-    // (A prompt might legitimately omit an input if it's optional, but the
-    // rubric treats all declared inputs as required.)
-    return slots.size >= e.inputs.length;
+    if (e.inputs.length <= 1) return true;
+    // Structural check: count distinct labeled slots in the prompt.
+    // A labeled slot is a line ending with ':' followed by content.
+    // If there are fewer labeled slots than declared inputs, conflation.
+    const lines = p.split("\n");
+    let labeledSlots = 0;
+    for (let i = 0; i < lines.length - 1; i++) {
+      if (/:\s*$/.test(lines[i].trim()) && lines[i + 1].trim().length > 0) {
+        labeledSlots++;
+      }
+    }
+    // Also count inline slots (input embedded mid-sentence, e.g., 'Read <path>.')
+    // These are less ideal but still distinct.
+    const inlineSlots = (p.match(/__FORGE_\w+__/g) || []).length;
+    const totalSlots = labeledSlots + inlineSlots;
+    return totalSlots >= e.inputs.length;
   },
 });
 
