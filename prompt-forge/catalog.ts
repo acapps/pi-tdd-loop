@@ -192,6 +192,53 @@ export const noHardcodedData = (declaredData: string[]): Guarantee => ({
 
 // --- The catalog ---
 
+// Round 3 (frontier): role-tool consistency. The termination line must
+// reference the tool the role ACTUALLY calls, not another role's tool.
+// E.g., the Writer negotiate prompt must terminate on negotiate_propose,
+// not negotiate_review (the Tester's tool).
+export const roleToolConsistency = (role: string, ownTool: string, otherTools: string[]): Guarantee => ({
+  id: `role-tool-${role}`,
+  why: `The termination line must reference ${ownTool} (the ${role}'s own tool), ` +
+    `not ${otherTools.join("/")} (another role's tool). A wrong-role tool reference ` +
+    `is unreachable and confusing.`,
+  weight: 1,
+  check: (p) => {
+    // Find the termination line (the last line containing 'stop' or 'after').
+    const lines = p.split("\n");
+    const termLines = lines.filter((l) => /stop|after\b/i.test(l));
+    if (termLines.length === 0) return true; // no termination line: other checks handle it
+    const termText = termLines.join(" ");
+    // If the termination line references another role's tool, fail.
+    for (const other of otherTools) {
+      if (new RegExp(other, "i").test(termText)) return false;
+    }
+    // The termination line should reference the role's own tool (or be generic).
+    return true;
+  },
+});
+
+// Round 3 (frontier): no-style-policy-bloat. Penalize conventions blocks that
+// repeat constraints already stated elsewhere, or add style rules outside the
+// role contract (e.g., 'Keep functions under 30 lines').
+export const noStylePolicyBloat = (): Guarantee => ({
+  id: "no-style-policy-bloat",
+  why: "Style policy (line limits, naming conventions) is not a role contract. " +
+    "A conventions block that repeats a constraint or adds style rules is bloat.",
+  weight: 1,
+  check: (p) => {
+    // Flag specific style rules that are outside the role contract.
+    const styleRules = [
+      /under\s+\d+\s+lines/i,           // "Keep functions under 30 lines"
+      /camelCase|snake_case/i,           // naming convention
+      /30\s+lines|50\s+lines/i,          // line limit
+    ];
+    const hits = styleRules.filter((r) => r.test(p)).length;
+    // 0-1 style rule is acceptable (a single convention is fine).
+    // 2+ is bloat.
+    return hits <= 1;
+  },
+});
+
 // A sentinel used to verify inputs flow through (carriesInput refinement).
 // NOTE (round 2): the distinct-sentinel check in score.ts is the PRIMARY
 // mechanism for carries-* guarantees. This shared SENTINEL is kept only for
@@ -574,8 +621,10 @@ export const CATALOG: PromptEntry[] = [
         check: (p) => /do not write|no file|discussion/i.test(p),
       },
       hasTermination(),
+      roleToolConsistency("writer", "negotiate_propose", ["negotiate_review"]),
       inputCoverage(),
       noHardcodedData(["specPath", "testFilePattern"]),
+      noStylePolicyBloat(),
     ],
     render: (b) =>
       `WRITER (negotiation).\n\n` +
@@ -607,7 +656,9 @@ export const CATALOG: PromptEntry[] = [
         check: (p) => /approve|rebut|defend/i.test(p),
       },
       hasTermination(),
+      roleToolConsistency("tester", "negotiate_review", ["negotiate_propose"]),
       noHardcodedData(["claim"]),
+      noStylePolicyBloat(),
     ],
     render: (b) =>
       `TESTER (dispute review). The Writer disputed a test:\n\n${b.claim ?? ""}\n\n` +
@@ -636,6 +687,7 @@ export const CATALOG: PromptEntry[] = [
       },
       hasTermination(),
       noHardcodedData(["claim"]),
+      noStylePolicyBloat(),
     ],
     render: (b) =>
       `WRITER (dispute fix). You accepted the Tester's report:\n\n${b.claim ?? ""}\n\n` +
