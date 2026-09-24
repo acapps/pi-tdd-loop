@@ -1,4 +1,5 @@
-# Bug: Session reload mid-phase restarts the whole phase instead of resuming the turn
+> **Status: superseded (2026-09-19).** Fixed by `internal/done-fix-session-restart.md` (commit `46236a4`): the resume path is `justTransitioned` surviving restore + `buildResumePrompt` in `src/events/before-agent.ts`. Retained as a historical record; do not spec from this file.
+
 
 > **Status: superseded (2026-09-19).** Fixed by `internal/done-fix-session-restart.md` (commit `46236a4`): the resume path is `justTransitioned` surviving restore (no longer zeroed by `clearTransientFlags`) + `buildResumePrompt` in `src/events/before-agent.ts`. The proposed `phaseCheckpoint` design below was rejected in favor of the existing flag — see Q5 in that spec. Retained as a historical record; do not spec from this file.
 

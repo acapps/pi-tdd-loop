@@ -1,3 +1,5 @@
+> **Status: fixed (2026-09-23).** Fixed by `internal/fix-phase0-scanner-noise.md` (this session): S2 backtick-quoted CONCEPT_PATTERNS, S3 UTF-8 trigger + signature-declaration gate, S4 contract-section scoping, S1 prompt framing line.
+
 # Bug: Phase 0 auto-scanner emits low-signal findings that cost the reviewer a full proposal
 
 ## Context

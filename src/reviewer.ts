@@ -86,14 +86,8 @@ export function analyzeSpec(specText: string): SpecAnalysis {
   const structural = validateSpecStructure(specText);
   const heuristic = findIssues(specText);
   // Re-number: structural findings get ids 1..N, heuristic findings continue
-  const findings: Finding[] = [];
   let id = 0;
-  for (const f of structural) {
-    findings.push({ ...f, id: ++id });
-  }
-  for (const f of heuristic) {
-    findings.push({ ...f, id: ++id });
-  }
+  const findings = [...structural, ...heuristic].map(f => ({ ...f, id: ++id }));
   return { findings, reasons: ["Phase 0 is the baseline"] };
 }
 
@@ -121,41 +115,45 @@ export function validateSpecStructure(specText: string): Omit<Finding, "id">[] {
   const findings: Omit<Finding, "id">[] = [];
 
   // Strip code blocks so headers inside ``` are not counted
-  const stripped = specText.replace(/```[\s\S]*?```/g, "");
-  const lines = stripped.split("\n");
+  const lines = specText.replace(/```[\s\S]*?```/g, "").split("\n");
 
   // Check title: first non-empty line must start with "# "
   const firstLine = lines.find(l => l.trim().length > 0) ?? "";
   if (!firstLine.trimStart().startsWith("# ")) {
-    findings.push({
-      category: "Missing section",
-      title: "Missing title",
-      ambiguity: "The spec does not start with a '# ' title line. The template requires it.",
-      interpretations: [],
-      recommendation: "Add a '# <verb>-<object>' title line at the top of the spec.",
-      severity: "blocker",
-    });
+    findings.push(missingSectionFinding(
+      "Missing title",
+      "The spec does not start with a '# ' title line. The template requires it.",
+      "Add a '# <verb>-<object>' title line at the top of the spec.",
+    ));
   }
 
   // Check each required H2 section (case-insensitive)
   for (const section of REQUIRED_SECTIONS) {
-    const found = lines.some(line => {
-      const trimmed = line.trim();
-      return trimmed.toLowerCase() === `## ${section.toLowerCase()}`;
-    });
+    const found = lines.some(line =>
+      line.trim().toLowerCase() === `## ${section.toLowerCase()}`);
     if (!found) {
-      findings.push({
-        category: "Missing section",
-        title: `Missing required section: ${section}`,
-        ambiguity: `The spec does not contain a '${section}' section. The template requires it.`,
-        interpretations: [],
-        recommendation: `Add a '## ${section}' section to the spec.`,
-        severity: "blocker",
-      });
+      findings.push(missingSectionFinding(
+        `Missing required section: ${section}`,
+        `The spec does not contain a '${section}' section. The template requires it.`,
+        `Add a '## ${section}' section to the spec.`,
+      ));
     }
   }
 
   return findings;
+}
+
+function missingSectionFinding(
+  title: string, ambiguity: string, recommendation: string,
+): Omit<Finding, "id"> {
+  return {
+    category: "Missing section",
+    title,
+    ambiguity,
+    interpretations: [],
+    recommendation,
+    severity: "blocker",
+  };
 }
 
 /**
@@ -294,8 +292,23 @@ const NON_FUNCTION_NAMES = /^(function|if|for|return|const|var|let|interface|typ
 
 function extractFunctions(specText: string): SpecFunc[] {
   const results = extractSignatureMatches(specText);
+  attachSignatureDescriptions(results, specText);
   attachHeadingDescriptions(results, specText);
   return results;
+}
+// S3: when a signature is written inline in prose (not as a heading), the
+// rest of its line is the description — needed so per-function detectors
+// (UTF-8, empty-input) see the surrounding contract text.
+function attachSignatureDescriptions(results: SpecFunc[], specText: string): void {
+  for (const func of results) {
+    if (func.description) continue;
+    const sigRe = new RegExp("\\u0060" + func.name + "\\s*\\([`\\w\\s,]*\\)", "g");
+    const m = sigRe.exec(specText);
+    if (!m) continue;
+    const lineEnd = specText.indexOf("\n", m.index);
+    const line = specText.slice(m.index, lineEnd === -1 ? specText.length : lineEnd);
+    func.description = line.replace(sigRe, " ").trim();
+  }
 }
 
 function extractSignatureMatches(specText: string): SpecFunc[] {
@@ -305,11 +318,19 @@ function extractSignatureMatches(specText: string): SpecFunc[] {
   let m;
   while ((m = sigRegex.exec(specText)) !== null) {
     const name = m[1];
-    if (name.length > 1 && !NON_FUNCTION_NAMES.test(name)) {
+    if (name.length > 1 && !NON_FUNCTION_NAMES.test(name) && isDeclaredFunction(specText, name)) {
       results.push({ name, params: m[2], returnType: m[3].replace(/`/g, ""), description: "" });
     }
   }
   return results;
+}
+
+// S3 gate: a signature written as a markdown heading (## Name(...)) or
+// backtick-quoted inline (`Name(...)`) is a declared function. Prose
+// mentions ("the sweep builds a string") are excluded.
+function isDeclaredFunction(specText: string, name: string): boolean {
+  return new RegExp("^#{1,6}\\s*" + name + "\\s*\\(", "m").test(specText)
+    || specText.includes("\u0060" + name + "(");
 }
 
 // Associate each function with the text that follows its heading
@@ -420,9 +441,41 @@ function detectSubjectiveThresholds(specText: string, unique: UniqueFinder): voi
 
 const IO_KEYWORDS = ["file", "read", "write", "disk", "persist", "save", "load", "I/O", "network", "http"];
 
-// 3. Missing error handling for I/O functions
+// 3. Missing error handling for I/O functions — scoped to the declared
+// contract (## Inventory or ## Interface section), not passing prose.
+function extractContractSections(specText: string): string {
+  const sections: string[] = [];
+  for (const header of ["## Inventory", "## Interface"]) {
+    const re = new RegExp("^" + header + "\\s*\\n([\\s\\S]*?)(?=^## |$)", "m");
+    const m = specText.match(re);
+    if (m) sections.push(m[1]);
+  }
+  return sections.join("\n");
+}
+
+// S4: a line in the contract slice declares I/O only if it is a declarative
+// file-list entry or a type signature containing an IO keyword — prose
+// sentences ("the prompt builds a value; it writes a summary") do not.
+function declaresIO(line: string): boolean {
+  const t = line.trim();
+  if (!t) return false;
+  const isFileList = /^[-*+]\s*`?\S*\.\w+`?\b/.test(t);
+  const isSignature = /\w+\s*\([^)]*\)\s*(?:→|\w)/.test(t);
+  if (!isFileList && !isSignature) return false;
+  const lower = t.toLowerCase();
+  return IO_KEYWORDS.some(kw => lower.includes(kw.toLowerCase()));
+}
+
 function detectMissingErrorHandling(specText: string, unique: UniqueFinder): void {
-  if (!IO_KEYWORDS.some(kw => specText.includes(kw))) return;
+  const contract = extractContractSections(specText);
+  // Prefer the declared contract (## Inventory / ## Interface); legacy
+  // specs without those sections fall back to signature lines in the body
+  // ("ReadFile(path string) string — reads the file").
+  const lines = contract
+    ? contract.split("\n")
+    : specText.split("\n");
+  const ioDeclared = lines.some(declaresIO);
+  if (!ioDeclared) return;
   if (mentionsErrors(specText)) return;
   unique("io-no-error", {
     category: "Type contract gap",
@@ -437,19 +490,17 @@ function detectMissingErrorHandling(specText: string, unique: UniqueFinder): voi
 }
 
 const CONCEPT_PATTERNS: Record<string, RegExp> = {
-  "directory": /(?:directory|dir|path|location|folder)[:\s]+([`'"\w\/\.\-]+|[^\n]+)/gi,
-  "type": /(?:type|interface|return)[\s:]+([`'"\w{}\[\]<>,\s\|:]+)/gi,
+  "directory": /(?:directory|dir|path|location|folder)\s*:\s*`([^`]+)`/gi,
+  "type": /(?:type|interface|return)\s+`([A-Za-z_][\w.<>\[\],\s|]*)`/gi,
   "format": /(?:format|file format|storage)[\s:]+([`'"\w\/\.\-]+|[^\n]+)/gi,
 };
 
 // 4. Conflicting statements — same concept, different values
 function detectConflictingStatements(specText: string, unique: UniqueFinder): void {
   for (const [concept, pattern] of Object.entries(CONCEPT_PATTERNS)) {
-    const matches: string[] = [];
-    let m;
-    while ((m = pattern.exec(specText)) !== null) matches.push(m[1]?.trim().replace(/[`'"\s]/g, ""));
-    const uniqueValues = [...new Set(matches)];
-    if (matches.length < 2 || uniqueValues.length < 2) continue;
+    const values = collectConceptValues(specText, pattern);
+    const uniqueValues = [...new Set(values)];
+    if (values.length < 2 || uniqueValues.length < 2) continue;
     unique(`conflict-${concept}`, {
       category: "Example-prose conflict" as const,
       title: `Conflicting ${concept}: ${uniqueValues.join(" vs ")}`,
@@ -462,6 +513,16 @@ function detectConflictingStatements(specText: string, unique: UniqueFinder): vo
       recommendation: `Consolidate to a single ${concept} specification`,
     });
   }
+}
+
+// All values a concept pattern captures in the spec, backticks/quotes trimmed.
+function collectConceptValues(specText: string, pattern: RegExp): string[] {
+  const values: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = pattern.exec(specText)) !== null) {
+    values.push(m[1]?.trim().replace(/[`'"\s]/g, ""));
+  }
+  return values;
 }
 
 // 5. Per-function checks
@@ -510,8 +571,9 @@ function detectFunctionIssues(func: SpecFunc, unique: UniqueFinder): void {
     });
   }
 
-  // UTF-8 mention without invalid-UTF-8 behavior
-  if (/utf.?8|unicode|multi.?byte|run/i.test(block) && !/invalid|malformed|bad/u.test(block)) {
+  // UTF-8 mention without invalid-UTF-8 behavior (S3: `run` dropped — it
+  // matched "round", "running", "return" and fired on unrelated prose)
+  if (/utf.?8|unicode|multi.?byte/i.test(block) && !/invalid|malformed|bad/u.test(block)) {
     unique(`utf8-${func.name}`, {
       category: "Underspecified behavior",
       title: `Invalid UTF-8 not specified — ${func.name}`,

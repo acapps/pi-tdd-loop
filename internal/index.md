@@ -33,8 +33,8 @@ Conventions for specs in this directory: [docs/spec-authoring.md](../docs/spec-a
 | [done-bug-phase-0-approval-dead-end.md](done-bug-phase-0-approval-dead-end.md) | bug | **done** | Phase × Tool policy matrix; Phase 0 approve/feedback handlers; `/loop-restart` extended. |
 | [done-bug-dispute-block-trap.md](done-bug-dispute-block-trap.md) | bug | **done** | Rule 2 only blocks on `"filed"` (filer's turn ending), not `"in-review"` (reviewer active). Reviewer gets read/bash/negotiate_review access. |
 | [bug-dispute-fix-redundant-turn.md](bug-dispute-fix-redundant-turn.md) | bug | **open** | `handleDisputeFix` fires on `"conceded"` + writer-filed even if the Tester already fixed the test in the same turn. Needs a "work already done" check. |
-| [bug-phase-restart-on-reload.md](bug-phase-restart-on-reload.md) | bug | **done** (superseded by `done-fix-session-restart.md`, `46236a4`) | Mid-phase reload resume via `justTransitioned` + `buildResumePrompt`. File kept as historical record. |
-| [bug-phase0-scanner-noise.md](bug-phase0-scanner-noise.md) | bug | **open** | `findIssues` heuristic (vague phrases, subjective thresholds) emits low-signal findings the LLM reviewer must explicitly dismiss, costing a full proposal round-trip. |
+| [done-bug-phase-restart-on-reload.md](done-bug-phase-restart-on-reload.md) | bug | **done** (superseded by `done-fix-session-restart.md`, `46236a4`) | Mid-phase reload resume via `justTransitioned` + `buildResumePrompt`. File kept as historical record. |
+| [done-bug-phase0-scanner-noise.md](done-bug-phase0-scanner-noise.md) | bug | **done** (2026-09-23, `fix-phase0-scanner-noise`) | Backtick-gated CONCEPT_PATTERNS, contract-scoped IO detection, S1 framing line. 43 contract tests in `test/contracts/`. |
 | [bug-role-context-mismatch.md](bug-role-context-mismatch.md) | bug | **open** (partial) | `buildDisputeFixPrompt` exists for the Tester, but the main Phase B path still dispatches on phase only — no round-parity for B. |
 | [bug-coverage-noop-ts.md](bug-coverage-noop-ts.md) | bug | **open** (partial) | TS row closed (degrade to plain `vitest run`). Java/jacoco named-reason row still open. |
 
