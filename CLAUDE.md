@@ -19,6 +19,7 @@ Only-my-setup change = scope creep. Not extension's job. Ask out loud, before co
 - Config that should live in dotfile/env var, not baked into repo
 - Skipped general case because narrow case = faster ship. Flag it, don't hide it.
 - A test that spawns a real toolchain (`go build`, `mvn`, `npx vitest`, `tsc`, any `execFile`/`execSync`/`spawn`) in the default suite. Unit tests mock the process boundary; real toolchain runs live in test/e2e/ only.
+- Cross-spec contamination: a Writer editing files outside the active spec's Inventory (e.g. 01a0bba2 — settle-drop spec's Writer implementing scanner-noise fixes in loop.ts/reviewer.ts). The Phase B/C gate now fails on out-of-scope dirty files (src/scope-check.ts), so this is a gated failure, not an after-the-fact finding.
 
 ## IN-SCOPE CHECK
 
