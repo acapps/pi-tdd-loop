@@ -91,20 +91,43 @@ export const carriesInput = (input: string): Guarantee => ({
 // Round 1 refinement (frontier): the stop instruction alone is not enough — it
 // must be paired with a COMPLETION CONDITION (what "done" means), or the loop
 // can settle early or never settle.
+// Round 2 refinement (frontier): the completion condition must be REACHABLE
+// given the entry's permitted actions. A no-write entry (negotiate, reviewer)
+// cannot have "when all tests pass" — it must reference the tool call
+// ("after calling negotiate_propose").
 export const hasTermination = (): Guarantee => ({
   id: "termination-contract",
-  why: "The prompt must tell the agent WHEN to stop (a completion condition) and " +
-    "HOW (stop producing tool calls), so the loop settles at the right time.",
+  why: "The prompt must tell the agent WHEN to stop (a reachable completion " +
+    "condition) and HOW (stop producing tool calls), so the loop settles at " +
+    "the right time. The condition must be reachable given the role's " +
+    "permitted actions (no-write roles reference the tool call, not test " +
+    "results).",
   weight: 1,
-  check: (p) => {
+  check: (p, entry) => {
     const hasStop = /stop producing tool calls|when done|call \w+ now|use \w+/i.test(p);
-    // A completion condition: "when all tests pass", "when the only remaining
-    // work is blocked", "when the source half is done", etc.
+    if (!hasStop) return false;
+
+    // For no-write entries (negotiate, reviewer), the condition must reference
+    // the tool call, not test results (which are unreachable).
+    const isNoWrite = entry.phase === "negotiate" || entry.role === "reviewer";
+    if (isNoWrite) {
+      // Must reference "after calling X" or "after the X call".
+      const referencesToolCall =
+        /after (the\s+)?(calling\s+)?(negotiate_\w+|\w+\s+call)/i.test(p) ||
+        /after\s+that\s+call/i.test(p);
+      // Must NOT reference test results (unreachable in no-write).
+      const referencesTests =
+        /all\s+tests\s+pass|tests\s+are\s+written|contract\s+tests/i.test(p);
+      return referencesToolCall && !referencesTests;
+    }
+
+    // For write entries (writer, cleaner, tester), the condition must reference
+    // a reachable completion state (tests pass, refactor complete, etc.).
     const hasCondition =
-      /when (all|the|your|no|every)\S{0,40}|when done|once (all|the|your)|after (all|the|your)|only remaining work|no more work/i.test(
+      /when (all|the|your|no|every)\S{0,40}|when done|once (all|the|your)|after (all|the|your)|only remaining work|no more work|all\s+tests\s+pass|refactor\s+is\s+complete/i.test(
         p,
       );
-    return hasStop && hasCondition;
+    return hasCondition;
   },
 });
 
@@ -170,7 +193,36 @@ export const noHardcodedData = (declaredData: string[]): Guarantee => ({
 // --- The catalog ---
 
 // A sentinel used to verify inputs flow through (carriesInput refinement).
+// NOTE (round 2): the distinct-sentinel check in score.ts is the PRIMARY
+// mechanism for carries-* guarantees. This shared SENTINEL is kept only for
+// backward compatibility; the catalog's carries-* checks should NOT rely on
+// it (that was the round-1 slot-conflation bug). They should be purely
+// structural (regex on the prompt text).
 export const SENTINEL = "__FORGE_INPUT__";
+
+// Round 2 refinement (frontier): input-coverage guarantee. Fails if two
+// declared inputs render to the same slot token, or a declared input has no
+// slot. This catches phase0 `findings` and negotiate `specPath`/
+// `testFilePattern` collapsing into one __FORGE_INPUT__.
+export const inputCoverage = (): Guarantee => ({
+  id: "input-coverage",
+  why: "Each declared input must have its OWN slot. Two inputs rendering to the " +
+    "same slot token is a conflation bug (round 2 frontier finding).",
+  weight: 2, // weighted heavily — this is the anti-conflation guard
+  check: (p, e) => {
+    if (e.inputs.length <= 1) return true; // single input: no conflation possible
+    // Count distinct slot tokens in the rendered prompt. A slot token is a
+    // __FORGE_*__ or {{*}} placeholder. If there are fewer distinct slots than
+    // declared inputs, at least two inputs share a slot.
+    const slots = new Set<string>();
+    for (const m of p.matchAll(/__FORGE_\w+__/g)) slots.add(m[0]);
+    for (const m of p.matchAll(/\{\{\w+\}\}/g)) slots.add(m[0]);
+    // If the prompt has fewer distinct slots than declared inputs, conflation.
+    // (A prompt might legitimately omit an input if it's optional, but the
+    // rubric treats all declared inputs as required.)
+    return slots.size >= e.inputs.length;
+  },
+});
 
 export const CATALOG: PromptEntry[] = [
   // ===== Phase 0 — Review =====
@@ -186,7 +238,10 @@ export const CATALOG: PromptEntry[] = [
         id: "carries-spec",
         why: "The reviewer must see the spec text to review it.",
         weight: 2,
-        check: (p, e) => p.includes(SENTINEL) || p.length > 50, // spec slot
+        // Round 2: purely structural — the distinct-sentinel check in
+        // score.ts is the primary mechanism. This checks for a 'Spec:' label
+        // or the spec content being present.
+        check: (p) => /spec/i.test(p) || p.length > 50,
       },
       {
         id: "instructs-verify-heuristics",
@@ -221,6 +276,7 @@ export const CATALOG: PromptEntry[] = [
           return true;
         },
       },
+      inputCoverage(),
       noHardcodedData(["specText", "findings"]),
     ],
     render: (b) =>
@@ -247,7 +303,8 @@ export const CATALOG: PromptEntry[] = [
         id: "carries-spec-path",
         why: "The Tester must know which spec to read.",
         weight: 1,
-        check: (p) => p.includes(SENTINEL) || /read \S+/i.test(p),
+        // Round 2: purely structural.
+        check: (p) => /read \S+/i.test(p),
       },
       {
         id: "covers-edge-cases",
@@ -256,6 +313,7 @@ export const CATALOG: PromptEntry[] = [
         check: (p) => /edge|empty|null|undefined/i.test(p),
       },
       hasTermination(),
+      inputCoverage(),
       noHardcodedData(["specPath"]),
     ],
     render: (b) =>
@@ -274,7 +332,9 @@ export const CATALOG: PromptEntry[] = [
         id: "carries-compile-error",
         why: "The retry must carry the SPECIFIC compile error to fix.",
         weight: 2,
-        check: (p) => p.includes(SENTINEL),
+        // Round 2: purely structural — the distinct-sentinel check in
+        // score.ts is the primary mechanism.
+        check: (p) => /compilation|error/i.test(p),
       },
       {
         id: "scoped-to-fix",
@@ -364,10 +424,12 @@ export const CATALOG: PromptEntry[] = [
         id: "carries-failure-summary",
         why: "The continue must carry the SPECIFIC failure summary.",
         weight: 2,
-        check: (p) => p.includes(SENTINEL),
+        // Round 2: purely structural.
+        check: (p) => /fail/i.test(p),
       },
       statesRoleBoundary("test"),
       hasTermination(),
+      inputCoverage(),
       noHardcodedData(["failureSummary"]),
     ],
     render: (b) =>
@@ -385,9 +447,14 @@ export const CATALOG: PromptEntry[] = [
       {
         id: "carries-resolution-slot",
         why: "The advance must carry the negotiated resolution (a slot filled from " +
-          "state.negotiateResolution), so it isn't silently dropped (01a0d128).",
+          "state.negotiateResolution), so it isn't silently dropped (01a0d128). " +
+          "Round 2: requires a label mentioning 'resolution', distinct from the " +
+          "workspaceRoot slot.",
         weight: 2,
-        check: (p) => p.includes(SENTINEL) || /agreed resolution/i.test(p),
+        // Round 2: require a 'resolution' label in the prompt. The
+        // distinct-sentinel check in score.ts verifies the slot is present;
+        // this checks it's LABELED as the resolution (not just any slot).
+        check: (p) => /resolution/i.test(p),
       },
       {
         id: "states-test-boundary",
@@ -408,6 +475,7 @@ export const CATALOG: PromptEntry[] = [
       },
       forbidsFalseDone(),
       hasTermination(),
+      inputCoverage(),
       noHardcodedData(["negotiateResolution"]),
     ],
     render: (b) =>
@@ -454,10 +522,12 @@ export const CATALOG: PromptEntry[] = [
         id: "carries-failure-summary",
         why: "The retry must carry the SPECIFIC failure.",
         weight: 2,
-        check: (p) => p.includes(SENTINEL),
+        // Round 2: purely structural.
+        check: (p) => /fail/i.test(p),
       },
       statesRoleBoundary("test"),
       hasTermination(),
+      inputCoverage(),
       noHardcodedData(["failureSummary"]),
     ],
     render: (b) =>
@@ -487,6 +557,7 @@ export const CATALOG: PromptEntry[] = [
         check: (p) => /do not write|no file|discussion/i.test(p),
       },
       hasTermination(),
+      inputCoverage(),
       noHardcodedData(["specPath", "testFilePattern"]),
     ],
     render: (b) =>
@@ -505,7 +576,8 @@ export const CATALOG: PromptEntry[] = [
         id: "carries-claim",
         why: "The review must carry the SPECIFIC claim being disputed.",
         weight: 2,
-        check: (p) => p.includes(SENTINEL),
+        // Round 2: purely structural.
+        check: (p) => /disput|claim|test/i.test(p),
       },
       {
         id: "names-decisions",
@@ -532,7 +604,8 @@ export const CATALOG: PromptEntry[] = [
         id: "carries-claim",
         why: "The concede-fix must carry the SPECIFIC accepted report.",
         weight: 2,
-        check: (p) => p.includes(SENTINEL),
+        // Round 2: purely structural.
+        check: (p) => /accept|report|claim/i.test(p),
       },
       {
         id: "source-only",

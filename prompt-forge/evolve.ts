@@ -63,19 +63,25 @@ const ops: Record<string, Operator> = {
     "\n\nIf any part of the work is blocked on another actor, state exactly which " +
     "part and that it is pending them — do not claim it is done.",
   ensureTermination: (p, entry) => {
-    // Round 1 refinement: the termination line must include a COMPLETION
-    // CONDITION, not just "stop producing tool calls".
-    const condition =
-      entry.role === "writer"
-        ? "When all tests pass, or the only remaining work is blocked on the Tester, "
-        : entry.role === "cleaner"
-        ? "When all tests pass and the refactor is complete, "
-        : entry.role === "tester"
-        ? "When all contract tests are written and compile, "
-        : "When your review is complete, ";
+    // Round 2 refinement: the termination line must include a COMPLETION
+    // CONDITION that is REACHABLE given the entry's permitted actions.
+    // No-write entries (negotiate, reviewer) reference the tool call, not
+    // test results.
+    let line: string;
+    if (entry.phase === "negotiate" || entry.role === "reviewer") {
+      // No-write: reference the tool call.
+      const tool = entry.role === "reviewer" ? "negotiate_propose" : "negotiate_review";
+      line = `After the ${tool} call, stop producing tool calls.`;
+    } else if (entry.role === "writer") {
+      line = "When all tests pass, or the only remaining work is blocked on the Tester, stop producing tool calls.";
+    } else if (entry.role === "cleaner") {
+      line = "When all tests pass and the refactor is complete, stop producing tool calls.";
+    } else {
+      line = "When all contract tests are written and compile, stop producing tool calls.";
+    }
     const existing = /stop producing tool calls|when done/i.test(p);
     if (existing) return p; // already has a stop line; assume it has a condition
-    return p + "\n\n" + condition + "stop producing tool calls.";
+    return p + "\n\n" + line;
   },
   fullFix: (p, entry) => {
     if (entry.role === "reviewer") {
