@@ -280,8 +280,11 @@ export const CATALOG: PromptEntry[] = [
       noHardcodedData(["specText", "findings"]),
     ],
     render: (b) =>
-      `Phase 0: Spec Review\n\nReview the spec below.\n\n${b.specText ?? ""}\n\n` +
-      (b.findings ? `Findings (heuristic candidates): ${b.findings}\n` : ""),
+      `Phase 0: Spec Review\n\nReview the spec below for ambiguities, missing edge cases, and underspecified behavior.\n\n` +
+      `Spec:\n${b.specText ?? ""}\n\n` +
+      `Auto-generated heuristic findings (unconfirmed):\n${b.findings ?? ""}\n\n` +
+      `The findings are heuristics, not confirmed defects. Check each one against the spec before relying on it, and add any you find yourself.\n\n` +
+      `You CANNOT edit any files in this phase. Respond only with negotiate_propose: plan='approve' if the spec is sound, otherwise your feedback on the verified findings. After that call, stop producing tool calls.`,
   },
 
   // ===== Phase A — Tester =====
@@ -317,8 +320,12 @@ export const CATALOG: PromptEntry[] = [
       noHardcodedData(["specPath"]),
     ],
     render: (b) =>
-      `You are the TESTER. Write contract tests.\n\nRead ${b.specPath ?? ""}.\n` +
-      `Write *.test.ts and stub .ts files.\n\nWhen done, stop producing tool calls.`,
+      `You are the TESTER (Phase A). Write contract tests from the spec.\n\n` +
+      `Spec: ${b.specPath ?? ""}\n` +
+      `Workspace: ${b.workspaceRoot ?? ""}\n\n` +
+      `Read the spec, then write Vitest tests (*.test.ts) and empty stub .ts files under the workspace. The tests define correct behavior and must fail against the stubs until the Writer implements them.\n\n` +
+      `Tests must:\n- Cover every spec requirement\n- Cover edge cases: empty, undefined, null, single element\n- Use describe/it from Vitest\n\n` +
+      `You CANNOT write real implementations; that is owned by the Writer. When done, stop producing tool calls.`,
   },
   {
     id: "phaseA.tester.compile-retry",
@@ -408,9 +415,12 @@ export const CATALOG: PromptEntry[] = [
       noHardcodedData([]),
     ],
     render: (b) =>
-      `Phase B (Writer). Write source files to pass all tests.\n\n` +
-      `Read *.test.ts and *.ts stubs. Implement the logic.\n` +
-      `When done, stop producing tool calls.`,
+      `Phase B (Writer). Implement the source so all tests pass.\n\n` +
+      `Workspace: ${b.workspaceRoot ?? ""}\n\n` +
+      `Read the *.test.ts files and the .ts stubs, then implement the logic. Preserve stub signatures. Use strict types (no any) and const declarations.\n` +
+      `Run tests with \`npx vitest run\` and type-check with \`npx tsc --noEmit\`.\n\n` +
+      `If a test is wrong, dispute it with negotiate_propose. If a test is correct and your code is wrong, concede with negotiate_propose(\"agree\").\n\n` +
+      `You CANNOT edit test files in this phase; that is owned by the Tester. When done, stop producing tool calls.`,
   },
   {
     id: "phaseB.writer.continue",
@@ -433,8 +443,11 @@ export const CATALOG: PromptEntry[] = [
       noHardcodedData(["failureSummary"]),
     ],
     render: (b) =>
-      `Phase B (Writer). Tests failed.\n\n${b.failureSummary ?? ""}\n\n` +
-      `Do not modify *.test.ts. When done, stop producing tool calls.`,
+      `Phase B (Writer). Tests failed.\n\n` +
+      `Workspace: ${b.workspaceRoot ?? ""}\n\n` +
+      `Failure summary:\n${b.failureSummary ?? ""}\n\n` +
+      `Fix the source files so the tests pass. If a test is wrong, dispute it with negotiate_propose. If a test is correct and your code is wrong, concede with negotiate_propose(\"agree\").\n\n` +
+      `You CANNOT edit test files in this phase; that is owned by the Tester. When done, stop producing tool calls.`,
   },
   {
     id: "phaseB.writer.auto-advance",
@@ -479,10 +492,12 @@ export const CATALOG: PromptEntry[] = [
       noHardcodedData(["negotiateResolution"]),
     ],
     render: (b) =>
-      `Advancing to Phase B. Write source files.\n\n` +
-      (b.negotiateResolution
-        ? `Agreed resolution: ${b.negotiateResolution}\n`
-        : "") +
+      `Advancing to Phase B without explicit approval. Implement the source.\n\n` +
+      `Workspace: ${b.workspaceRoot ?? ""}\n\n` +
+      `Negotiated resolution:\n${b.negotiateResolution ?? ""}\n\n` +
+      `Read the *.test.ts files and .ts stubs, then implement the logic. Preserve stub signatures. Use strict types (no any).\n` +
+      `Run tests with \`npx vitest run\` and type-check with \`npx tsc --noEmit\`.\n\n` +
+      `You CANNOT edit test files in this phase; that is owned by the Tester. If the resolution requires a test-file change, do the source half and report the test half as pending the Tester. Do NOT report the work as complete while any part is pending another actor.\n\n` +
       `When done, stop producing tool calls.`,
   },
 
@@ -531,8 +546,10 @@ export const CATALOG: PromptEntry[] = [
       noHardcodedData(["failureSummary"]),
     ],
     render: (b) =>
-      `Phase C (Cleaner). Tests failed after refactoring:\n\n${b.failureSummary ?? ""}\n\n` +
-      `Do not modify *.test.ts. When done, stop producing tool calls.`,
+      `Phase C (Cleaner). Tests failed after your refactor.\n\n` +
+      `Workspace: ${b.workspaceRoot ?? ""}\n\n` +
+      `Failure summary:\n${b.failureSummary ?? ""}\n\n` +
+      `Restore working behavior in the source files without changing behavior beyond what the tests expect. You CANNOT edit test files in this phase. When done, stop producing tool calls.`,
   },
 
   // ===== Negotiate / Dispute layer =====
@@ -561,8 +578,12 @@ export const CATALOG: PromptEntry[] = [
       noHardcodedData(["specPath", "testFilePattern"]),
     ],
     render: (b) =>
-      `WRITER (negotiation).\n\nRead ${b.specPath ?? ""}. Review ${b.testFilePattern ?? ""}.\n` +
-      `Surface contradictions. Use negotiate_propose. Do NOT write files.`,
+      `WRITER (negotiation).\n\n` +
+      `Spec: ${b.specPath ?? ""}\n` +
+      `Test files: ${b.testFilePattern ?? ""}\n\n` +
+      `Read the spec, then review the tests and understand every case. Find contradictions or ambiguities: conflicting rules, undifferentiated errors, weak assertions. Surface them in your proposal; do not silently pick an interpretation.\n\n` +
+      `Call negotiate_propose: 'agree' if the tests match the spec, otherwise describe your approach (types, functions, behavior). Do NOT write files. The Tester will respond via negotiate_review.\n\n` +
+      `After the negotiate_propose call, stop producing tool calls.`,
   },
   {
     id: "negotiate.tester.review-writer-dispute",
