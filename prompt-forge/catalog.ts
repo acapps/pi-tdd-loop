@@ -88,11 +88,24 @@ export const carriesInput = (input: string): Guarantee => ({
 });
 
 // The prompt has a termination contract ("stop producing tool calls" or equiv).
+// Round 1 refinement (frontier): the stop instruction alone is not enough — it
+// must be paired with a COMPLETION CONDITION (what "done" means), or the loop
+// can settle early or never settle.
 export const hasTermination = (): Guarantee => ({
   id: "termination-contract",
-  why: "The prompt must tell the agent when to stop, so the loop can settle.",
+  why: "The prompt must tell the agent WHEN to stop (a completion condition) and " +
+    "HOW (stop producing tool calls), so the loop settles at the right time.",
   weight: 1,
-  check: (p) => /stop producing tool calls|when done|call \w+ now|use \w+/i.test(p),
+  check: (p) => {
+    const hasStop = /stop producing tool calls|when done|call \w+ now|use \w+/i.test(p);
+    // A completion condition: "when all tests pass", "when the only remaining
+    // work is blocked", "when the source half is done", etc.
+    const hasCondition =
+      /when (all|the|your|no|every)\S{0,40}|when done|once (all|the|your)|after (all|the|your)|only remaining work|no more work/i.test(
+        p,
+      );
+    return hasStop && hasCondition;
+  },
 });
 
 // The prompt routes blocked work to a named actor (structural: names an actor
@@ -177,9 +190,16 @@ export const CATALOG: PromptEntry[] = [
       },
       {
         id: "instructs-verify-heuristics",
-        why: "Auto-generated findings are heuristic; the reviewer must verify, not trust.",
+        why: "Auto-generated findings are heuristic; the reviewer must verify, not trust. " +
+          "Round 1 refinement: require an explicit imperative to verify/check findings, " +
+          "not just the word 'verify' in passing.",
         weight: 2,
-        check: (p) => /verify|false positive|reject/i.test(p),
+        check: (p) =>
+          // An imperative to verify/check findings against the spec.
+          /(verify|check|confirm|validate)\s+(each\s+)?(finding|one|them|it|these|the)\b/i.test(
+            p,
+          ) ||
+          /treat\s+(them|findings|these)\s+as\s+(heuristic|unverified|candidate)/i.test(p),
       },
       {
         id: "names-mechanism",
@@ -189,9 +209,17 @@ export const CATALOG: PromptEntry[] = [
       },
       {
         id: "does-not-assert-findings-real",
-        why: "The prompt must not present heuristic findings as verified defects.",
+        why: "The prompt must not present heuristic findings as verified defects. " +
+          "Round 1 refinement: fail if 'confirmed issues'/'the following defects' appear; " +
+          "pass trivially if the prompt makes no claim about findings.",
         weight: 1,
-        check: (p) => !/confirmed defect|verified bug/i.test(p) || /candidate|heuristic|potential/i.test(p),
+        check: (p) => {
+          // Hard fail: explicit assertion that findings are real/confirmed.
+          if (/confirmed\s+(defect|issue|bug)|the\s+following\s+defects|verified\s+bug/i.test(p))
+            return false;
+          // Pass if framed as unverified, OR if the prompt makes no claim at all.
+          return true;
+        },
       },
       noHardcodedData(["specText", "findings"]),
     ],
@@ -311,9 +339,10 @@ export const CATALOG: PromptEntry[] = [
       },
       {
         id: "names-dispute-mechanism",
-        why: "The Writer must know how to dispute a wrong test (negotiate_propose).",
+        why: "The Writer must know how to dispute a wrong test (negotiate_propose). " +
+          "Round 1 refinement: accept 'disagree' not just 'dispute'.",
         weight: 1,
-        check: (p) => /negotiate_propose|dispute/i.test(p),
+        check: (p) => /negotiate_propose|dispute|disagree/i.test(p),
       },
       hasTermination(),
       noHardcodedData([]),

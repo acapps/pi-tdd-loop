@@ -27,33 +27,75 @@ mkdirSync(OUT, { recursive: true });
 
 type Operator = (prompt: string, entry: PromptEntry) => string;
 
+// Round 1 refinement (frontier): boundary ops are ROLE-SCOPED. A reviewer
+// (Phase 0) cannot edit tests OR source — its boundary is "do not edit any
+// files". A writer/cleaner (Phase B/C) cannot edit tests — its boundary is
+// "do not edit test files". The old unscoped ops injected a Tester-ownership
+// line into the reviewer prompt, which is noise.
+function boundaryFor(entry: PromptEntry): string {
+  if (entry.role === "reviewer")
+    return "You CANNOT edit any files in this phase. Your only output is the negotiate_propose call.";
+  if (entry.role === "tester")
+    return "You CANNOT edit non-test files in this phase. That half is owned by the Writer.";
+  return "You CANNOT edit test files in this phase. That half is owned by the Tester.";
+}
+
 const ops: Record<string, Operator> = {
-  addTestBoundary: (p) =>
-    p + "\n\nYou CANNOT edit test files in this phase. If work requires editing " +
-    `a test file, that half is owned by the Tester, not you.`,
-  routeTestToTester: (p) =>
-    p + "\n\nIf a part of the agreed work requires editing a test file, do NOT do " +
-    "it yourself — it belongs to the Tester. Report it as pending the Tester.",
+  addTestBoundary: (p, entry) =>
+    p + "\n\n" + boundaryFor(entry),
+  routeTestToTester: (p, entry) =>
+    entry.role === "reviewer"
+      ? p // reviewer has no test half to route
+      : p +
+        "\n\nIf a part of the agreed work requires editing a test file, do NOT do " +
+        "it yourself — it belongs to the Tester. Report it as pending the Tester.",
   addFalseDoneGuard: (p) =>
-    p + "\n\nDo NOT report the work as complete or done while any part of it is " +
+    p +
+    "\n\nDo NOT report the work as complete or done while any part of it is " +
     "pending another actor.",
-  leadWithBoundary: (p) =>
-    `STOP — read this first: you CANNOT edit test files in this phase. That half is the Tester's.\n\n` +
+  leadWithBoundary: (p, entry) =>
+    `STOP — read this first: ` +
+    boundaryFor(entry).replace(/^You /, "you ").replace(/\.$/, ".") +
+    `\n\n` +
     p,
   addPendingReport: (p) =>
     p +
     "\n\nIf any part of the work is blocked on another actor, state exactly which " +
     "part and that it is pending them — do not claim it is done.",
-  ensureTermination: (p) =>
-    /stop producing tool calls|when done/i.test(p)
-      ? p
-      : p + "\n\nWhen done, stop producing tool calls.",
-  fullFix: (p) =>
-    p +
-    "\n\nYou CANNOT edit test files in this phase — that half is owned by the " +
-    "Tester. If the work includes a test-file change, do the source half, then " +
-    "report the test half as pending the Tester. Do NOT report the work as " +
-    "complete while any part is pending another actor.",
+  ensureTermination: (p, entry) => {
+    // Round 1 refinement: the termination line must include a COMPLETION
+    // CONDITION, not just "stop producing tool calls".
+    const condition =
+      entry.role === "writer"
+        ? "When all tests pass, or the only remaining work is blocked on the Tester, "
+        : entry.role === "cleaner"
+        ? "When all tests pass and the refactor is complete, "
+        : entry.role === "tester"
+        ? "When all contract tests are written and compile, "
+        : "When your review is complete, ";
+    const existing = /stop producing tool calls|when done/i.test(p);
+    if (existing) return p; // already has a stop line; assume it has a condition
+    return p + "\n\n" + condition + "stop producing tool calls.";
+  },
+  fullFix: (p, entry) => {
+    if (entry.role === "reviewer") {
+      // Reviewer: no test half, no boundary beyond "no file edits".
+      return (
+        p +
+        "\n\n" +
+        boundaryFor(entry) +
+        "\n\nThe findings listed are auto-generated heuristics, not confirmed defects. " +
+        "Verify each one against the spec before relying on it."
+      );
+    }
+    return (
+      p +
+      "\n\nYou CANNOT edit test files in this phase — that half is owned by the " +
+      "Tester. If the work includes a test-file change, do the source half, then " +
+      "report the test half as pending the Tester. Do NOT report the work as " +
+      "complete while any part is pending another actor."
+    );
+  },
 };
 
 interface Variant {
