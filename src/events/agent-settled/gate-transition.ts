@@ -90,6 +90,17 @@ export async function handleGateTransition(
         debug(`Scope check FAILED: ${scope.outOfScope.length} file(s) outside Inventory: ${scope.outOfScope.join(", ")}`);
       } else if (!scope.skipped) {
         debug("Scope check passed");
+      } else if (scope.skipReason === "no Inventory section") {
+        // The dangerous skip: this is a git repo with a readable spec, but its
+        // Inventory could not be parsed — so cross-spec contamination is NOT
+        // being checked. Surface it (session 01a0d128: the bullet-list
+        // Inventory was unparseable, the check silently skipped, and a stray
+        // out-of-scope test file passed the gate). Non-fatal: a spec may
+        // legitimately have no file-level Inventory (e.g. a pure-doc spec).
+        ctx.ui.notify(
+          "Scope check skipped: the active spec has no parseable ## Inventory file list — out-of-scope edits are not being gated this run.",
+          "warning",
+        );
       }
     }
 

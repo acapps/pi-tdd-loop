@@ -44,17 +44,64 @@ describe("parseInventory", () => {
     expect(parseInventory(SPEC_WITH_INVENTORY)).toEqual(["src/foo.ts", "test/foo.test.ts"]);
   });
 
+  // The template's ACTUAL Inventory format is a bullet list, not a table.
+  // The old table-only parser returned null here → the scope check silently
+  // skipped on every real spec (session 01a0d128).
+  it("extracts file paths from the template's bullet-list Inventory", () => {
+    const spec = [
+      "# fix-foo",
+      "",
+      "## Inventory",
+      "",
+      "- **Files:**",
+      "  - `src/events/before-agent.ts` — modify `buildWriterPrompt` (add two",
+      "    branches); add two small pure helpers",
+      "    `buildDisputeReviewPrompt` and `buildWriterConcedeFixPrompt`.",
+      "  - `test/events/before-agent.test.ts` — extend the `Phase B` block.",
+      "- **Imports:** none added.",
+      "",
+      "## Interface",
+      "",
+      "See `src/events/before-agent.ts`.",
+    ].join("\n");
+    // Only the two file paths; the helper function names (no `/`, no ext)
+    // and the Interface-section path are excluded.
+    expect(parseInventory(spec)).toEqual(["src/events/before-agent.ts", "test/events/before-agent.test.ts"]);
+  });
+
+  it("deduplicates a path that appears in both Files and another subsection", () => {
+    const spec = "# f\n\n## Inventory\n\n- `src/a.ts` — modify\n- **Imports:** `src/a.ts` again\n\n## Interface\n";
+    expect(parseInventory(spec)).toEqual(["src/a.ts"]);
+  });
+
+  it("strips a line qualifier (path:125 → path) so it dedupes against the bare path", () => {
+    const spec = "# f\n\n## Inventory\n\n- `src/a.ts` — modify\n- Effect: `src/a.ts:125` returns X\n\n## Interface\n";
+    expect(parseInventory(spec)).toEqual(["src/a.ts"]);
+  });
+
   it("returns null when no Inventory section exists", () => {
     expect(parseInventory(SPEC_NO_INVENTORY)).toBeNull();
   });
 
-  it("returns null when the Inventory section has no table rows", () => {
+  it("returns null when the Inventory section lists no file paths", () => {
     expect(parseInventory("# fix\n\n## Inventory\n\n(no files)\n\n## Interface\n")).toBeNull();
   });
 
   it("stops at the next ## section", () => {
     const spec = "# fix\n\n## Inventory\n\n| `a.ts` | Modify |\n\n## Interface\n\n| `b.ts` | not-inventoried |\n";
     expect(parseInventory(spec)).toEqual(["a.ts"]);
+  });
+
+  it("parses the real archived spec (bug-role-context-mismatch) from session 01a0d128", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const p = resolve(__dirname, "../internal/done-bug-role-context-mismatch.md");
+    if (!readFileSync) return;
+    const text = readFileSync(p, "utf-8");
+    const inv = parseInventory(text);
+    expect(inv).not.toBeNull();
+    expect(inv).toContain("src/events/before-agent.ts");
+    expect(inv).toContain("test/events/before-agent.test.ts");
   });
 });
 

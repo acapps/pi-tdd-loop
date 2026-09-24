@@ -22,6 +22,7 @@ import { getLanguageConfig } from "../../../src/languages";
 import * as GP from "../../../src/generic-prompts";
 import * as archive from "../../../src/spec-archive";
 import { runGates, formatFailures } from "../../../src/gates";
+import { checkScope } from "../../../src/scope-check";
 import { createMockExtensionAPI } from "../../__mocks__/@earendil-works/pi-coding-agent";
 
 vi.mock("../../../src/gates", async (importOriginal) => {
@@ -29,7 +30,16 @@ vi.mock("../../../src/gates", async (importOriginal) => {
   return { ...actual, runGates: vi.fn() };
 });
 
+// checkScope is the only other I/O in the scope-check branch; mock it so the
+// skip-warning tests never touch git or the filesystem. readSpecForScopeCheck
+// stays real (it just returns null for the mock cwd).
+vi.mock("../../../src/scope-check", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../src/scope-check")>();
+  return { ...actual, checkScope: vi.fn() };
+});
+
 const runGatesMock = vi.mocked(runGates);
+const checkScopeMock = vi.mocked(checkScope);
 const GO = getLanguageConfig("go");
 
 // --- Fixtures ---
@@ -124,6 +134,9 @@ let archiveSpy: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   runGatesMock.mockReset();
   runGatesMock.mockReturnValue(Promise.resolve(gate())); // default: all pass
+  // Default: spec unreadable (as before the mock existed) → scope check skips.
+  checkScopeMock.mockReset();
+  checkScopeMock.mockReturnValue({ ok: true, skipped: true, outOfScope: [], skipReason: "spec unreadable" });
   // The B→C archive is the only fs side effect in this file; stub it so the
   // suite never touches the real filesystem. Tests asserting the wiring
   // unstub it locally.
@@ -429,6 +442,49 @@ describe("Phase C", () => {
     expect(pi.sentMessages[0].content).toContain("Loop complete");
     expect(pi.sentMessages[0].content).toContain("spec.md");
     expect(pi.sentMessages[0].options).toEqual({ deliverAs: "followUp" });
+  });
+});
+
+// --- Scope check skip visibility ---
+// Session 01a0d128: the scope check silently skipped because the spec's
+// bullet-list Inventory was unparseable, so a stray out-of-scope test file
+// passed the gate undetected. The "no Inventory section" skip is the dangerous
+// one (git repo + readable spec, but nothing to check against) — it must be
+// surfaced, not just debug-logged.
+
+describe("scope check skip visibility", () => {
+  it("no Inventory section → warning notify, gate still passes (non-fatal)", async () => {
+    checkScopeMock.mockReturnValue({ ok: true, skipped: true, outOfScope: [], skipReason: "no Inventory section" });
+    const { input, ctx } = makeInput({ state: makeState({ phase: "B", round: 1 }) });
+    const result = await handleGateTransition(input);
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
+      "Scope check skipped: the active spec has no parseable ## Inventory file list — out-of-scope edits are not being gated this run.",
+      "warning",
+    );
+    // The skip is non-fatal: an all-pass gate still advances.
+    expect(result.applied).toBe(true);
+  });
+
+  it("spec unreadable → no warning (legit skip, e.g. Phase C done-effect path)", async () => {
+    checkScopeMock.mockReturnValue({ ok: true, skipped: true, outOfScope: [], skipReason: "spec unreadable" });
+    const { input, ctx } = makeInput({ state: makeState({ phase: "C", round: 1 }) });
+    await handleGateTransition(input);
+    expect(ctx.ui.notify).not.toHaveBeenCalledWith(
+      expect.stringContaining("Scope check skipped"),
+      "warning",
+    );
+  });
+
+  it("out-of-scope files → gate fails in place with a scope-check failure", async () => {
+    checkScopeMock.mockReturnValue({ ok: false, skipped: false, outOfScope: ["src/other.ts"] });
+    const { input, ctx, debug } = makeInput({ state: makeState({ phase: "B", round: 1 }) });
+    const result = await handleGateTransition(input);
+    // The all-pass gate is flipped to a failure by the scope check → Phase B
+    // round 1 gate-fail produces a retry effect (applied, round → 2).
+    expect(result.applied).toBe(true);
+    expect(result.state.round).toBe(2);
+    expect(ctx.ui.notify).toHaveBeenCalledWith("Gate failed. Retry 2/5.", "warning");
+    expect(debug).toHaveBeenCalledWith(expect.stringContaining("Scope check FAILED"));
   });
 });
 

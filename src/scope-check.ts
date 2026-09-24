@@ -48,14 +48,39 @@ const ALLOWLIST = new Set([
 ]);
 
 /**
- * Parse the `## Inventory` section of a spec file. Returns the file paths
- * from the first table column (backtick-quoted), or null when the section
- * is absent. Pure string function — unit-testable without I/O.
+ * True when a backtick-quoted token looks like a file path: contains a `/`
+ * or ends in a known source/test extension. This is what separates the
+ * Inventory's file entries from the many other backtick tokens a spec carries
+ * (function names like `buildWriterPrompt`, flags, strings).
+ */
+function isFilePath(token: string): boolean {
+  if (token.includes("/")) return true;
+  return /\.[a-z]{1,5}$/i.test(token);
+}
+
+/**
+ * Parse the `## Inventory` section of a spec file into its file paths.
+ * Returns the paths, or null when the section is absent or lists no files.
+ * Pure string function — unit-testable without I/O.
+ *
+ * Handles BOTH Inventory formats the spec-authoring template produces:
+ *  - bullet list (the template's actual form):
+ *      - **Files:**
+ *        - `src/foo.ts` — modify ...
+ *        - `test/foo.test.ts` — extend ...
+ *  - markdown table (also accepted):
+ *      | `src/foo.ts` | Modify |
+ *
+ * It extracts every backtick-quoted token in the section that looks like a
+ * file path (isFilePath), deduplicated, in order of first appearance. The
+ * earlier table-only parser returned null for every bullet-list spec — a
+ * silent no-op that skipped the scope check on real specs (session 01a0d128).
  */
 export function parseInventory(specText: string): string[] | null {
   const lines = specText.split("\n");
   let inInventory = false;
   const files: string[] = [];
+  const seen = new Set<string>();
   for (const line of lines) {
     const trimmed = line.trim();
     if (/^##\s+Inventory\b/i.test(trimmed)) {
@@ -64,9 +89,16 @@ export function parseInventory(specText: string): string[] | null {
     }
     if (inInventory && /^##\s+/i.test(trimmed)) break; // next section
     if (!inInventory) continue;
-    // Table row: | `path` | action | — first cell, backtick-quoted.
-    const match = trimmed.match(/^\|\s*`([^`]+)`\s*\|/);
-    if (match) files.push(match[1]);
+    // Every backtick-quoted token on the line (bullet rows, table cells, prose).
+    const tokens = trimmed.match(/`([^`]+)`/g) ?? [];
+    for (const t of tokens) {
+      // Strip a line qualifier (path:125 → path) and surrounding whitespace.
+      const path = t.slice(1, -1).trim().replace(/:\d+$/, "").trim();
+      if (isFilePath(path) && !seen.has(path)) {
+        seen.add(path);
+        files.push(path);
+      }
+    }
   }
   return files.length > 0 ? files : null;
 }
