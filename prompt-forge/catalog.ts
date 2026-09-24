@@ -174,11 +174,12 @@ export const noHardcodedData = (declaredData: string[]): Guarantee => ({
     "A general prompt uses slots, not one session's data.",
   weight: 2,
   check: (p) => {
-    // Round 4: reject state-derived literals (counts, gate outcomes).
+    // Round 4: reject state-derived literals in prose (counts, gate outcomes).
     const stateLiterals = [
-      /\(\d+\s+potential\s+findings\)/i,
-      /threshold\s+met/i,
-      /\(\d+\s+findings\)/i,
+      /\(\d+\s+(potential\s+)?findings?\)/i,   // "(0 potential findings)"
+      /threshold\s+(met|not\s+met)/i,            // "threshold met"
+      /\d+\s+tests\b/i,                           // "5 tests"
+      /\d+\s+of\s+\d+/i,                           // "3 of 5"
     ];
     if (stateLiterals.some((r) => r.test(p))) return false;
     // Find backtick-quoted or path-like tokens.
@@ -331,21 +332,63 @@ export const inputCoverage = (): Guarantee => ({
   weight: 2,
   check: (p, e) => {
     if (e.inputs.length <= 1) return true;
-    // Structural check: count distinct labeled slots in the prompt.
-    // A labeled slot is a line ending with ':' followed by content.
-    // If there are fewer labeled slots than declared inputs, conflation.
+    // Per-input check: each declared input must have a distinct labeled slot.
+    // For body-typed inputs (specText, findings, negotiateResolution, etc.),
+    // the slot must be preceded by a label line containing the input name
+    // (case-insensitive). For path-type inputs, inline is acceptable.
+    const bodyInputs = e.inputs.filter((i) =>
+      /text|findings|resolution|summary|claim|dispute/i.test(i)
+    );
+    const pathInputs = e.inputs.filter((i) => !bodyInputs.includes(i));
+
+    // Check body-typed inputs: must have a label line containing the input name.
+    for (const input of bodyInputs) {
+      const labelPattern = new RegExp(
+        `^\\s*${input.replace(/[^a-zA-Z]/g, "\\w+")}\\w*\\s*:`,
+        "im"
+      );
+      // Also accept the input name in a label line (e.g., 'Spec:' for specText)
+      const altLabel = new RegExp(
+        `^\\s*\\w+\\s*:`,
+        "im"
+      );
+      // The label must be followed by a non-empty line (the slot content).
+      const lines = p.split("\n");
+      let found = false;
+      for (let i = 0; i < lines.length - 1; i++) {
+        const trimmed = lines[i].trim();
+        const isLabel = /^[\w\s-]+:\s*$/.test(trimmed);
+        if (isLabel && lines[i + 1].trim().length > 0) {
+          // Check if this label is for the right input.
+          const labelWord = trimmed.replace(/:$/, "").trim().toLowerCase();
+          const inputWord = input.toLowerCase().replace(/text$/, "");
+          // Match if the label contains a key part of the input name.
+          if (labelWord.includes(inputWord) || inputWord.includes(labelWord) ||
+              labelWord === input.toLowerCase() ||
+              new RegExp(`\\b${inputWord}\\b`, "i").test(labelWord)) {
+            found = true;
+            break;
+          }
+        }
+      }
+      if (!found) return false;
+    }
+
+    // Check path-type inputs: must appear as a distinct slot (labeled or inline).
+    // Count distinct slot tokens in the prompt.
+    const slotTokens = new Set<string>();
     const lines = p.split("\n");
-    let labeledSlots = 0;
     for (let i = 0; i < lines.length - 1; i++) {
-      if (/:\s*$/.test(lines[i].trim()) && lines[i + 1].trim().length > 0) {
-        labeledSlots++;
+      const trimmed = lines[i].trim();
+      if (/^[\w\s-]+:\s*$/.test(trimmed) && lines[i + 1].trim().length > 0) {
+        slotTokens.add(trimmed.replace(/:$/, "").trim().toLowerCase());
       }
     }
-    // Also count inline slots (input embedded mid-sentence, e.g., 'Read <path>.')
-    // These are less ideal but still distinct.
-    const inlineSlots = (p.match(/__FORGE_\w+__/g) || []).length;
-    const totalSlots = labeledSlots + inlineSlots;
-    return totalSlots >= e.inputs.length;
+    // Also count inline __FORGE_*__ tokens as distinct slots.
+    const forgeTokens = p.match(/__FORGE_\w+__/g) || [];
+    for (const t of forgeTokens) slotTokens.add(t);
+
+    return slotTokens.size >= e.inputs.length;
   },
 });
 
