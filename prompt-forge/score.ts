@@ -38,24 +38,51 @@ export interface EntryScore {
   failedIds: string[];
 }
 
-// Bind every declared input to the sentinel so carriesInput can verify the slot.
+// Bind each declared input to a DISTINCT sentinel so carries-* guarantees can
+// verify the SPECIFIC input's slot, not just that some slot is present. This
+// fixes the frontier's slot-conflation finding: a single shared sentinel let
+// `carries-resolution-slot` pass when the slot was actually workspaceRoot.
+function sentinelFor(input: string): string {
+  return `__FORGE_${input.toUpperCase()}__`;
+}
+
 function bindSentinels(entry: PromptEntry): Record<string, string> {
   const bind: Record<string, string> = {};
-  for (const input of entry.inputs) bind[input] = SENTINEL;
+  for (const input of entry.inputs) bind[input] = sentinelFor(input);
   return bind;
 }
 
-// Evaluate one guarantee. carriesInput-style guarantees (id starts with
-// "carries-") are checked against the sentinel-bound render.
+// Which input does a carries-* guarantee refer to? Map guarantee id → input.
+// carries-resolution-slot → negotiateResolution; carries-spec → specText;
+// carries-failure-summary → failureSummary; carries-input (generic) → the
+// entry's first input. This is what makes slot-conflation impossible: the
+// scorer checks the SPECIFIC input's sentinel, not any sentinel.
+function carriesInput(g: Guarantee, entry: PromptEntry): string | null {
+  const id = g.id;
+  if (id === "carries-resolution-slot") return "negotiateResolution";
+  if (id === "carries-spec") return "specText";
+  if (id === "carries-failure-summary") return "failureSummary";
+  if (id === "carries-input") return entry.inputs[0] ?? null;
+  if (id.startsWith("carries-")) {
+    // carries-<name> → try the input named <name>.
+    const name = id.replace("carries-", "");
+    const match = entry.inputs.find((i) => i.toLowerCase() === name);
+    return match ?? entry.inputs[0] ?? null;
+  }
+  return null;
+}
+
+// Evaluate one guarantee. carries-* guarantees check that the SPECIFIC input's
+// distinct sentinel is present (proving that input's slot flows through), OR
+// the guarantee's own structural check passes.
 function evalGuarantee(
   g: Guarantee,
   prompt: string,
   entry: PromptEntry,
 ): boolean {
-  if (g.id === "carries-resolution-slot" || g.id.startsWith("carries-")) {
-    // For carries-* guarantees, verify the sentinel (bound input) is present,
-    // OR the guarantee's own structural check passes (e.g. "agreed resolution").
-    const sentinelPresent = prompt.includes(SENTINEL);
+  const input = carriesInput(g, entry);
+  if (input) {
+    const sentinelPresent = prompt.includes(sentinelFor(input));
     const structural = g.check(prompt, entry);
     return sentinelPresent || structural;
   }
