@@ -132,6 +132,36 @@ export function getGitDirtyFiles(cwd: string): string[] | null {
 }
 
 /**
+ * Get only the untracked files (?? prefix) from `git status --porcelain`.
+ * Used for the scope-check baseline: pre-existing untracked files are
+ * "just other work in the repo" and should not block the gate. Modified
+ * tracked files (M) are NOT included — their dirty state is meaningful
+ * (content changed) and they must still be checked against the Inventory.
+ */
+export function getGitUntrackedFiles(cwd: string): string[] | null {
+  try {
+    const out = execSync("git status --porcelain", {
+      cwd,
+      encoding: "utf-8",
+      stdio: "pipe",
+    });
+    const files: string[] = [];
+    for (const line of out.split("\n")) {
+      if (line.length < 4) continue;
+      // Only untracked: "?? path"
+      if (!line.startsWith("??")) continue;
+      let path = line.slice(3).trim();
+      // Quoted paths (unicode): "path" — strip the quotes.
+      if (path.startsWith('"') && path.endsWith('"')) path = path.slice(1, -1);
+      if (path) files.push(path);
+    }
+    return files;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Run the scope check. Pure orchestration over the two functions above —
  * unit-test by mocking execSync/readFileSync, never by spawning git.
  *
@@ -143,6 +173,7 @@ export function checkScope(
   cwd: string,
   specPath: string,
   specText: string | null,
+  baseline?: string[],
 ): ScopeCheckResult {
   if (specText === null) {
     return { ok: true, outOfScope: [], skipped: true, skipReason: "spec unreadable" };
@@ -155,6 +186,12 @@ export function checkScope(
   if (dirty === null) {
     return { ok: true, outOfScope: [], skipped: true, skipReason: "not a git repository" };
   }
+
+  // Filter out files that were already dirty at spec start (baseline).
+  // These are pre-existing untracked/modified files, not contamination.
+  const effectiveDirty = baseline
+    ? dirty.filter((f) => !baseline.includes(f))
+    : dirty;
 
   // Build the allowed set: Inventory paths (resolved against cwd) + the
   // spec file itself + its done- archive twin + the allowlist.
@@ -171,7 +208,7 @@ export function checkScope(
   for (const a of ALLOWLIST) allowed.add(resolve(cwd, a));
 
   const outOfScope: string[] = [];
-  for (const f of dirty) {
+  for (const f of effectiveDirty) {
     const abs = isAbsolute(f) ? f : resolve(cwd, f);
     if (!allowed.has(abs)) outOfScope.push(f);
   }

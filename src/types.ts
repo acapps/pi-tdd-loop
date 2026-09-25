@@ -40,6 +40,15 @@ export interface LoopState {
   // handler; undefined and "" both mean "no feedback pending".
   negotiateProposed?: boolean;
   negotiateFeedback?: string;
+  // fix-negotiated-resolution-dropped: the agreed resolution of a negotiate
+  // dispute, captured when the Tester's review feedback names a test-file
+  // change. Survives round advances (unlike negotiateFeedback). Cleared when
+  // Phase B begins (resetForPhaseB). Absent → no open resolution.
+  negotiateResolution?: string;
+  // fix-scope-check-baseline: git dirty set at spec start — baseline for the
+  // scope-check. Captured in cmdLoop after runPhase0Baseline. Cleared in
+  // resetForPhaseB. Absent → scope-check uses all dirty files (backward compat).
+  baselineDirtyFiles?: string[];
   // Phase 0
   specFindings?: Finding[];
   awaitingReview?: boolean;

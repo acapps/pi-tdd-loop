@@ -12,7 +12,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { EventCtx } from "../index";
 import type { LanguageConfig } from "../../languages";
 import { runGates } from "../../gates";
-import { checkScope, readSpecForScopeCheck } from "../../scope-check";
+import { checkScope, readSpecForScopeCheck, getGitUntrackedFiles } from "../../scope-check";
 import { getLiveMetrics, accumulateGate } from "../../metrics";
 import * as T from "../../transitions";
 import { applyEffect } from "./effect-applicator";
@@ -79,7 +79,19 @@ export async function handleGateTransition(
     // Skips cleanly when the check cannot run (non-git cwd, no Inventory).
     if (gate && outcome.kind === "result" && (phase === "B" || phase === "C")) {
       const specText = readSpecForScopeCheck(gateCwd, state.specPath);
-      const scope = checkScope(gateCwd, state.specPath, specText);
+
+      // Re-capture baseline if missing (restored session): the first Phase B/C
+      // gate captures the current dirty set as the baseline so that subsequent
+      // gates can filter out pre-existing files.
+      if (state.baselineDirtyFiles === undefined) {
+        const baseline = getGitUntrackedFiles(gateCwd);
+        if (baseline !== null) {
+          state.baselineDirtyFiles = baseline;
+          debug(`Scope-check baseline captured: ${baseline.length} file(s)`);
+        }
+      }
+
+      const scope = checkScope(gateCwd, state.specPath, specText, state.baselineDirtyFiles);
       if (!scope.skipped && !scope.ok) {
         gate.allPassed = false;
         gate.failures = [{

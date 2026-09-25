@@ -10,6 +10,7 @@ import * as R from "../reviewer";
 import { detectProject, isValidLanguage } from "../languages";
 import { initLiveMetrics } from "../metrics";
 import { parseLoopArgs, loadLoopConfig, mergeLoopArgs } from "../selectors";
+import { getGitUntrackedFiles } from "../scope-check";
 import {
   resolveProjectCwd, runPhase0Baseline, applyBranchSetup, enterPhase0Review,
 } from "./loop-baseline";
@@ -71,6 +72,16 @@ export function cmdLoop(
         merged.autoApprove, merged.maxA, merged.maxNegotiate, merged.maxB,
         merged.maxC, merged.maxDispute, merged.maxTurnsPerPhase,
       );
+
+      // fix-scope-check-baseline: capture the git dirty set at spec start.
+      // This is the baseline the scope-check uses to filter out pre-existing
+      // untracked/modified files at gate time.
+      const baseline = getGitUntrackedFiles(projectCwd);
+      if (baseline !== null) {
+        state.current.baselineDirtyFiles = baseline;
+        debug(`Scope-check baseline: ${baseline.length} pre-existing dirty file(s)`);
+      }
+
       initLiveMetrics({ specPath: merged.specPath, language, phase: "review" });
 
       if (merged.branch !== undefined) {

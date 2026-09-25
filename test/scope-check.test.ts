@@ -9,7 +9,7 @@ vi.mock("node:child_process", () => ({
 }));
 
 import { execSync } from "node:child_process";
-import { parseInventory, checkScope } from "../src/scope-check";
+import { parseInventory, checkScope, getGitUntrackedFiles } from "../src/scope-check";
 
 const mockExecSync = vi.mocked(execSync);
 
@@ -194,5 +194,130 @@ describe("checkScope", () => {
     const r = checkScope(CWD, "internal/fix-foo.md", SPEC_WITH_INVENTORY);
     expect(r.ok).toBe(false);
     expect(r.outOfScope).toEqual(["src/ünïcode.ts"]);
+  });
+
+  // --- fix-scope-check-baseline: pre-existing dirty files are filtered out ---
+
+  it("filters out pre-existing untracked files (baseline)", () => {
+    // Session 01a0d6aa: prompt-evolution/ and prompt-forge/behavior-test.ts
+    // were untracked before the spec started. They should not block the gate.
+    mockExecSync.mockReturnValue(
+      " M src/foo.ts\n?? prompt-evolution/\n?? prompt-forge/behavior-test.ts\n",
+    );
+    const baseline = ["prompt-evolution/", "prompt-forge/behavior-test.ts"];
+    const r = checkScope(CWD, "internal/fix-foo.md", SPEC_WITH_INVENTORY, baseline);
+    expect(r.skipped).toBe(false);
+    expect(r.ok).toBe(true);
+    expect(r.outOfScope).toEqual([]);
+  });
+
+  it("still flags NEW untracked files not in baseline", () => {
+    // A new untracked file created during the spec is still contamination.
+    mockExecSync.mockReturnValue(
+      " M src/foo.ts\n?? prompt-evolution/\n?? test/contracts/other-spec.test.ts\n",
+    );
+    const baseline = ["prompt-evolution/"];
+    const r = checkScope(CWD, "internal/fix-foo.md", SPEC_WITH_INVENTORY, baseline);
+    expect(r.ok).toBe(false);
+    expect(r.outOfScope).toEqual(["test/contracts/other-spec.test.ts"]);
+  });
+
+  it("without baseline: all dirty files are checked (backward compat)", () => {
+    // No baseline arg → pre-existing untracked files are still flagged.
+    mockExecSync.mockReturnValue(
+      " M src/foo.ts\n?? prompt-evolution/\n",
+    );
+    const r = checkScope(CWD, "internal/fix-foo.md", SPEC_WITH_INVENTORY);
+    expect(r.ok).toBe(false);
+    expect(r.outOfScope).toEqual(["prompt-evolution/"]);
+  });
+
+  it("empty baseline: same as no baseline", () => {
+    mockExecSync.mockReturnValue(" M src/foo.ts\n?? prompt-evolution/\n");
+    const r = checkScope(CWD, "internal/fix-foo.md", SPEC_WITH_INVENTORY, []);
+    expect(r.ok).toBe(false);
+    expect(r.outOfScope).toEqual(["prompt-evolution/"]);
+  });
+
+  it("regression: session 01a0d6aa scenario passes with baseline", () => {
+    // The 5 modified files are in the Inventory. The 2 untracked files
+    // (prompt-evolution/, prompt-forge/behavior-test.ts) are in the baseline.
+    mockExecSync.mockReturnValue(
+      " M src/events/agent-settled/effect-applicator.ts\n"
+      + " M src/state-validation.ts\n"
+      + " M src/tools/negotiate.ts\n"
+      + " M src/tools/state-io.ts\n"
+      + " M src/types.ts\n"
+      + "?? prompt-evolution/\n"
+      + "?? prompt-forge/behavior-test.ts\n",
+    );
+    const baseline = ["prompt-evolution/", "prompt-forge/behavior-test.ts"];
+    const spec = "## Inventory\n- `src/types.ts`\n- `src/state-validation.ts`\n- `src/tools/negotiate.ts`\n- `src/tools/state-io.ts`\n- `src/events/agent-settled/effect-applicator.ts`\n";
+    const r = checkScope(CWD, "internal/fix-negotiated-resolution-dropped.md", spec, baseline);
+    expect(r.skipped).toBe(false);
+    expect(r.ok).toBe(true);
+    expect(r.outOfScope).toEqual([]);
+  });
+
+  it("regression: session 01a0d6aa scenario fails without baseline", () => {
+    // Same dirty set, no baseline → the 2 untracked files are flagged.
+    mockExecSync.mockReturnValue(
+      " M src/events/agent-settled/effect-applicator.ts\n"
+      + " M src/state-validation.ts\n"
+      + " M src/tools/negotiate.ts\n"
+      + " M src/tools/state-io.ts\n"
+      + " M src/types.ts\n"
+      + "?? prompt-evolution/\n"
+      + "?? prompt-forge/behavior-test.ts\n",
+    );
+    const spec = "## Inventory\n- `src/types.ts`\n- `src/state-validation.ts`\n- `src/tools/negotiate.ts`\n- `src/tools/state-io.ts`\n- `src/events/agent-settled/effect-applicator.ts`\n";
+    const r = checkScope(CWD, "internal/fix-negotiated-resolution-dropped.md", spec);
+    expect(r.ok).toBe(false);
+    expect(r.outOfScope).toEqual(["prompt-evolution/", "prompt-forge/behavior-test.ts"]);
+  });
+
+  it("modified file dirty at spec start AND outside Inventory is still flagged", () => {
+    // The Writer modifies src/bar.ts (not in Inventory) during the spec.
+    // src/bar.ts was also modified at spec start, but it's a tracked file (M),
+    // so it's NOT in the untracked baseline. It must still be flagged.
+    mockExecSync.mockReturnValue(" M src/foo.ts\n M src/bar.ts\n");
+    const baseline: string[] = []; // no untracked files at spec start
+    const r = checkScope(CWD, "internal/fix-foo.md", SPEC_WITH_INVENTORY, baseline);
+    expect(r.ok).toBe(false);
+    expect(r.outOfScope).toEqual(["src/bar.ts"]);
+  });
+});
+
+describe("getGitUntrackedFiles", () => {
+  beforeEach(() => {
+    mockExecSync.mockReset();
+  });
+
+  const CWD = "/project";
+
+  it("returns only untracked (??) files", () => {
+    mockExecSync.mockReturnValue(
+      " M src/foo.ts\n?? prompt-evolution/\n M src/bar.ts\n?? test/new.test.ts\n",
+    );
+    const r = getGitUntrackedFiles(CWD);
+    expect(r).toEqual(["prompt-evolution/", "test/new.test.ts"]);
+  });
+
+  it("returns empty array when no untracked files", () => {
+    mockExecSync.mockReturnValue(" M src/foo.ts\n M src/bar.ts\n");
+    const r = getGitUntrackedFiles(CWD);
+    expect(r).toEqual([]);
+  });
+
+  it("returns null when not a git repository", () => {
+    mockExecSync.mockImplementation(() => { throw new Error("not a git repo"); });
+    const r = getGitUntrackedFiles(CWD);
+    expect(r).toBeNull();
+  });
+
+  it("handles quoted paths", () => {
+    mockExecSync.mockReturnValue('?? "prompt-ünïcode/"\n');
+    const r = getGitUntrackedFiles(CWD);
+    expect(r).toEqual(["prompt-ünïcode/"]);
   });
 });

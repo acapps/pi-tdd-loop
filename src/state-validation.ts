@@ -26,7 +26,7 @@ const TURNED_PHASES: readonly Phase[] = ["review", "A", "negotiate", "B", "C"];
 // --- Shape contract (flat LoopState) ---
 
 interface FieldSpec {
-  type: "number" | "boolean" | "string";
+  type: "number" | "boolean" | "string" | "string[]";
   optional?: boolean;
 }
 
@@ -47,7 +47,9 @@ const FIELD_SPECS: Record<string, FieldSpec> = {
   negotiateReprompted: { type: "boolean" },
   negotiateProposed: { type: "boolean", optional: true },
   negotiateFeedback: { type: "string", optional: true },
-  specPath: { type: "string" },
+  negotiateResolution: { type: "string", optional: true },
+  baselineDirtyFiles: { type: "string[]", optional: true },
+  specPath: { type: "string"},
   lastProposal: { type: "string" },
 };
 
@@ -79,6 +81,12 @@ function checkField(
   const value = data[field];
   if (value === undefined) {
     if (!spec.optional) errors.push(`missing field: ${field}`);
+    return;
+  }
+  if (spec.type === "string[]") {
+    if (!Array.isArray(value) || !value.every((v) => typeof v === "string")) {
+      errors.push(`field ${field} must be string[]`);
+    }
     return;
   }
   if (typeof value !== spec.type) {
