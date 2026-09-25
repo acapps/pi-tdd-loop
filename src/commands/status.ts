@@ -105,14 +105,24 @@ export function cmdContinue(
 ) {
   return {
     description: "Continue the loop from the current phase",
-    handler: async (_args: string, ctx: CommandContext) => {
+    handler: async (args: string, ctx: CommandContext) => {
       const s = state.current;
       if (isIdleOrDone(s.phase)) {
         ctx.ui.notify("Nothing to continue. Run /loop <spec-path> to start.", "warning");
         return;
       }
       if (s.phase === "escalated") {
-        s.phase = s.lastPhase;
+        // If the user specified a phase argument, use it; otherwise fall back to lastPhase.
+        if (args.trim()) {
+          try {
+            s.phase = resolvePhaseArg(args);
+          } catch {
+            ctx.ui.notify(`Invalid phase: ${args.trim()}. Use A, negotiate, B, or C.`, "warning");
+            return;
+          }
+        } else {
+          s.phase = s.lastPhase;
+        }
         resetPhaseState(s);
         ctx.ui.notify(`Continued from Phase ${s.phase}, round 1.`, "info");
         commit(s, pi, debug);
