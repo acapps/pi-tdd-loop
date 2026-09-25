@@ -29,7 +29,7 @@ interface LanguagePrompts {
   promptTesterPhaseA: (specPath: string, buildTool: string, workspaceRoot?: string) => string;
   promptTesterPhaseARestart: (specPath: string, buildTool: string, workspaceRoot?: string) => string;
   promptTesterCompileRetry: (compileError: string) => string;
-  promptNegotiateAutoAdvance: (workspaceRoot?: string) => string;
+  promptNegotiateAutoAdvance: (negotiateResolution: string, workspaceRoot?: string) => string;
   promptWriterPhaseB: (workspaceRoot?: string) => string;
   promptWriterPhaseBContinue: (failureSummary: string, failureCount: number, workspaceRoot?: string) => string;
   promptCleanerPhaseC: (workspaceRoot?: string) => string;

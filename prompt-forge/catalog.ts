@@ -107,9 +107,13 @@ export const hasTermination = (): Guarantee => ({
     const hasStop = /stop producing tool calls|when done|call \w+ now|use \w+/i.test(p);
     if (!hasStop) return false;
 
-    // For no-write entries (negotiate, reviewer), the condition must reference
-    // the tool call, not test results (which are unreachable).
-    const isNoWrite = entry.phase === "negotiate" || entry.role === "reviewer";
+    // For no-write entries (negotiate review, reviewer), the condition must
+    // reference the tool call, not test results (which are unreachable).
+    // NOTE: negotiate.writer.concede-fix is a WRITE entry despite being in the
+    // negotiate phase — it writes source files to fix the flagged issue.
+    const isNoWrite =
+      (entry.phase === "negotiate" && entry.role !== "writer") ||
+      entry.role === "reviewer";
     if (isNoWrite) {
       // Must reference "after calling X" or "after the X call".
       const referencesToolCall =
@@ -121,13 +125,22 @@ export const hasTermination = (): Guarantee => ({
       return referencesToolCall && !referencesTests;
     }
 
-    // For write entries (writer, cleaner, tester), the condition must reference
-    // a reachable completion state (tests pass, refactor complete, etc.).
-    const hasCondition =
-      /when (all|the|your|no|every)\S{0,40}|when done|once (all|the|your)|after (all|the|your)|only remaining work|no more work|all\s+tests\s+pass|refactor\s+is\s+complete/i.test(
-        p,
-      );
-    return hasCondition;
+    // Round 5: the condition must reference a reachable completion state.
+    // For write entries (writer, cleaner), 'When done' alone is NOT sufficient
+    // — it requires the agent to judge its own completion, which is the
+    // false-done bug. An observable condition (tests pass, refactor complete)
+    // or a role-specific condition (source half done) is required.
+    // For no-write entries (reviewer, tester in review mode), 'When done' IS
+    // sufficient — the agent's judgment IS the completion condition.
+    const isWriteRole = /writer|cleaner/i.test(entry.role ?? "");
+    const hasObservableCondition =
+      /all\s+tests\s+pass|tests\s+pass\s+again|fix\s+is\s+applied|failures\s+are\s+resolved|refactor\s+is\s+complete|source\s+half\s+is\s+done|all\s+tests\s+are\s+written/i.test(p);
+    if (isWriteRole && !hasObservableCondition) {
+      // Write role: 'When done' alone is NOT sufficient.
+      const hasBareDone = /when\s+done/i.test(p);
+      if (hasBareDone) return false;
+    }
+    return hasObservableCondition || hasStop;
   },
 });
 
@@ -186,10 +199,18 @@ export const noHardcodedData = (declaredData: string[]): Guarantee => ({
     const tokens = new Set<string>();
     for (const m of p.matchAll(/`([^`]+)`/g)) tokens.add(m[1]);
     for (const m of p.matchAll(/\b[\w./-]+\.\w{1,5}(?:\.\w+)?\b/g)) tokens.add(m[0]);
+    // Round 5: allowlist — toolchain commands and role constants are not session data.
+    const allowlist = [
+      /npx\s+(vitest|tsc|jest|mocha)/i,
+      /negotiate_(propose|review)/i,
+      /\*\.test\.\w+/,  // glob patterns
+      /\.test\.\w+/,     // test file extensions
+    ];
     for (const t of tokens) {
       if (t.includes("*")) continue;
       if (declaredData.some((d) => t.includes(d) || d.includes(t))) continue;
       if (declaredData.length === 0) continue;
+      if (allowlist.some((r) => r.test(t))) continue;
       if (/^[\w.-]+\/[\w./-]+\.\w{1,5}$/.test(t)) return false;
     }
     return true;
@@ -241,6 +262,26 @@ export const noStylePolicyBloat = (): Guarantee => ({
     const hits = styleRules.filter((r) => r.test(p)).length;
     // 0-1 style rule is acceptable (a single convention is fine).
     // 2+ is bloat.
+    return hits <= 1;
+  },
+});
+
+// Round 5 (frontier): no-redundancy. Fail when the boundary is stated twice.
+// The addTestBoundary op appends its sentence blindly, which produced
+// duplicates ('Do not modify *.test.ts' + 'You CANNOT edit test files').
+export const noRedundancy = (): Guarantee => ({
+  id: "no-redundancy",
+  why: "The boundary must be stated once. Duplicated boundary sentences are bloat.",
+  weight: 1,
+  check: (p) => {
+    const boundaryPatterns = [
+      /CANNOT\s+edit\s+test\s+files/i,
+      /do\s+not\s+modify\s+\*?\.?test/i,
+      /cannot\s+modify\s+test/i,
+      /test\s+files?\s+(are\s+)?off[-\s]limits/i,
+      /do\s+not\s+edit\s+test/i,
+    ];
+    const hits = boundaryPatterns.filter((r) => r.test(p)).length;
     return hits <= 1;
   },
 });
@@ -341,31 +382,26 @@ export const inputCoverage = (): Guarantee => ({
     );
     const pathInputs = e.inputs.filter((i) => !bodyInputs.includes(i));
 
-    // Check body-typed inputs: must have a label line containing the input name.
+    // Check body-typed inputs: must have a label line containing a key part
+    // of the input name. E.g., 'Failure summary:' matches 'failureSummary',
+    // 'Negotiated resolution:' matches 'negotiateResolution'.
     for (const input of bodyInputs) {
-      const labelPattern = new RegExp(
-        `^\\s*${input.replace(/[^a-zA-Z]/g, "\\w+")}\\w*\\s*:`,
-        "im"
-      );
-      // Also accept the input name in a label line (e.g., 'Spec:' for specText)
-      const altLabel = new RegExp(
-        `^\\s*\\w+\\s*:`,
-        "im"
-      );
-      // The label must be followed by a non-empty line (the slot content).
+      // Split the camelCase input name into words: 'failureSummary' → ['failure', 'summary']
+      const words = input.replace(/([A-Z])/g, ' $1').toLowerCase().split(/\s+/).filter(Boolean);
+      // Check if the label contains ANY of the input's words.
+      // 'failureSummary' → ['failure', 'summary'] — "Failing test summary" contains 'summary' ✓
+      // 'negotiateResolution' → ['negotiate', 'resolution'] — "Negotiated resolution" contains 'resolution' ✓
+      // 'specText' → ['spec', 'text'] — "Spec" contains 'spec' ✓
       const lines = p.split("\n");
       let found = false;
       for (let i = 0; i < lines.length - 1; i++) {
         const trimmed = lines[i].trim();
-        const isLabel = /^[\w\s-]+:\s*$/.test(trimmed);
+        const isLabel = /^[\w\s()-]+:\s*$/.test(trimmed);
         if (isLabel && lines[i + 1].trim().length > 0) {
-          // Check if this label is for the right input.
           const labelWord = trimmed.replace(/:$/, "").trim().toLowerCase();
-          const inputWord = input.toLowerCase().replace(/text$/, "");
-          // Match if the label contains a key part of the input name.
-          if (labelWord.includes(inputWord) || inputWord.includes(labelWord) ||
-              labelWord === input.toLowerCase() ||
-              new RegExp(`\\b${inputWord}\\b`, "i").test(labelWord)) {
+          // Match if the label contains any of the input's words (stemmed).
+          const hasWord = words.some((w: string) => labelWord.includes(w));
+          if (hasWord) {
             found = true;
             break;
           }
@@ -387,6 +423,16 @@ export const inputCoverage = (): Guarantee => ({
     // Also count inline __FORGE_*__ tokens as distinct slots.
     const forgeTokens = p.match(/__FORGE_\w+__/g) || [];
     for (const t of forgeTokens) slotTokens.add(t);
+
+    // Round 5: verify each named __FORGE_*__ token maps to a declared input.
+    // __FORGE_SPEC_TEXT__ → specText, __FORGE_FINDINGS__ → findings, etc.
+    for (const token of forgeTokens) {
+      const tokenName = token.replace(/^__FORGE_/, "").replace(/__$/, "");
+      const inputName = tokenName.charAt(0).toLowerCase() + tokenName.slice(1).replace(/_/g, "");
+      if (!e.inputs.some((i) => i.toLowerCase() === inputName.toLowerCase())) {
+        return false; // token doesn't map to a declared input
+      }
+    }
 
     return slotTokens.size >= e.inputs.length;
   },
@@ -493,7 +539,8 @@ export const CATALOG: PromptEntry[] = [
       `Workspace: ${b.workspaceRoot ?? ""}\n\n` +
       `Read the spec, then write Vitest tests (*.test.ts) and empty stub .ts files under the workspace. The tests define correct behavior and must fail against the stubs until the Writer implements them.\n\n` +
       `Tests must:\n- Cover every spec requirement\n- Cover edge cases: empty, undefined, null, single element\n- Use describe/it from Vitest\n\n` +
-      `You CANNOT write real implementations; that is owned by the Writer. When done, stop producing tool calls.`,
+      `You CANNOT write real implementations; that is owned by the Writer.\n` +
+      `When all tests are written, stop producing tool calls.`,
   },
   {
     id: "phaseA.tester.compile-retry",
@@ -522,7 +569,7 @@ export const CATALOG: PromptEntry[] = [
     ],
     render: (b) =>
       `Compilation failed. Fix the compilation errors.\n\n${b.compileError ?? ""}\n\n` +
-      `When done, stop producing tool calls.`,
+      `When the compile error is fixed, stop producing tool calls.`,
   },
   {
     id: "phaseA.tester.dispute-fix",
@@ -544,7 +591,8 @@ export const CATALOG: PromptEntry[] = [
     ],
     render: (b) =>
       `Conceded dispute. Fix the test in *.test.ts to match the spec.\n` +
-      `Do not modify non-test files. When done, stop producing tool calls.`,
+      `Do not modify non-test files.\n` +
+      `When the tests pass again, stop producing tool calls.`,
   },
 
   // ===== Phase B — Writer =====
@@ -581,14 +629,17 @@ export const CATALOG: PromptEntry[] = [
       },
       hasTermination(),
       noHardcodedData([]),
+      noStylePolicyBloat(),
+      noRedundancy(),
     ],
     render: (b) =>
-      `Phase B (Writer). Implement the source so all tests pass.\n\n` +
-      `Workspace: ${b.workspaceRoot ?? ""}\n\n` +
-      `Read the *.test.ts files and the .ts stubs, then implement the logic. Preserve stub signatures. Use strict types (no any) and const declarations.\n` +
-      `Run tests with \`npx vitest run\` and type-check with \`npx tsc --noEmit\`.\n\n` +
-      `If a test is wrong, dispute it with negotiate_propose. If a test is correct and your code is wrong, concede with negotiate_propose(\"agree\").\n\n` +
-      `You CANNOT edit test files in this phase; that is owned by the Tester. When done, stop producing tool calls.`,
+      `Phase B (Writer). Write TypeScript source files that make all tests pass.\n\n` +
+      `Workspace:\n${b.workspaceRoot ?? ""}\n\n` +
+      `Read the *.test.ts files and the *.ts stubs, then implement the logic in source files under the workspace. Preserve stub signatures.\n` +
+      `Verify with \`npx vitest run\` and \`npx tsc --noEmit\`.\n\n` +
+      `If a test is wrong, dispute it with negotiate_propose. If the test is correct and your code is wrong, concede with negotiate_propose("agree") and fix the code.\n\n` +
+      `You CANNOT edit test files in this phase; the Tester owns them.\n` +
+      `When all tests pass (or you have filed a dispute), stop producing tool calls.`,
   },
   {
     id: "phaseB.writer.continue",
@@ -609,13 +660,15 @@ export const CATALOG: PromptEntry[] = [
       hasTermination(),
       inputCoverage(),
       noHardcodedData(["failureSummary"]),
+      noRedundancy(),
     ],
     render: (b) =>
       `Phase B (Writer). Tests failed.\n\n` +
-      `Workspace: ${b.workspaceRoot ?? ""}\n\n` +
-      `Failure summary:\n${b.failureSummary ?? ""}\n\n` +
-      `Fix the source files so the tests pass. If a test is wrong, dispute it with negotiate_propose. If a test is correct and your code is wrong, concede with negotiate_propose(\"agree\").\n\n` +
-      `You CANNOT edit test files in this phase; that is owned by the Tester. When done, stop producing tool calls.`,
+      `Workspace:\n${b.workspaceRoot ?? ""}\n\n` +
+      `Failing test summary:\n${b.failureSummary ?? ""}\n\n` +
+      `Fix the source files so the tests pass. If a test is wrong, dispute it with negotiate_propose. If the test is correct and your code is wrong, concede with negotiate_propose("agree") and fix the code.\n\n` +
+      `You CANNOT edit test files in this phase; the Tester owns them.\n` +
+      `When the failures are resolved (or you have filed a dispute), stop producing tool calls.`,
   },
   {
     id: "phaseB.writer.auto-advance",
@@ -658,15 +711,18 @@ export const CATALOG: PromptEntry[] = [
       hasTermination(),
       inputCoverage(),
       noHardcodedData(["negotiateResolution"]),
+      noStylePolicyBloat(),
     ],
     render: (b) =>
-      `Advancing to Phase B without explicit approval. Implement the source.\n\n` +
-      `Workspace: ${b.workspaceRoot ?? ""}\n\n` +
+      `Advancing to Phase B without explicit approval. Write TypeScript source files.\n\n` +
       `Negotiated resolution:\n${b.negotiateResolution ?? ""}\n\n` +
-      `Read the *.test.ts files and .ts stubs, then implement the logic. Preserve stub signatures. Use strict types (no any).\n` +
-      `Run tests with \`npx vitest run\` and type-check with \`npx tsc --noEmit\`.\n\n` +
-      `You CANNOT edit test files in this phase; that is owned by the Tester. If the resolution requires a test-file change, do the source half and report the test half as pending the Tester. Do NOT report the work as complete while any part is pending another actor.\n\n` +
-      `When done, stop producing tool calls.`,
+      `Workspace:\n${b.workspaceRoot ?? ""}\n\n` +
+      `Read the *.test.ts files and the *.ts stubs, then implement the logic in source files under the workspace. Preserve stub signatures.\n` +
+      `Verify with \`npx vitest run\` and \`npx tsc --noEmit\`.\n\n` +
+      `You CANNOT edit test files in this phase; the Tester owns them. ` +
+      `If the resolution includes a test-file change, do the source half and report the test half as pending the Tester. ` +
+      `Do NOT report the work as complete while any part is pending another actor.\n` +
+      `When the source half is done, stop producing tool calls.`,
   },
 
   // ===== Phase C — Cleaner =====
@@ -687,11 +743,15 @@ export const CATALOG: PromptEntry[] = [
       statesRoleBoundary("test"),
       hasTermination(),
       noHardcodedData([]),
+      noStylePolicyBloat(),
+      noRedundancy(),
     ],
     render: (b) =>
-      `Phase C (Cleaner). Refactor source files for readability.\n` +
-      `Do not modify *.test.ts. All tests must pass.\n` +
-      `When done, stop producing tool calls.`,
+      `Phase C (Cleaner). Refactor the source files for clarity and maintainability.\n\n` +
+      `Workspace:\n${b.workspaceRoot ?? ""}\n\n` +
+      `Refactor the source files. Do NOT change behavior.\n` +
+      `You CANNOT edit test files in this phase; the Tester owns them.\n` +
+      `When the refactor is complete, stop producing tool calls.`,
   },
   {
     id: "phaseC.cleaner.retry",
@@ -712,12 +772,15 @@ export const CATALOG: PromptEntry[] = [
       hasTermination(),
       inputCoverage(),
       noHardcodedData(["failureSummary"]),
+      noRedundancy(),
     ],
     render: (b) =>
-      `Phase C (Cleaner). Tests failed after your refactor.\n\n` +
-      `Workspace: ${b.workspaceRoot ?? ""}\n\n` +
+      `Phase C (Cleaner). Tests failed after refactoring.\n\n` +
+      `Workspace:\n${b.workspaceRoot ?? ""}\n\n` +
       `Failure summary:\n${b.failureSummary ?? ""}\n\n` +
-      `Restore working behavior in the source files without changing behavior beyond what the tests expect. You CANNOT edit test files in this phase. When done, stop producing tool calls.`,
+      `Restore the behavior the tests expect by fixing the source files, keeping the refactor where it does not cause the failure.\n` +
+      `You CANNOT edit test files in this phase; the Tester owns them.\n` +
+      `When the tests pass again, stop producing tool calls.`,
   },
 
   // ===== Negotiate / Dispute layer =====
@@ -783,7 +846,8 @@ export const CATALOG: PromptEntry[] = [
     ],
     render: (b) =>
       `TESTER (dispute review). The Writer disputed a test:\n\n${b.claim ?? ""}\n\n` +
-      `Use negotiate_review: 'approve' or rebut. Do not write files.`,
+      `Use negotiate_review: 'approve' or rebut. Do not write files.\n` +
+      `After the negotiate_review call, stop producing tool calls.`,
   },
   {
     id: "negotiate.writer.concede-fix",
@@ -812,7 +876,8 @@ export const CATALOG: PromptEntry[] = [
     ],
     render: (b) =>
       `WRITER (dispute fix). You accepted the Tester's report:\n\n${b.claim ?? ""}\n\n` +
-      `Fix the flagged file(s). Write source files only. When done, stop producing tool calls.`,
+      `Fix the flagged file(s) so the tests pass. Write source files only.\n` +
+      `When the fix is applied, stop producing tool calls.`,
   },
 ];
 

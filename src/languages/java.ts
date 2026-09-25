@@ -2,15 +2,12 @@
 
 import type { LanguageConfig } from "./index";
 
+// Toolchain commands only — style policy (naming, line limits) is not a role
+// contract and must not be injected into prompts (no-style-policy-bloat).
 const CONVENTIONS = `
-Java conventions:
+Toolchain:
 - Use \`mvn test\` for test output
 - Use \`mvn compile\` for compilation check
-- Package names use lowercase with dots
-- Class names use PascalCase
-- Prefer AssertJ assertions over JUnit assert methods
-- Use Records for data classes where applicable
-- Keep methods under 50 lines
 `;
 
 function ws(workspaceRoot?: string): string {
@@ -29,7 +26,8 @@ const config: LanguageConfig = {
     promptTesterPhaseA: (specPath: string, buildTool: string, workspaceRoot?: string) =>
 `You are the TESTER. Write contract tests.
 
-Read ${specPath}. ${ws(workspaceRoot)}Design the test contract that defines correct behavior.
+Spec: ${specPath}
+${ws(workspaceRoot)}Design the test contract that defines correct behavior.
 Write both *Test.java (tests) and stub .java files (empty implementations).
 
 Tests must:
@@ -37,14 +35,16 @@ Tests must:
 - Include edge cases: null, empty, single element, whitespace
 - Use JUnit @ParameterizedTest or table-driven tests where applicable
 - Use AssertJ assertions ( assertThat() )
+- Fail against the stubs until the Writer implements them
 
 Build tool: ${buildTool}. Config file: ${buildTool === "gradle" ? "build.gradle" : "pom.xml"}.
-When done, stop producing tool calls.`,
+When all tests are written, stop producing tool calls.`,
 
     promptTesterPhaseARestart: (specPath: string, buildTool: string, workspaceRoot?: string) =>
 `You are the TESTER. Write contract tests.
 
-Read ${specPath}. ${ws(workspaceRoot)}Design the test contract that defines correct behavior.
+Spec: ${specPath}
+${ws(workspaceRoot)}Design the test contract that defines correct behavior.
 Write both *Test.java (tests) and stub .java files (empty implementations).
 
 Tests must:
@@ -52,9 +52,10 @@ Tests must:
 - Include edge cases: null, empty, single element, whitespace
 - Use JUnit @ParameterizedTest or table-driven tests where applicable
 - Use AssertJ assertions ( assertThat() )
+- Fail against the stubs until the Writer implements them
 
 Build tool: ${buildTool}. Config file: ${buildTool === "gradle" ? "build.gradle" : "pom.xml"}.
-When done, stop producing tool calls.`,
+When all tests are written, stop producing tool calls.`,
 
     promptTesterCompileRetry: (compileError: string) =>
 `Compilation failed. Fix the compilation errors.
@@ -63,55 +64,61 @@ ${compileError}
 
 When done, stop producing tool calls.`,
 
-    promptNegotiateAutoAdvance: (workspaceRoot?: string) =>
+    promptNegotiateAutoAdvance: (negotiateResolution: string, workspaceRoot?: string) =>
 `Advancing to Phase B without explicit approval. Write Java source files.
 
-${ws(workspaceRoot)}Read *Test.java and *.java stubs. Implement the logic. Preserve stub signatures.
-Use AssertJ for any new assertions.
+${ws(workspaceRoot)}Negotiated resolution:
+${negotiateResolution}
+
+Read *Test.java and *.java stubs. Implement the source half of the resolution. Preserve stub signatures.
+Do not modify *Test.java — test files are owned by the Tester. If the resolution requires test changes, implement the source half and report the test half as pending the Tester.
+Do not claim the resolution is complete if the test half is outstanding.
 
 ${CONVENTIONS}
 
-When done, stop producing tool calls.`,
+When the source half is done, stop producing tool calls.`,
 
     promptWriterPhaseB: (workspaceRoot?: string) =>
 `Phase B (Writer). Write Java source files to pass all tests.
 
 ${ws(workspaceRoot)}Read *Test.java and *.java stubs. Implement the logic. Preserve stub signatures.
+Do not modify *Test.java — test files are owned by the Tester.
 Dispute wrong tests via negotiate_propose.
 Concede with negotiate_propose("agree") if the test is correct and your code is wrong.
 
 ${CONVENTIONS}
 
-When done, stop producing tool calls.`,
+When all tests pass, stop producing tool calls.`,
 
     promptWriterPhaseBContinue: (failureSummary: string, failureCount: number, workspaceRoot?: string) =>
 `Phase B (Writer). Tests failed.
 
-${ws(workspaceRoot)}${failureSummary}
+${ws(workspaceRoot)}Failure summary:
+${failureSummary}
 
-Do not modify *Test.java. Dispute wrong tests via negotiate_propose.
+Do not modify *Test.java — test files are owned by the Tester.
+Dispute wrong tests via negotiate_propose.
 Concede with negotiate_propose("agree") if the test is correct and your code is wrong.
-When done, stop producing tool calls.`,
+When all tests pass, stop producing tool calls.`,
 
     promptCleanerPhaseC: (workspaceRoot?: string) =>
 `Phase C (Cleaner). Refactor Java source files for readability:
 
 - Return early. Extract helpers. Clear names.
-- Keep methods under 50 lines
-- Use Records for data classes where applicable
-- You may only write *.java (non-test files). Do not modify *Test.java.
+- Do not modify *Test.java — test files are owned by the Tester.
 - All tests must pass.
 ${ws(workspaceRoot)}${CONVENTIONS}
 
-When done, stop producing tool calls.`,
+When the refactor is complete and all tests pass, stop producing tool calls.`,
 
     promptCleanerRetry: (failureSummary: string, failureCount: number, workspaceRoot?: string) =>
 `Phase C (Cleaner). Tests failed after refactoring:
 
-${ws(workspaceRoot)}${failureSummary}
+${ws(workspaceRoot)}Failure summary:
+${failureSummary}
 
-Fix the broken tests by restoring working code. Do not modify *Test.java.
-When done, stop producing tool calls.`,
+Fix the broken code by restoring working behavior. Do not modify *Test.java — test files are owned by the Tester.
+When all tests pass, stop producing tool calls.`,
 
     promptCleanerRestart: (workspaceRoot?: string) =>
 `Phase C (Cleaner). Restart. Refactor Java source files.

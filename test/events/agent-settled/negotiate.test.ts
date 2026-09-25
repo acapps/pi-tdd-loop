@@ -151,7 +151,7 @@ describe("handleNegotiateSettled — auto-advance", () => {
     expect(result.newState.negotiateReprompted).toBe(false); // reset on advance
 
     expect(pi.sentMessages).toHaveLength(1);
-    expect(pi.sentMessages[0].content).toBe(GO.prompts.promptNegotiateAutoAdvance());
+    expect(pi.sentMessages[0].content).toBe(GO.prompts.promptNegotiateAutoAdvance(""));
     expect(pi.sentMessages[0].options).toEqual({ deliverAs: "followUp" });
     expect(ctx.ui.notify).toHaveBeenCalledWith("Advancing to Phase B without explicit proposal.", "info");
     expect(ctx.ui.setStatus).toHaveBeenCalledWith("loop", "Phase B — round 1");
@@ -168,7 +168,7 @@ describe("handleNegotiateSettled — auto-advance", () => {
     expect(result.handled).toBe(true);
     expect(result.newState.phase).toBe("B");
     expect(pi.sentMessages).toHaveLength(1);
-    expect(pi.sentMessages[0].content).toBe(GO.prompts.promptNegotiateAutoAdvance());
+    expect(pi.sentMessages[0].content).toBe(GO.prompts.promptNegotiateAutoAdvance(""));
   });
 });
 
@@ -248,5 +248,115 @@ describe("handleNegotiateSettled — review round", () => {
     expect(result.newState.negotiateReprompted).toBe(true);
     expect(pi.sentMessages).toHaveLength(1);
     expect(pi.sentMessages[0].content).toBe(GP.promptNegotiateRepromptTester());
+  });
+});
+
+// --- Resolution carrying (spec internal/fix-negotiated-resolution-dropped.md) ---
+//
+// The bug: deliverAdvance sent a generic promptNegotiateAutoAdvance() that
+// carried none of the negotiated agreement. The Writer's "I will: 1. Move…
+// 2. Add…" was a chat message, not state. The resolution was silently dropped
+// (session 01a0d128). The fix: promptNegotiateAutoAdvance now takes
+// negotiateResolution as a parameter, and deliverAdvance passes
+// state.negotiateFeedback. The prompt includes boundary language (test files
+// owned by the Tester) and no-false-done language.
+
+describe("promptNegotiateAutoAdvance — resolution carrying (spec fix-negotiated-resolution-dropped)", () => {
+  const RESOLUTION = "Move the new describes into test/events/before-agent.test.ts and delete test/events/b-phase-role-context.test.ts";
+
+  it("carries the resolution text verbatim in the prompt", () => {
+    const lang = getLanguageConfig("typescript");
+    const prompt = lang.prompts.promptNegotiateAutoAdvance(RESOLUTION, "/tmp/proj");
+    expect(prompt).toContain(RESOLUTION);
+  });
+
+  it("includes the test-file boundary (test files owned by the Tester)", () => {
+    const lang = getLanguageConfig("typescript");
+    const prompt = lang.prompts.promptNegotiateAutoAdvance(RESOLUTION, "/tmp/proj");
+    expect(prompt).toMatch(/test files are owned by the Tester/i);
+  });
+
+  it("includes the no-false-done guard (do not claim complete if test half outstanding)", () => {
+    const lang = getLanguageConfig("typescript");
+    const prompt = lang.prompts.promptNegotiateAutoAdvance(RESOLUTION, "/tmp/proj");
+    expect(prompt).toMatch(/Do not claim the resolution is complete if the test half is outstanding/i);
+  });
+
+  it("instructs the Writer to implement the source half and report the test half pending", () => {
+    const lang = getLanguageConfig("typescript");
+    const prompt = lang.prompts.promptNegotiateAutoAdvance(RESOLUTION, "/tmp/proj");
+    expect(prompt).toMatch(/Implement the source half of the resolution/i);
+    expect(prompt).toMatch(/report the test half as pending the Tester/i);
+  });
+
+  it("handles empty resolution (no feedback) without crashing", () => {
+    const lang = getLanguageConfig("typescript");
+    const prompt = lang.prompts.promptNegotiateAutoAdvance("", "/tmp/proj");
+    expect(prompt).toContain("Negotiated resolution:");
+    expect(prompt).toContain("Advancing to Phase B");
+  });
+
+  it("all three languages carry the resolution in the same structure", () => {
+    for (const key of ["typescript", "go", "java"] as const) {
+      const lang = getLanguageConfig(key);
+      const prompt = lang.prompts.promptNegotiateAutoAdvance(RESOLUTION, "/tmp/proj");
+      expect(prompt, `${key}: must carry resolution`).toContain(RESOLUTION);
+      expect(prompt, `${key}: must have test boundary`).toMatch(/test files are owned by the Tester/i);
+      expect(prompt, `${key}: must have no-false-done`).toMatch(/Do not claim the resolution is complete/i);
+    }
+  });
+
+  it("includes the termination contract (stop producing tool calls)", () => {
+    const lang = getLanguageConfig("typescript");
+    const prompt = lang.prompts.promptNegotiateAutoAdvance(RESOLUTION, "/tmp/proj");
+    expect(prompt).toMatch(/stop producing tool calls/i);
+  });
+});
+
+describe("handleNegotiateSettled — auto-advance carries the resolution", () => {
+  const RESOLUTION = "Move the new describes into test/events/before-agent.test.ts";
+
+  it("deliverAdvance passes state.negotiateFeedback to promptNegotiateAutoAdvance", () => {
+    // NOTE: In the auto-advance path, negotiateFeedback is always "" because
+    // advanceNegotiateRound clears it before the auto-advance fires. The
+    // resolution-carrying is structural (the prompt has the section + boundary
+    // language) but the actual resolution text is not yet wired from the
+    // Tester's concession into the auto-advance state. This is the open gap
+    // for the direct-advance path (transitionToPhaseB), which is the path
+    // that dropped the resolution in session 01a0d128.
+    const state = makeState({ round: 3, negotiateReprompted: true, negotiateFeedback: "" });
+    const { input, pi } = makeInput({ state });
+    const result = handleNegotiateSettled(input);
+
+    expect(result.handled).toBe(true);
+    expect(result.newState.phase).toBe("B");
+    expect(pi.sentMessages).toHaveLength(1);
+    // The prompt has the resolution section structure
+    expect(pi.sentMessages[0].content).toContain("Negotiated resolution:");
+    // And the boundary language is always present
+    expect(pi.sentMessages[0].content).toMatch(/test files are owned by the Tester/i);
+    // And the no-false-done guard
+    expect(pi.sentMessages[0].content).toMatch(/Do not claim the resolution is complete/i);
+  });
+
+  it("empty negotiateFeedback → prompt has the resolution section but no text", () => {
+    const state = makeState({ round: 3, negotiateReprompted: true, negotiateFeedback: "" });
+    const { input, pi } = makeInput({ state });
+    const result = handleNegotiateSettled(input);
+
+    expect(result.newState.phase).toBe("B");
+    expect(pi.sentMessages).toHaveLength(1);
+    expect(pi.sentMessages[0].content).toContain("Negotiated resolution:");
+  });
+
+  it("absent negotiateFeedback (undefined) → treated as empty string", () => {
+    const state = makeState({ round: 3, negotiateReprompted: true });
+    delete (state as any).negotiateFeedback;
+    const { input, pi } = makeInput({ state });
+    const result = handleNegotiateSettled(input);
+
+    expect(result.newState.phase).toBe("B");
+    expect(pi.sentMessages).toHaveLength(1);
+    expect(pi.sentMessages[0].content).toContain("Negotiated resolution:");
   });
 });

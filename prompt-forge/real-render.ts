@@ -3,15 +3,21 @@
 // the real prompts, not the catalog stubs. Inputs are bound to the sentinel
 // (for carries-* verification) or to provided test data.
 
-import { CATALOG, SENTINEL, type PromptEntry } from "./catalog";
+import { CATALOG, type PromptEntry } from "./catalog";
 import * as GP from "../src/generic-prompts";
 import { buildPhaseZeroPrompt } from "../src/commands/loop";
 import type { SpecAnalysis } from "../src/types";
 import tsConfig from "../src/languages/typescript";
 
+// Distinct sentinel per input (matches score.ts bindSentinels).
+// __FORGE_SPEC_TEXT__, __FORGE_FINDINGS__, __FORGE_WORKSPACE_ROOT__, etc.
+function sentinelFor(input: string): string {
+  return `__FORGE_${input.toUpperCase()}__`;
+}
+
 export function renderReal(entry: PromptEntry, bind?: Record<string, string>): string {
   const b: Record<string, string> = { ...(bind ?? {}) };
-  for (const i of entry.inputs) if (!(i in b)) b[i] = SENTINEL;
+  for (const i of entry.inputs) if (!(i in b)) b[i] = sentinelFor(i);
   const p = entry.name;
   const L = tsConfig.prompts;
   switch (p) {
@@ -31,7 +37,7 @@ export function renderReal(entry: PromptEntry, bind?: Record<string, string>): s
     case "promptWriterPhaseBContinue":
       return L.promptWriterPhaseBContinue(b.failureSummary ?? "", 1, b.workspaceRoot);
     case "promptNegotiateAutoAdvance":
-      return L.promptNegotiateAutoAdvance(b.workspaceRoot);
+      return L.promptNegotiateAutoAdvance(b.negotiateResolution ?? "", b.workspaceRoot);
     case "promptCleanerPhaseC":
       return L.promptCleanerPhaseC(b.workspaceRoot);
     case "promptCleanerRetry":

@@ -213,7 +213,23 @@ function buildWriterPrompt(
   if (state.dispute?.status === "conceded" && state.dispute?.filer === "writer") {
     return buildDisputeFixPrompt(state, pi, debug, systemPrompt);
   }
+  if (state.dispute?.status === "in-review" && state.dispute?.filer === "writer") {
+    return buildDisputeReviewPrompt(lang, systemPrompt);
+  }
+  if (state.dispute?.status === "conceded" && state.dispute?.filer === "tester") {
+    return buildWriterConcedeFixPrompt(lang, systemPrompt);
+  }
   debug(`Writer round ${state.round}`);
+  return buildWriterNormalPrompt(lang, state, systemPrompt);
+}
+
+// Normal Phase B turn (no active dispute sub-flow): the Writer implements.
+// Strings are verbatim behavior — owned by the Phase B test suite.
+function buildWriterNormalPrompt(
+  lang: LangConfig,
+  state: LoopState,
+  systemPrompt: string,
+): BeforeAgentHandlerOutput {
   return {
     message: buildContextMessage(
       `WRITER. Write ${lang.sourceFilePattern} to pass ${lang.testFilePattern}.\n` +
@@ -221,6 +237,39 @@ function buildWriterPrompt(
       "When done, stop producing tool calls.",
     ),
     systemPrompt: `${systemPrompt}\n\nPhase B (Writer), round ${state.round}. Write ${lang.sourceFilePattern} only. Do not modify ${lang.testFilePattern}.`,
+  };
+}
+
+// Spec: internal/bug-role-context-mismatch.md — the Tester's dispute-review
+// turn (Writer filed, Tester reviews). Pure read: no commit, no status
+// mutation — the status is advanced by the settle handler, not here.
+function buildDisputeReviewPrompt(
+  lang: LangConfig,
+  systemPrompt: string,
+): BeforeAgentHandlerOutput {
+  return {
+    message: buildContextMessage(
+      "TESTER (dispute review). The Writer disputed a test. Review the claim against the spec and the code.\n" +
+      "Use negotiate_review: decision='approve' to concede (you will fix the test), or a rebuttal to defend it.\n" +
+      "Do not write files.",
+    ),
+    systemPrompt: `${systemPrompt}\n\nPhase B (dispute review, Tester). Review the Writer's dispute. Use negotiate_review. Do not write files.`,
+  };
+}
+
+// Spec: internal/bug-role-context-mismatch.md — the Writer's concede-fix
+// turn (Tester filed, Writer conceded, fixes the flagged files). Pure read,
+// same contract as buildDisputeReviewPrompt.
+function buildWriterConcedeFixPrompt(
+  lang: LangConfig,
+  systemPrompt: string,
+): BeforeAgentHandlerOutput {
+  return {
+    message: buildContextMessage(
+      `WRITER (dispute fix). You accepted the Tester's report. Fix the flagged ${lang.sourceFilePattern} to resolve it.\n` +
+      "Write source files only. When done, stop producing tool calls.",
+    ),
+    systemPrompt: `${systemPrompt}\n\nPhase B (dispute fix, Writer). You may write ${lang.sourceFilePattern}. Do not modify ${lang.testFilePattern}.`,
   };
 }
 

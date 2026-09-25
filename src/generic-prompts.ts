@@ -7,12 +7,16 @@
 export function promptWriterNegotiate(specPath: string, testFilePattern: string): string {
   return `WRITER (negotiation).
 
-Read ${specPath}. Then review ${testFilePattern} — understand all test cases.
+Spec: ${specPath}
+Test files: ${testFilePattern}
+
+Read the spec, then review the test files — understand all test cases.
 Find contradictions or ambiguities: conflicting rules, undifferentiated errors, weak assertions.
 Surface these in your proposal — do not silently pick an interpretation.
 
 Use negotiate_propose: 'agree' if tests match spec, or describe your approach (types, functions, behavior).
-Do NOT write files. Tester reviews via negotiate_review.`;
+Do NOT write files. Tester reviews via negotiate_review.
+After the negotiate_propose call, stop producing tool calls.`;
 }
 
 // Spec 10: the run's last word — delivered by applyDoneEffect into the
@@ -85,13 +89,14 @@ Call negotiate_review now:
 export function promptTesterReviewWriterDispute(claim: string): string {
   return `TESTER (dispute review). The Writer disputed a test:
 
+Dispute claim:
 ${claim}
 
 Use negotiate_review to proceed:
   - decision='approve' → you concede: the test is wrong; you will fix it
   - decision='<your rebuttal>' → you defend the test; the Writer must fix the code
 
-Do not write files. Call negotiate_review now.`;
+Do not write files. After the negotiate_review call, stop producing tool calls.`;
 }
 
 export function promptWriterDisputeReview(claim: string): string {
@@ -109,10 +114,11 @@ Do not write files. Call negotiate_review now.`;
 export function promptWriterConcedeFix(claim: string): string {
   return `WRITER (dispute fix). You accepted the Tester's report:
 
+Dispute claim:
 ${claim}
 
 Fix the flagged file(s) to resolve it. Write source files only.
-When done, stop producing tool calls.`;
+When the fix is applied, stop producing tool calls.`;
 }
 
 export function promptTesterReportRejected(decision: string): string {

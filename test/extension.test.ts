@@ -297,7 +297,7 @@ describe("/loop command", () => {
     expect(api.sentMessages.length).toBeGreaterThan(0);
     const lastMsg = api.sentMessages[api.sentMessages.length - 1];
     expect(lastMsg.content).toContain("Phase 0: Spec Review");
-    expect(lastMsg.content).toContain("Spec content");
+    expect(lastMsg.content).toContain("Spec:");
     expect(lastMsg.options?.deliverAs).toBe("followUp");
 
     // Should notify and set status

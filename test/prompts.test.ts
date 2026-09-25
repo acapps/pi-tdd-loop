@@ -114,22 +114,28 @@ describe("promptLoopReport (spec 10)", () => {
 });
 
 describe("Negotiate auto-advance prompts", () => {
-  it("Go auto-advance mentions Go conventions", () => {
-    const prompt = getLanguageConfig("go").prompts.promptNegotiateAutoAdvance();
+  it("Go auto-advance mentions resolution and test boundary", () => {
+    const prompt = getLanguageConfig("go").prompts.promptNegotiateAutoAdvance("do X");
     expect(prompt).toContain("without explicit");
-    expect(prompt).toContain("errors.Is");
+    expect(prompt).toContain("Negotiated resolution");
+    expect(prompt).toContain("do X");
+    expect(prompt).toContain("Do not modify *_test.go");
   });
 
-  it("Java auto-advance mentions Java conventions", () => {
-    const prompt = getLanguageConfig("java").prompts.promptNegotiateAutoAdvance();
+  it("Java auto-advance mentions resolution and test boundary", () => {
+    const prompt = getLanguageConfig("java").prompts.promptNegotiateAutoAdvance("do X");
     expect(prompt).toContain("without explicit");
-    expect(prompt).toContain("AssertJ");
+    expect(prompt).toContain("Negotiated resolution");
+    expect(prompt).toContain("do X");
+    expect(prompt).toContain("Do not modify *Test.java");
   });
 
-  it("TypeScript auto-advance mentions TS conventions", () => {
-    const prompt = getLanguageConfig("typescript").prompts.promptNegotiateAutoAdvance();
+  it("TypeScript auto-advance mentions resolution and test boundary", () => {
+    const prompt = getLanguageConfig("typescript").prompts.promptNegotiateAutoAdvance("do X");
     expect(prompt).toContain("without explicit");
-    expect(prompt).toContain("Strict types");
+    expect(prompt).toContain("Negotiated resolution");
+    expect(prompt).toContain("do X");
+    expect(prompt).toContain("Do not modify *.test.ts");
   });
 });
 
@@ -267,45 +273,49 @@ describe("Dispute fix prompts", () => {
 describe("Phase C prompts (Go)", () => {
   const prompts = getLanguageConfig("go").prompts;
 
-  it("promptCleanerPhaseC mentions refactoring rules", () => {
+  it("promptCleanerPhaseC mentions refactoring and test boundary", () => {
     const prompt = prompts.promptCleanerPhaseC();
     expect(prompt).toContain("Cleaner");
-    expect(prompt).toContain("No method over 200 lines");
     expect(prompt).toContain("Return early");
+    expect(prompt).toContain("Do not modify *_test.go");
   });
 
-  it("promptCleanerRestart delegates to full prompt", () => {
+  it("promptCleanerRestart is independent of full prompt", () => {
     const restart = prompts.promptCleanerRestart();
     const full = prompts.promptCleanerPhaseC();
-    expect(restart).toBe(full);
+    expect(restart).not.toBe(full);
+    expect(restart).toContain("Cleaner");
+    expect(restart).toContain("Do not modify *_test.go");
   });
 
-  it("promptCleanerRetry mentions broken tests", () => {
+  it("promptCleanerRetry mentions failure summary and test boundary", () => {
     const prompt = prompts.promptCleanerRetry("fail A", 1);
-    expect(prompt).toContain("Refactoring broke 1 test");
+    expect(prompt).toContain("Tests failed after refactoring");
+    expect(prompt).toContain("Failure summary");
     expect(prompt).toContain("fail A");
+    expect(prompt).toContain("Do not modify *_test.go");
   });
 });
 
 describe("Phase C prompts (Java)", () => {
   const prompts = getLanguageConfig("java").prompts;
 
-  it("promptCleanerPhaseC mentions Java-specific rules", () => {
+  it("promptCleanerPhaseC mentions refactoring and test boundary", () => {
     const prompt = prompts.promptCleanerPhaseC();
     expect(prompt).toContain("Cleaner");
-    expect(prompt).toContain("50 lines"); // Java methods should be shorter
-    expect(prompt).toContain("Records");
+    expect(prompt).toContain("Return early");
+    expect(prompt).toContain("Do not modify *Test.java");
   });
 });
 
 describe("Phase C prompts (TypeScript)", () => {
   const prompts = getLanguageConfig("typescript").prompts;
 
-  it("promptCleanerPhaseC mentions TS-specific rules", () => {
+  it("promptCleanerPhaseC mentions refactoring and test boundary", () => {
     const prompt = prompts.promptCleanerPhaseC();
     expect(prompt).toContain("Cleaner");
-    expect(prompt).toContain("30 lines"); // TS functions should be shorter
-    expect(prompt).toContain("const");
+    expect(prompt).toContain("Return early");
+    expect(prompt).toContain("Do not modify *.test.ts");
   });
 });
 

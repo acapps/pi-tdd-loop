@@ -103,41 +103,44 @@ function parseAndMerge(args: string, ctx: CommandContext) {
 }
 
 export function buildPhaseZeroPrompt(specText: string, analysis: SpecAnalysis): string {
-  const findingCount = analysis.findings.length;
-  const reasons = analysis.reasons.join(", ");
+  const findings = analysis.findings;
 
   const lines = [
     "Phase 0: Spec Review",
     "",
-    `The spec meets the threshold for review: ${reasons}`,
+    "Review the spec below for ambiguities, missing edge cases, and underspecified behavior.",
     "",
-    "Review the spec below and check for ambiguities, missing edge cases, or underspecified behavior.",
+    "Spec:",
     "",
-    "Use negotiate_propose to approve (plan='approve') or provide feedback on findings.",
+    specText,
     "",
   ];
 
-  if (findingCount > 0) {
+  if (findings.length > 0) {
     lines.push(
-      "Auto-generated findings below are heuristic candidates, not verified defects: verify each against the spec text; if a candidate is a false positive, reject it in a single negotiate_propose call (plan='reject-findings: <per-finding rationale>') before approving.",
+      "Findings:",
+      "",
+    );
+    for (const f of findings) {
+      lines.push(R.formatFinding(f));
+      lines.push("");
+    }
+    lines.push(
+      "The findings above are heuristic candidates, not verified defects. Verify each finding against the spec text; if a candidate is a false positive, reject it in a single negotiate_propose call (plan='reject-findings: <per-finding rationale>') before approving.",
+      "",
+    );
+  } else {
+    lines.push(
+      "Findings:",
+      "",
+      "(none)",
       "",
     );
   }
 
   lines.push(
-    `Spec content (${findingCount} potential findings):`,
-    "",
-    specText,
+    "Use negotiate_propose: plan='approve' if the spec is sound, otherwise provide feedback on the verified findings. After that call, stop producing tool calls.",
   );
-
-  if (findingCount > 0) {
-    lines.push("");
-    lines.push(R.buildSummaryTable(analysis.findings));
-    for (const f of analysis.findings) {
-      lines.push("");
-      lines.push(R.formatFinding(f));
-    }
-  }
 
   return lines.join("\n");
 }

@@ -130,5 +130,5 @@ function deliverAdvance(
   debug("Negotiate: auto-advancing to Phase B");
   ctx.ui.notify(effect.notify, "info");
   ctx.ui.setStatus("loop", effect.status);
-  sendPrompt(pi, lang.prompts.promptNegotiateAutoAdvance(), state, debug);
+  sendPrompt(pi, lang.prompts.promptNegotiateAutoAdvance(state.negotiateFeedback ?? ""), state, debug);
 }

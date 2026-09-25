@@ -2,14 +2,12 @@
 
 import type { LanguageConfig } from "./index";
 
+// Toolchain commands only — style policy (naming, line limits) is not a role
+// contract and must not be injected into prompts (no-style-policy-bloat).
 const CONVENTIONS = `
-TypeScript conventions:
+Toolchain:
 - Use \`npx vitest run\` for test output
 - Use \`npx tsc --noEmit\` for type checking
-- Package exports use export keyword
-- Function names use camelCase
-- Prefer strict types (no any), use const declarations
-- Keep functions under 30 lines
 `;
 
 function ws(workspaceRoot?: string): string {
@@ -28,7 +26,8 @@ const config: LanguageConfig = {
     promptTesterPhaseA: (specPath: string, _buildTool: string, workspaceRoot?: string) =>
 `You are the TESTER. Write contract tests.
 
-Read ${specPath}. ${ws(workspaceRoot)}Design the test contract that defines correct behavior.
+Spec: ${specPath}
+${ws(workspaceRoot)}Design the test contract that defines correct behavior.
 Write both *.test.ts and *.ts (tests) and stub .ts files (empty implementations).
 
 Tests must:
@@ -37,13 +36,15 @@ Tests must:
 - Use describe/it blocks from Vitest
 - Import assert functions and test utilities
 - Check package.json for dependencies
+- Fail against the stubs until the Writer implements them
 
-When done, stop producing tool calls.`,
+When all tests are written, stop producing tool calls.`,
 
     promptTesterPhaseARestart: (specPath: string, _buildTool: string, workspaceRoot?: string) =>
 `You are the TESTER. Write contract tests.
 
-Read ${specPath}. ${ws(workspaceRoot)}Design the test contract that defines correct behavior.
+Spec: ${specPath}
+${ws(workspaceRoot)}Design the test contract that defines correct behavior.
 Write both *.test.ts and *.ts (tests) and stub .ts files (empty implementations).
 
 Tests must:
@@ -52,8 +53,9 @@ Tests must:
 - Use describe/it blocks from Vitest
 - Import assert functions and test utilities
 - Check package.json for dependencies
+- Fail against the stubs until the Writer implements them
 
-When done, stop producing tool calls.`,
+When all tests are written, stop producing tool calls.`,
 
     promptTesterCompileRetry: (compileError: string) =>
 `Compilation failed. Fix the compilation errors.
@@ -62,54 +64,61 @@ ${compileError}
 
 When done, stop producing tool calls.`,
 
-    promptNegotiateAutoAdvance: (workspaceRoot?: string) =>
+    promptNegotiateAutoAdvance: (negotiateResolution: string, workspaceRoot?: string) =>
 `Advancing to Phase B without explicit approval. Write TypeScript source files.
 
-${ws(workspaceRoot)}Read *.test.ts and *.ts stubs. Implement the logic. Preserve stub signatures.
-Use Strict types (no any).
+${ws(workspaceRoot)}Negotiated resolution:
+${negotiateResolution}
+
+Read *.test.ts and *.ts stubs. Implement the source half of the resolution. Preserve stub signatures.
+Do not modify *.test.ts — test files are owned by the Tester. If the resolution requires test changes, implement the source half and report the test half as pending the Tester.
+Do not claim the resolution is complete if the test half is outstanding.
 
 ${CONVENTIONS}
 
-When done, stop producing tool calls.`,
+When the source half is done, stop producing tool calls.`,
 
     promptWriterPhaseB: (workspaceRoot?: string) =>
 `Phase B (Writer). Write TypeScript source files to pass all tests.
 
 ${ws(workspaceRoot)}Read *.test.ts and *.ts stubs. Implement the logic. Preserve stub signatures.
+Do not modify *.test.ts — test files are owned by the Tester.
 Dispute wrong tests via negotiate_propose.
 Concede with negotiate_propose("agree") if the test is correct and your code is wrong.
 
 ${CONVENTIONS}
 
-When done, stop producing tool calls.`,
+When all tests pass, stop producing tool calls.`,
 
     promptWriterPhaseBContinue: (failureSummary: string, failureCount: number, workspaceRoot?: string) =>
 `Phase B (Writer). Tests failed.
 
-${ws(workspaceRoot)}${failureSummary}
+${ws(workspaceRoot)}Failure summary:
+${failureSummary}
 
-Do not modify *.test.ts. Dispute wrong tests via negotiate_propose.
+Do not modify *.test.ts — test files are owned by the Tester.
+Dispute wrong tests via negotiate_propose.
 Concede with negotiate_propose("agree") if the test is correct and your code is wrong.
-When done, stop producing tool calls.`,
+When all tests pass, stop producing tool calls.`,
 
     promptCleanerPhaseC: (workspaceRoot?: string) =>
 `Phase C (Cleaner). Refactor TypeScript source files for readability:
 
 - Return early. Extract helpers. Clear names.
-- Keep functions under 30 lines, prefer const declarations
-- You may only write *.ts (non-test files). Do not modify *.test.ts.
+- Do not modify *.test.ts — test files are owned by the Tester.
 - All tests must pass.
 ${ws(workspaceRoot)}${CONVENTIONS}
 
-When done, stop producing tool calls.`,
+When the refactor is complete and all tests pass, stop producing tool calls.`,
 
     promptCleanerRetry: (failureSummary: string, failureCount: number, workspaceRoot?: string) =>
 `Phase C (Cleaner). Tests failed after refactoring:
 
-${ws(workspaceRoot)}${failureSummary}
+${ws(workspaceRoot)}Failure summary:
+${failureSummary}
 
-Fix the broken tests by restoring working code. Do not modify *.test.ts.
-When done, stop producing tool calls.`,
+Fix the broken code by restoring working behavior. Do not modify *.test.ts — test files are owned by the Tester.
+When all tests pass, stop producing tool calls.`,
 
     promptCleanerRestart: (workspaceRoot?: string) =>
 `Phase C (Cleaner). Restart. Refactor TypeScript source files.

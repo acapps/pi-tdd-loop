@@ -503,7 +503,7 @@ describe("step 8 — negotiate (always true; replaces state.current, G2)", () =>
     expect(input.state.current.round).toBe(1);
     expect(input.state.current.justTransitioned).toBe(true);
     expect(pi.sentMessages).toHaveLength(1);
-    expect(pi.sentMessages[0].content).toBe(GO.prompts.promptNegotiateAutoAdvance());
+    expect(pi.sentMessages[0].content).toBe(GO.prompts.promptNegotiateAutoAdvance(""));
     expect(runGatesMock).not.toHaveBeenCalled();
   });
 });

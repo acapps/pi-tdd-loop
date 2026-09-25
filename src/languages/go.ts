@@ -2,14 +2,13 @@
 
 import type { LanguageConfig } from "./index";
 
+// Toolchain commands only — style policy (naming, line limits) is not a role
+// contract and must not be injected into prompts (no-style-policy-bloat).
 const CONVENTIONS = `
-Go conventions:
+Toolchain:
 - Use go test -json ./... for test output
 - Use go build ./... for compilation check
 - Use go test -cover ./... for coverage
-- Package name matches directory
-- Exported names use PascalCase
-- Error handling without explicit error types, prefer errors.Is and errors.As
 `;
 
 // Golden project workspace hint (spec: golden-workspace-fix.md).
@@ -32,7 +31,8 @@ const config: LanguageConfig = {
     promptTesterPhaseA: (specPath: string, _buildTool: string, workspaceRoot?: string) =>
 `You are the TESTER. Write contract tests.
 
-Read ${specPath}. ${ws(workspaceRoot)}Design the test contract that defines correct behavior.
+Spec: ${specPath}
+${ws(workspaceRoot)}Design the test contract that defines correct behavior.
 Write both *_test.go and *.go (tests) and Stubs (.go files with empty implementations).
 
 Tests must:
@@ -40,13 +40,15 @@ Tests must:
 - Include edge cases: empty, single-char, UTF-8, whitespace, case
 - Use table-driven tests where applicable
 - Be comprehensive enough to catch real bugs
+- Fail against the stubs until the Writer implements them
 
-When done, stop producing tool calls.`,
+When all tests are written, stop producing tool calls.`,
 
     promptTesterPhaseARestart: (specPath: string, _buildTool: string, workspaceRoot?: string) =>
 `You are the TESTER. Write contract tests.
 
-Read ${specPath}. ${ws(workspaceRoot)}Design the test contract that defines correct behavior.
+Spec: ${specPath}
+${ws(workspaceRoot)}Design the test contract that defines correct behavior.
 Write both *_test.go and *.go (tests) and Stubs (.go files with empty implementations).
 
 Tests must:
@@ -54,8 +56,9 @@ Tests must:
 - Include edge cases: empty, single-char, UTF-8, whitespace, case
 - Use table-driven tests where applicable
 - Be comprehensive enough to catch real bugs
+- Fail against the stubs until the Writer implements them
 
-When done, stop producing tool calls.`,
+When all tests are written, stop producing tool calls.`,
 
     promptTesterCompileRetry: (compileError: string) =>
 `Compilation failed. Fix the compilation errors.
@@ -64,63 +67,66 @@ ${compileError}
 
 When done, stop producing tool calls.`,
 
-    promptNegotiateAutoAdvance: (workspaceRoot?: string) =>
+    promptNegotiateAutoAdvance: (negotiateResolution: string, workspaceRoot?: string) =>
 `Advancing to Phase B without explicit approval. Write Go source files.
 
-${ws(workspaceRoot)}Read *_test.go and *.go stubs. Implement the logic. Preserve stub signatures.
+${ws(workspaceRoot)}Negotiated resolution:
+${negotiateResolution}
+
+Read *_test.go and *.go stubs. Implement the source half of the resolution. Preserve stub signatures.
+Do not modify *_test.go — test files are owned by the Tester. If the resolution requires test changes, implement the source half and report the test half as pending the Tester.
+Do not claim the resolution is complete if the test half is outstanding.
 
 ${CONVENTIONS}
 
-When done, stop producing tool calls.`,
+When the source half is done, stop producing tool calls.`,
 
     promptWriterPhaseB: (workspaceRoot?: string) =>
 `Phase B (Writer). Write Go source files to pass all tests.
 
 ${ws(workspaceRoot)}Read *_test.go and *.go stubs. Implement the logic. Preserve stub signatures.
+Do not modify *_test.go — test files are owned by the Tester.
 Dispute wrong tests via negotiate_propose.
 Concede with negotiate_propose("agree") if the test is correct and your code is wrong.
 
 ${CONVENTIONS}
 
-When done, stop producing tool calls.`,
+When all tests pass, stop producing tool calls.`,
 
     promptWriterPhaseBContinue: (failureSummary: string, failureCount: number, workspaceRoot?: string) =>
 `Phase B (Writer). Tests failed.
 
-${ws(workspaceRoot)}${failureSummary}
+${ws(workspaceRoot)}Failure summary:
+${failureSummary}
 
-Do not modify *_test.go. Dispute wrong tests via negotiate_propose.
+Do not modify *_test.go — test files are owned by the Tester.
+Dispute wrong tests via negotiate_propose.
 Concede with negotiate_propose("agree") if the test is correct and your code is wrong.
-When done, stop producing tool calls.`,
+When all tests pass, stop producing tool calls.`,
 
     promptCleanerPhaseC: (workspaceRoot?: string) =>
 `Phase C (Cleaner). Refactor Go source files for readability:
 
 - Return early. Extract helpers. Clear names.
-- No method over 200 lines
-- You may only write *.go (non-test files). Do not modify *_test.go.
+- Do not modify *_test.go — test files are owned by the Tester.
 - All tests must pass.
 ${ws(workspaceRoot)}${CONVENTIONS}
 
-When done, stop producing tool calls.`,
+When the refactor is complete and all tests pass, stop producing tool calls.`,
 
     promptCleanerRetry: (failureSummary: string, failureCount: number, workspaceRoot?: string) =>
-`Phase C (Cleaner). Refactoring broke ${failureCount} test. Fix the broken code:
+`Phase C (Cleaner). Tests failed after refactoring:
 
-${ws(workspaceRoot)}${failureSummary}
+${ws(workspaceRoot)}Failure summary:
+${failureSummary}
 
-Do not modify *_test.go. All tests must pass.
-When done, stop producing tool calls.`,
+Fix the broken code by restoring working behavior. Do not modify *_test.go — test files are owned by the Tester.
+When all tests pass, stop producing tool calls.`,
 
     promptCleanerRestart: (workspaceRoot?: string) =>
-`Phase C (Cleaner). Refactor Go source files for readability:
+`Phase C (Cleaner). Restart. Refactor Go source files.
 
-- Return early. Extract helpers. Clear names.
-- No method over 200 lines
-- You may only write *.go (non-test files). Do not modify *_test.go.
-- All tests must pass.
-${ws(workspaceRoot)}${CONVENTIONS}
-
+${ws(workspaceRoot)}Do not modify *_test.go. All tests must pass.
 When done, stop producing tool calls.`,
 
     promptTesterDisputeFix: (workspaceRoot?: string) =>

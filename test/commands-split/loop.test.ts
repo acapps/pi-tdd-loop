@@ -162,28 +162,33 @@ describe("createInitialState", () => {
 // ================================================================
 
 describe("buildPhaseZeroPrompt", () => {
-  it("findings 0 → fixed header + spec, no summary/findings sections", () => {
+  it("findings 0 → spec + findings label, no summary table", () => {
     const out = buildPhaseZeroPrompt("SPEC", { findings: [], reasons: ["always"] });
-    expect(out).toBe(
-      "Phase 0: Spec Review\n\n" +
-      "The spec meets the threshold for review: always\n\n" +
-      "Review the spec below and check for ambiguities, missing edge cases, or underspecified behavior.\n\n" +
-      "Use negotiate_propose to approve (plan='approve') or provide feedback on findings.\n\n" +
-      "Spec content (0 potential findings):\n\n" +
-      "SPEC");
+    expect(out).toContain("Phase 0: Spec Review");
+    expect(out).toContain("Review the spec below");
+    expect(out).toContain("Spec:");
+    expect(out).toContain("SPEC");
+    expect(out).toContain("Findings:");
+    expect(out).toContain("(none)");
+    expect(out).toContain("negotiate_propose");
+    expect(out).not.toContain("threshold");
+    expect(out).not.toContain("potential findings");
   });
 
-  it("findings 1 → summary table + each finding appended", () => {
+  it("findings 1 → each finding appended with verify instruction", () => {
     (Reviewer.buildSummaryTable as ReturnType<typeof vi.fn>).mockReturnValue("TABLE");
     (Reviewer.formatFinding as ReturnType<typeof vi.fn>).mockReturnValue("F1");
     const out = buildPhaseZeroPrompt("S", { findings: [{ title: "F1" } as Finding], reasons: [] });
-    expect(out).toContain("TABLE");
+    expect(out).toContain("Findings:");
     expect(out).toContain("F1");
+    expect(out).toContain("Verify each finding");
+    expect(out).toContain("reject-findings");
   });
 
-  it("empty reasons → 'The spec meets the threshold for review: '" + " (empty join)", () => {
+  it("empty reasons → no threshold line", () => {
     const out = buildPhaseZeroPrompt("S", { findings: [], reasons: [] });
-    expect(out).toContain("The spec meets the threshold for review: \n");
+    expect(out).not.toContain("threshold");
+    expect(out).toContain("Spec:");
   });
 });
 

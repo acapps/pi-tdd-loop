@@ -425,20 +425,19 @@ vi.mock("../../src/reviewer", async (importOriginal) => {
 });
 
 const S1_LINE =
-  "Auto-generated findings below are heuristic candidates, not verified defects: verify each against the spec text; if a candidate is a false positive, reject it in a single negotiate_propose call (plan='reject-findings: <per-finding rationale>') before approving.";
+  "The findings above are heuristic candidates, not verified defects. Verify each finding against the spec text; if a candidate is a false positive, reject it in a single negotiate_propose call (plan='reject-findings: <per-finding rationale>') before approving.";
 
 describe("S1 — buildPhaseZeroPrompt framing line", () => {
-  it("0 findings → framing line absent; output byte-identical to pre-change", () => {
+  it("0 findings → framing line absent; output has Spec/Findings labels", () => {
     const out = buildPhaseZeroPrompt("SPEC", { findings: [], reasons: ["always"] });
-    expect(out).toBe(
-      "Phase 0: Spec Review\n\n" +
-        "The spec meets the threshold for review: always\n\n" +
-        "Review the spec below and check for ambiguities, missing edge cases, or underspecified behavior.\n\n" +
-        "Use negotiate_propose to approve (plan='approve') or provide feedback on findings.\n\n" +
-        "Spec content (0 potential findings):\n\n" +
-        "SPEC"
-    );
+    expect(out).toContain("Phase 0: Spec Review");
+    expect(out).toContain("Spec:");
+    expect(out).toContain("SPEC");
+    expect(out).toContain("Findings:");
+    expect(out).toContain("(none)");
     expect(out).not.toContain("heuristic candidates");
+    expect(out).not.toContain("threshold");
+    expect(out).not.toContain("potential findings");
   });
 
   it(">0 findings → framing line present verbatim", () => {
@@ -446,29 +445,27 @@ describe("S1 — buildPhaseZeroPrompt framing line", () => {
     expect(out).toContain(S1_LINE);
   });
 
-  it("framing line sits between the negotiate_propose line and the Spec content line", () => {
+  it("framing line sits after the Findings label", () => {
     const out = buildPhaseZeroPrompt("S", { findings: [{ title: "F1" } as Finding], reasons: ["always"] });
-    const approveIdx = out.indexOf("Use negotiate_propose to approve");
-    const framingIdx = out.indexOf("Auto-generated findings below");
-    const contentIdx = out.indexOf("Spec content (1 potential findings):");
-    expect(approveIdx).toBeGreaterThan(-1);
-    expect(framingIdx).toBeGreaterThan(approveIdx);
-    expect(contentIdx).toBeGreaterThan(framingIdx);
+    const findingsIdx = out.indexOf("Findings:");
+    const framingIdx = out.indexOf("The findings above are heuristic candidates");
+    expect(findingsIdx).toBeGreaterThan(-1);
+    expect(framingIdx).toBeGreaterThan(findingsIdx);
   });
 
   it("existing pinned lines unchanged when findings > 0", () => {
     const out = buildPhaseZeroPrompt("S", { findings: [{ title: "F1" } as Finding], reasons: ["always"] });
     expect(out).toContain("Phase 0: Spec Review");
-    expect(out).toContain("The spec meets the threshold for review: always");
-    expect(out).toContain("Review the spec below and check for ambiguities, missing edge cases, or underspecified behavior.");
-    expect(out).toContain("Use negotiate_propose to approve (plan='approve') or provide feedback on findings.");
-    expect(out).toContain("Spec content (1 potential findings):");
+    expect(out).toContain("Review the spec below");
+    expect(out).toContain("Spec:");
     expect(out).toContain("S");
+    expect(out).toContain("Findings:");
+    expect(out).toContain("negotiate_propose");
   });
 
   it("framing line appears exactly once", () => {
     const out = buildPhaseZeroPrompt("S", { findings: [{ title: "F1" } as Finding, { title: "F2" } as Finding], reasons: ["always"] });
-    const matches = out.match(/Auto-generated findings below/g) ?? [];
+    const matches = out.match(/The findings above are heuristic candidates/g) ?? [];
     expect(matches.length).toBe(1);
   });
 });
@@ -481,12 +478,14 @@ describe("edge cases", () => {
   it("buildPhaseZeroPrompt with empty spec text and 0 findings", () => {
     const out = buildPhaseZeroPrompt("", { findings: [], reasons: ["always"] });
     expect(out).not.toContain("heuristic candidates");
-    expect(out).toContain("Spec content (0 potential findings):");
+    expect(out).toContain("Spec:");
+    expect(out).toContain("Findings:");
+    expect(out).toContain("(none)");
   });
 
   it("buildPhaseZeroPrompt with exactly 1 finding renders framing line once", () => {
     const out = buildPhaseZeroPrompt("S", { findings: [{ title: "F1" } as Finding], reasons: [] });
-    const matches = out.match(/Auto-generated findings below/g) ?? [];
+    const matches = out.match(/The findings above are heuristic candidates/g) ?? [];
     expect(matches.length).toBe(1);
   });
 
