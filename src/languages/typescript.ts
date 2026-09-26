@@ -29,6 +29,8 @@ const config: LanguageConfig = {
 Spec: ${specPath}
 ${ws(workspaceRoot)}Read the spec's Test Strategy section first. It defines exactly which tests to write. Start with those tests. Do not explore the codebase — the spec is your contract.
 
+If the spec has no Test Strategy section: read the codebase, identify the test contract (which files to test, which behaviors to cover, which edge cases matter), and write a "## Test Strategy" section into the spec file. Then write the tests defined by that section.
+
 Write both *.test.ts and *.ts (tests) and stub .ts files (empty implementations).
 
 Tests must:
@@ -46,6 +48,8 @@ When all tests are written, stop producing tool calls.`,
 
 Spec: ${specPath}
 ${ws(workspaceRoot)}Read the spec's Test Strategy section first. It defines exactly which tests to write. Start with those tests. Do not explore the codebase — the spec is your contract.
+
+If the spec has no Test Strategy section: read the codebase, identify the test contract (which files to test, which behaviors to cover, which edge cases matter), and write a "## Test Strategy" section into the spec file. Then write the tests defined by that section.
 
 Write both *.test.ts and *.ts (tests) and stub .ts files (empty implementations).
 
