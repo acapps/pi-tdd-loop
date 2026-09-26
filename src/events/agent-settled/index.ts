@@ -113,7 +113,7 @@ export async function handleAgentSettled(
   // Steps 3–6: guards — each returns undefined from the dispatcher when handled
   if (checkLoopEscalation(state, pi, ctx, debug)) return undefined;
   if (handleJustTransitioned(state, pi, lang, debug)) return undefined;
-  if (handleDisputeHandlers(state, pi, lang, debug, ctx)) return undefined;
+  if (await handleDisputeHandlers(state, pi, lang, debug, ctx)) return undefined;
 
   // Steps 7–9: phase handlers — dispatcher returns their result
   return await handlePhaseSettled(state, pi, lang, debug, ctx);
@@ -145,16 +145,16 @@ async function handleMergeVerification(
 
 // Spec 09: the dispute chain, in order, first match wins; the gate is skipped
 // for the settle that delivered a prompt.
-function handleDisputeHandlers(
+async function handleDisputeHandlers(
   state: { current: LoopState },
   pi: ExtensionAPI,
   lang: LanguageConfig,
   debug: (msg: string) => void,
   ctx: EventCtx,
-): boolean {
+): Promise<boolean> {
   const input = { state, pi, lang, debug, ctx };
   // Dispute fix turn (spec 04).
-  if (handleDisputeFix(input).handled) return true;
+  if ((await handleDisputeFix(input)).handled) return true;
   // Table 1: the review turn is scheduled from the settle handler; the gate
   // resumes on the next settle.
   if (handleDisputeReview(input).handled) return true;

@@ -13,6 +13,12 @@ import type { LanguageConfig } from "../../languages";
 import * as GP from "../../generic-prompts";
 import { commit } from "../../commit";
 import { sendPrompt } from "../../prompt";
+import { getTestCommand } from "../../gates";
+import { getWorkspaceRoot } from "../../types";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
 
 // --- Types ---
 
@@ -34,12 +40,36 @@ export interface DisputeHandlerOutput {
 // Row 5: status "conceded" + writer filed → the Tester fixes the test.
 // The status → "closed" moves BEFORE the send (persist before send): a
 // reload after delivery cannot re-deliver.
-export function handleDisputeFix(
+//
+// If the Tester already fixed the test in the decision turn (the suite is
+// green), skip the fix prompt and let the normal gate handle the advance.
+export async function handleDisputeFix(
   input: DisputeHandlerInput,
-): DisputeHandlerOutput {
+): Promise<DisputeHandlerOutput> {
   const { state, pi, ctx, lang, debug } = input;
   const d = state.current.dispute;
   if (!d || d.status !== "conceded" || d.filer !== "writer") return { handled: false };
+
+  // Check if the suite is already green (the Tester may have fixed the test
+  // in the same turn as the concede decision).
+  const s = state.current;
+  const cwd = getWorkspaceRoot(s.specPath);
+  const testCmd = getTestCommand(s.language, s.buildTool, { cwd });
+  let suiteGreen = false;
+  try {
+    const [bin, ...args] = testCmd.split(/\s+/);
+    await execFileAsync(bin, args, { cwd, timeout: 30000 });
+    suiteGreen = true;
+  } catch {
+    suiteGreen = false;
+  }
+
+  if (suiteGreen) {
+    debug("Dispute fix → suite already green, skipping fix prompt");
+    state.current.dispute = { ...d, status: "closed" };
+    commit(state.current, pi, debug);
+    return { handled: true };
+  }
 
   debug("Dispute fix → Tester fixes the test");
   state.current.dispute = { ...d, status: "closed" };

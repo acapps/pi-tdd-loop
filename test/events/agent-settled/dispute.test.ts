@@ -19,7 +19,9 @@
 //    disputeFiler (N2); one loop-state entry; { handled: true, type: "writer-fix" }.
 //  - DisputeHandlerOutput.type union: "fix" | "review" | "defend" | "writer-fix".
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { execFile as execFileReal } from "node:child_process";
+import { promisify as promisifyReal } from "node:util";
 import {
   handleDisputeFix,
   handleDisputeReview,
@@ -32,6 +34,13 @@ import * as GP from "../../../src/generic-prompts";
 import { createMockExtensionAPI } from "../../__mocks__/@earendil-works/pi-coding-agent";
 
 const GO = getLanguageConfig("go");
+
+// Mock execFile to avoid spawning real processes in unit tests.
+// Per CLAUDE.md TEST SPEED RULE: unit tests NEVER spawn real processes.
+const mockExecFileCb = vi.fn();
+vi.mock("node:child_process", () => ({
+  execFile: (...args: unknown[]) => mockExecFileCb(...args),
+}));
 
 // --- Fixtures ---
 
@@ -87,9 +96,13 @@ function cloneState(s: LoopState): LoopState {
 // --- handleDisputeFix (unchanged — regression) ---
 
 describe("handleDisputeFix", () => {
-  it("flag false → unhandled, zero side effects", () => {
+  beforeEach(() => {
+    mockExecFileCb.mockReset();
+  });
+
+  it("flag false → unhandled, zero side effects", async () => {
     const { input, pi, ctx, debug } = makeInput({ state: { current: makeState({}) } });
-    const result = handleDisputeFix(input);
+    const result = await handleDisputeFix(input);
 
     expect(result.handled).toBe(false);
     expect(ctx.ui.setStatus).not.toHaveBeenCalled();
@@ -98,11 +111,31 @@ describe("handleDisputeFix", () => {
     expect(debug).not.toHaveBeenCalled();
   });
 
-  it("flag true → handled: status + tester dispute fix prompt, flag NOT cleared, no entry", () => {
+  it("suite green → handled, no fix prompt sent (Tester already fixed it)", async () => {
+    // Mock: execFile callback resolves (null error = tests pass)
+    mockExecFileCb.mockImplementation((_cmd: unknown, _args: unknown, _opts: unknown, cb: unknown) => {
+      if (typeof cb === "function") cb(null, "", "");
+    });
+    const state = makeState({ phase: "B", round: 1, dispute: { status: "conceded", filer: "writer" } });
+    const { input, pi, ctx, debug } = makeInput({ state: { current: state } });
+    const result = await handleDisputeFix(input);
+
+    expect(result.handled).toBe(true);
+    expect(state.dispute?.status).toBe("closed");
+    expect(pi.sentMessages).toHaveLength(0); // no fix prompt
+    expect(ctx.ui.setStatus).not.toHaveBeenCalled();
+    expect(debug).toHaveBeenCalledWith("Dispute fix → suite already green, skipping fix prompt");
+  });
+
+  it("suite red → handled: fix prompt sent (existing behavior)", async () => {
+    // Mock: execFile callback rejects (error = tests fail)
+    mockExecFileCb.mockImplementation((_cmd: unknown, _args: unknown, _opts: unknown, cb: unknown) => {
+      if (typeof cb === "function") cb(Object.assign(new Error("exit 1"), { code: 1 }), "", "");
+    });
     const state = makeState({ phase: "B", round: 1, dispute: { status: "conceded", filer: "writer" } });
     const before = cloneState(state);
     const { input, pi, ctx } = makeInput({ state: { current: state } });
-    const result = handleDisputeFix(input);
+    const result = await handleDisputeFix(input);
 
     expect(result.handled).toBe(true);
     expect(ctx.ui.setStatus).toHaveBeenCalledWith("loop", "Phase B — round 1 (dispute fix)");
@@ -113,9 +146,12 @@ describe("handleDisputeFix", () => {
     expect(pi.appendedEntries).toHaveLength(1); // commit entry
   });
 
-  it("status reflects the current round (round 2)", () => {
+  it("status reflects the current round (round 2)", async () => {
+    mockExecFileCb.mockImplementation((_cmd: unknown, _args: unknown, _opts: unknown, cb: unknown) => {
+      if (typeof cb === "function") cb(Object.assign(new Error("exit 1"), { code: 1 }), "", "");
+    });
     const { input, ctx } = makeInput({ state: { current: makeState({ phase: "B", round: 2, dispute: { status: "conceded", filer: "writer" } }) } });
-    handleDisputeFix(input);
+    await handleDisputeFix(input);
     expect(ctx.ui.setStatus).toHaveBeenCalledWith("loop", "Phase B — round 2 (dispute fix)");
   });
 });
