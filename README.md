@@ -80,6 +80,8 @@ CLI flags override config file values.
 
 `/spec [--slug <name>] [--out <dir>] <goal...>` is the spec-writing half of the workflow: it runs one Author turn that reads your loose goal, verifies claims against the repo, and writes a tight spec file (default `internal/<slug>.md`) shaped to the [spec template](docs/spec-authoring.md). It is a separate, stateless command — no loop phases, no gates, no `LoopState` — so spec-writing and implementation can each take their own session. When the spec is ready, kick off the implementation half with `/loop internal/<slug>.md`.
 
+**Why `/spec` helps but isn't required.** The spec's Test Strategy section is the reconnaissance: it tells the Phase A Tester exactly which tests to write, where to put them, and what edge cases matter. Without it, the Tester must do that reconnaissance itself, which is where loops tend to sprawl (observed: 55-minute read-only stall with zero test files written). The Phase A prompt now handles both cases: if the spec has a Test Strategy section, the Tester transcribes it; if not, the Tester reads the codebase, writes a `## Test Strategy` section into the spec, and then writes the tests. Either way, the reconnaissance is explicit (produces a section) rather than implicit (open-ended exploration). `/spec` is the faster path because it does the reconnaissance in a single focused Author turn; `/loop` without `/spec` works but spends more of Phase A on the same work.
+
 ### `/loop-debug --log-bug`
 
 `/loop-debug --log-bug <name>` extracts the session's `loop-*` debug entries in-process and writes `bug-fix-<slug>.md` into the working directory — a self-contained, `/loop`-runnable bug spec with an auto-filled Context (phase/round/spec/language), placeholder Observed problem / Proposed fix sections, and the extracted log excerpt inlined. Fill the placeholders in, then run `/loop bug-fix-<slug>.md`.
@@ -103,6 +105,12 @@ Phase 0 (Baseline + Review) → Phase A (Tester) → Negotiate → Phase B (Writ
   Suite must be green         Compile gate     Approve or       Test +           Test gate
   + ambiguity check           (stubs + tests)  feedback         Coverage gate    (refactor safe)
 ```
+
+### Runtime guards
+
+- **Reconnaissance breaker**: after 15 read-only tool calls (reads, greps, git status) without any write/edit in a single turn, the agent is blocked from further reads and told to act on what it has. Any write/edit resets the counter. This prevents self-perpetuating reconnaissance loops where the agent reads and re-reads files indefinitely instead of writing code or tests. Complements the exact-match repeated-call breaker (5× identical calls).
+- **Scope-check baseline**: the loop captures `git status --porcelain` at spec start (Phase 0). The scope-check gate filters out these pre-existing untracked files, so only files created or modified *during* the loop are checked against the spec's Inventory. Prevents false out-of-scope failures when the working tree has untracked artifacts from prior work.
+- **Clean tree guard**: the loop refuses to start on a dirty working tree.
 
 ### Phase 0 — Baseline + spec review
 

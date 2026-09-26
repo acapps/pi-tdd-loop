@@ -91,6 +91,6 @@ npx tsx prompt-forge/forge.ts
 ## Relationship to `prompt-evolution/`
 
 `prompt-evolution/` was the first attempt — one prompt, one session, overfit.
-Kept as the documented lesson. `prompt-forge/` is the general system that
-replaces it: all prompts, structural rubric, anti-overfit enforced by
+It has been deleted. `prompt-forge/` is the general system that replaced it:
+all prompts, structural rubric, anti-overfit enforced by
 `no-hardcoded-data`.
