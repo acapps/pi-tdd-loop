@@ -25,6 +25,7 @@ import {
   commandSkeleton,
   SKELETON_FIELDS,
   resetCallCounters,
+  resetReconCounters,
   REPEATED_CALL_LIMIT,
 } from "../../src/events/tool-call/index";
 import { createMockExtensionAPI } from "../__mocks__/@earendil-works/pi-coding-agent";
@@ -51,6 +52,7 @@ function makeHandler() {
 
 beforeEach(() => {
   resetCallCounters();
+  resetReconCounters();
 });
 
 // --- commandSkeleton ---

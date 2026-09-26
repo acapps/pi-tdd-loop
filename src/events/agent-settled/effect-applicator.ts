@@ -321,6 +321,14 @@ export function buildRetryPrompt(
   }
 }
 
+// fix-negotiated-resolution-dropped: boundary language appended to the Phase B
+// prompt when a negotiated resolution names a test-file change. Instructs the
+// Writer to implement the source half, leave the test half to the Tester, and
+// not claim completion while the test half is outstanding.
+function RESOLUTION_BLOCK(resolution: string): string {
+  return `\n\nNegotiated resolution:\n${resolution}\n\nImplement the source half of the resolution. Do not modify test files — test files are owned by the Tester. If the resolution requires test changes, implement the source half and report the test half as pending the Tester. Do not claim the resolution is complete if the test half is outstanding.`;
+}
+
 export function buildAdvancePrompt(
   promptType: string,
   state: LoopState,
@@ -330,8 +338,14 @@ export function buildAdvancePrompt(
   switch (promptType) {
     case ADVANCE_PROMPTS.WRITER_NEGOTIATE:
       return GP.promptWriterNegotiate(state.specPath, lang.testFilePattern);
-    case ADVANCE_PROMPTS.WRITER_PHASE_B:
-      return lang.prompts.promptWriterPhaseB(ws);
+    case ADVANCE_PROMPTS.WRITER_PHASE_B: {
+      const base = lang.prompts.promptWriterPhaseB(ws);
+      // fix-negotiated-resolution-dropped: carry the agreed resolution into
+      // the Phase B prompt with boundary language so the Writer knows what
+      // was agreed and what it can/can't do.
+      if (!state.negotiateResolution) return base;
+      return base + RESOLUTION_BLOCK(state.negotiateResolution);
+    }
     case ADVANCE_PROMPTS.CLEANER_PHASE_C:
       return lang.prompts.promptCleanerPhaseC(ws);
     default:

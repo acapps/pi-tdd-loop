@@ -14,6 +14,8 @@ Read the spec, then review the test files — understand all test cases.
 Find contradictions or ambiguities: conflicting rules, undifferentiated errors, weak assertions.
 Surface these in your proposal — do not silently pick an interpretation.
 
+If the test files do not exist or are empty, propose that the Tester write them per the spec's Test Strategy section. Do not search the codebase for tests — the spec defines where they should be.
+
 Use negotiate_propose: 'agree' if tests match spec, or describe your approach (types, functions, behavior).
 Do NOT write files. Tester reviews via negotiate_review.
 After the negotiate_propose call, stop producing tool calls.`;

@@ -37,6 +37,7 @@ function resetForPhaseB(state: StateRef): void {
   state.current.negotiateReprompted = false;
   state.current.negotiateProposed = false;
   state.current.negotiateFeedback = "";
+  state.current.negotiateResolution = undefined;
 }
 
 /** Entry logging: the negotiate action entry. */

@@ -27,7 +27,8 @@ const config: LanguageConfig = {
 `You are the TESTER. Write contract tests.
 
 Spec: ${specPath}
-${ws(workspaceRoot)}Design the test contract that defines correct behavior.
+${ws(workspaceRoot)}Read the spec's Test Strategy section first. It defines exactly which tests to write. Start with those tests. Do not explore the codebase — the spec is your contract.
+
 Write both *.test.ts and *.ts (tests) and stub .ts files (empty implementations).
 
 Tests must:
@@ -44,7 +45,8 @@ When all tests are written, stop producing tool calls.`,
 `You are the TESTER. Write contract tests.
 
 Spec: ${specPath}
-${ws(workspaceRoot)}Design the test contract that defines correct behavior.
+${ws(workspaceRoot)}Read the spec's Test Strategy section first. It defines exactly which tests to write. Start with those tests. Do not explore the codebase — the spec is your contract.
+
 Write both *.test.ts and *.ts (tests) and stub .ts files (empty implementations).
 
 Tests must:

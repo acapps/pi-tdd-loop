@@ -10,6 +10,7 @@ import * as Ev from "./src/events";
 import {
   createRepeatedToolCallHandler,
   resetCallCounters,
+  resetReconCounters,
 } from "./src/events/tool-call/index";
 import type { LoopState } from "./src/types";
 
@@ -99,9 +100,11 @@ function registerLoopBreaker(pi: ExtensionAPI, debug: (msg: string) => void): vo
   pi.on("tool_call", createRepeatedToolCallHandler(pi, debug));
   pi.on("turn_start", () => {
     resetCallCounters();
+    resetReconCounters();
   });
   pi.on("agent_settled", () => {
     resetCallCounters();
+    resetReconCounters();
   });
 }
 

@@ -83,11 +83,7 @@ function executeNegotiateAgree(
   return { content: [{ text: "Proposal recorded. Moving to Phase B." }] };
 }
 
-function executeNegotiateProposal(
-  state: StateRef,
-  pi: ExtensionAPI,
-  debug: Debug,
-): ToolResult {
+function executeNegotiateProposal(state: StateRef, pi: ExtensionAPI, debug: Debug): ToolResult {
   debug("negotiate_propose: proposal recorded");
   state.current.negotiateProposed = true;
   persistState(state, pi, debug);
@@ -147,10 +143,8 @@ function handleNegotiateReview(
   logNegotiateEntry(state, pi, debug, "review", decision);
 
   if (isApproval(decision)) {
-    // bug-negotiate-drift row 2: an approve of a real contract proposal on a
-    // Tester turn (even round) is a claim about the file — the Tester re-reviews
-    // the contract file read-only before the advance. 'agree' (row 3) asserts
-    // the file already matches and skips straight to B.
+    // bug-negotiate-drift row 2: approve of a real proposal on even round →
+    // re-review; 'agree' (row 3) skips straight to B.
     if (state.current.round % 2 === 0 && !isAgreeProposal(state.current.lastProposal)) {
       return executeNegotiateReReview(state, pi, debug);
     }
@@ -159,12 +153,8 @@ function handleNegotiateReview(
   return executeNegotiateFeedback(state, pi, debug, decision);
 }
 
-function executeNegotiateReReview(
-  state: StateRef,
-  pi: ExtensionAPI,
-  debug: Debug,
-): ToolResult {
-  debug("Approved → contract re-review (Tester verifies file)");
+function executeNegotiateReReview(state: StateRef, pi: ExtensionAPI, debug: Debug): ToolResult {
+  debug("Approved → contract re-review");
   const lang = getLanguageConfig(state.current.language);
   state.current.round++;
   state.current.negotiateProposed = false;
@@ -175,25 +165,28 @@ function executeNegotiateReReview(
   return { content: [{ text: "Proposal accepted. Re-reviewing the contract file before Phase B." }] };
 }
 
-function executeNegotiateApprove(
-  state: StateRef,
-  pi: ExtensionAPI,
-  debug: Debug,
-  ctx: ToolCtx,
-): ToolResult {
+function executeNegotiateApprove(state: StateRef, pi: ExtensionAPI, debug: Debug, ctx: ToolCtx): ToolResult {
   debug("Approved → Phase B");
   transitionToPhaseB(state, pi, ctx, debug);
   return buildReviewResult(state.current.phase, "approve");
 }
 
-function executeNegotiateFeedback(
-  state: StateRef,
-  pi: ExtensionAPI,
-  debug: Debug,
-  decision: string,
-): ToolResult {
+function executeNegotiateFeedback(state: StateRef, pi: ExtensionAPI, debug: Debug, decision: string): ToolResult {
   debug("negotiate_review: feedback");
   state.current.negotiateFeedback = decision;
+  if (touchesTests(decision)) state.current.negotiateResolution = decision;
   persistState(state, pi, debug);
   return buildReviewResult(state.current.phase, decision);
+}
+
+// fix-negotiated-resolution-dropped: detect whether a negotiated resolution
+// touches a test file. Safe direction: false negatives degrade to current
+// behavior (no resolution carried); false positives are visible in the prompt.
+const TEST_FILE_SUFFIX = /\.test\.(ts|js)$|_test\.go$|Test\.java$|\.spec\.ts$/;
+
+function touchesTests(text: string): boolean {
+  if (!text) return false;
+  for (const m of text.matchAll(/`([^`]+)`/g)) if (TEST_FILE_SUFFIX.test(m[1])) return true;
+  for (const m of text.matchAll(/[\w.\/-]+\.(?:test\.ts|test\.js|spec\.ts|_test\.go|Test\.java)/g)) if (TEST_FILE_SUFFIX.test(m[0])) return true;
+  return /test file/i.test(text);
 }
