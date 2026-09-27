@@ -1,6 +1,6 @@
 # Bug: Coverage gate is a silent no-op for TypeScript (and faked for Java)
 
-> **Status (TS row):** closed by `internal/ts-gate-coverage-provider.md`. **Deliberate reversal of the fix proposed below:** the predecessor recommendation was "provider absent → fail the gate with a named reason"; the implementing spec instead follows `internal/bug-gate-signal-integrity.md` row 6 — unmeasurable coverage is an environment fact, so a provider-less TypeScript project degrades to a plain `vitest run` (gate on compile + test exit code, coverage sub-check skipped, `cov=0%` is "unavailable", never a failure). The Java/jacoco row and the "fail with a named reason" semantics remain open in this file.
+> **Status:** closed (2026-09-27). TS row closed by `internal/ts-gate-coverage-provider.md` (provider absent → plain `vitest run`, coverage sub-check skipped). Java row closed by the gate-signal-integrity refactor: `mvn test -Djacoco.skip=false` runs fine with or without jacoco; if jacoco is configured the JaCoCo table is parsed by `parseCoverage`, if not the output has no coverage line → `parseCoverage` returns null → coverage stays 0 → threshold check skipped (`gate.coverage > 0` guard in `transitions.ts`). Same "unmeasurable = environment fact, skip sub-check" semantics as TS. The "fail with a named reason" recommendation is retired in favor of the gate-signal-integrity row 6 semantics.
 
 ## Context
 

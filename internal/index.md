@@ -38,7 +38,7 @@ Conventions for specs in this directory: [docs/spec-authoring.md](../docs/spec-a
 | [done-bug-role-context-mismatch.md](done-bug-role-context-mismatch.md) | bug | **done** (2026-09-23, `fix-b-phase-role-context`) | Phase B loop-context dispatches on phase only — the Tester's dispute-review turn and the Writer's tester-filed concede-fix turn both get the bare Writer context. Fixed via `getRoleContext` dispatch on dispute status + filer. |
 | [done-fix-negotiated-resolution-dropped.md](done-fix-negotiated-resolution-dropped.md) | bug | **done** (2026-09-24, `fix-negotiated-resolution-dropped`) | Negotiate tool-call advance (`transitionToPhaseB` → `promptWriterPhaseB`) carried no resolution, so a test-touching agreed resolution was silently dropped (session 01a0d128). Fixed: `state.negotiateResolution` captured from Tester's concession, appended to Phase B prompt via `buildAdvancePrompt` with boundary + no-false-done language. |
 | [done-fix-scope-check-baseline.md](done-fix-scope-check-baseline.md) | bug | **done** (2026-09-25, `fix-scope-check-baseline`) | Scope-check flagged pre-existing untracked files as out-of-scope (session 01a0d6aa: 5 consecutive identical failures). Fixed: `state.baselineDirtyFiles` captured at spec start, filtered at gate time. |
-| [bug-coverage-noop-ts.md](bug-coverage-noop-ts.md) | bug | **open** (partial) | TS row closed (degrade to plain `vitest run`). Java/jacoco named-reason row still open. |
+| [done-bug-coverage-noop-ts.md](done-bug-coverage-noop-ts.md) | bug | done | TS row closed by ts-gate-coverage-provider. Java row closed by gate-signal-integrity refactor (jacoco optional, unmeasurable = skip). 2026-09-27 |
 
 ## Feature specs (not bug-specs)
 
