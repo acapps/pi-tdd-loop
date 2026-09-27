@@ -1,6 +1,7 @@
 // --- TypeScript language config ---
 
 import type { LanguageConfig } from "./index";
+import { delimitUntrusted, UNTRUSTED_DATA_GUARD } from "../generic-prompts";
 
 // Toolchain commands only — style policy (naming, line limits) is not a role
 // contract and must not be injected into prompts (no-style-policy-bloat).
@@ -66,7 +67,8 @@ When all tests are written, stop producing tool calls.`,
     promptTesterCompileRetry: (compileError: string) =>
 `Compilation failed. Fix the compilation errors.
 
-${compileError}
+${delimitUntrusted("COMPILE ERROR", compileError)}
+${UNTRUSTED_DATA_GUARD}
 
 When done, stop producing tool calls.`,
 
@@ -74,7 +76,8 @@ When done, stop producing tool calls.`,
 `Advancing to Phase B without explicit approval. Write TypeScript source files.
 
 ${ws(workspaceRoot)}Negotiated resolution:
-${negotiateResolution}
+${delimitUntrusted("NEGOTIATED RESOLUTION", negotiateResolution)}
+${UNTRUSTED_DATA_GUARD}
 
 Read *.test.ts and *.ts stubs. Implement the source half of the resolution. Preserve stub signatures.
 Do not modify *.test.ts — test files are owned by the Tester. If the resolution requires test changes, implement the source half and report the test half as pending the Tester.
@@ -100,7 +103,8 @@ When all tests pass, stop producing tool calls.`,
 `Phase B (Writer). Tests failed.
 
 ${ws(workspaceRoot)}Failure summary:
-${failureSummary}
+${delimitUntrusted("TEST OUTPUT", failureSummary)}
+${UNTRUSTED_DATA_GUARD}
 
 Do not modify *.test.ts — test files are owned by the Tester.
 Dispute wrong tests via negotiate_propose.
@@ -121,7 +125,8 @@ When the refactor is complete and all tests pass, stop producing tool calls.`,
 `Phase C (Cleaner). Tests failed after refactoring:
 
 ${ws(workspaceRoot)}Failure summary:
-${failureSummary}
+${delimitUntrusted("TEST OUTPUT", failureSummary)}
+${UNTRUSTED_DATA_GUARD}
 
 Fix the broken code by restoring working behavior. Do not modify *.test.ts — test files are owned by the Tester.
 When all tests pass, stop producing tool calls.`,

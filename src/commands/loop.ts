@@ -11,6 +11,7 @@ import { detectProject, isValidLanguage } from "../languages";
 import { initLiveMetrics } from "../metrics";
 import { parseLoopArgs, loadLoopConfig, mergeLoopArgs } from "../selectors";
 import { getGitUntrackedFiles } from "../scope-check";
+import { delimitUntrusted, UNTRUSTED_DATA_GUARD } from "../generic-prompts";
 import {
   resolveProjectCwd, runPhase0Baseline, applyBranchSetup, enterPhase0Review,
 } from "./loop-baseline";
@@ -123,20 +124,19 @@ export function buildPhaseZeroPrompt(specText: string, analysis: SpecAnalysis): 
     "",
     "Spec:",
     "",
-    specText,
+    delimitUntrusted("SPEC TEXT", specText),
+    UNTRUSTED_DATA_GUARD,
     "",
   ];
 
   if (findings.length > 0) {
+    const findingsText = findings.map(f => R.formatFinding(f)).join("\n\n");
     lines.push(
       "Findings:",
       "",
-    );
-    for (const f of findings) {
-      lines.push(R.formatFinding(f));
-      lines.push("");
-    }
-    lines.push(
+      delimitUntrusted("FINDINGS", findingsText),
+      UNTRUSTED_DATA_GUARD,
+      "",
       "The findings above are heuristic candidates, not verified defects. Verify each finding against the spec text; if a candidate is a false positive, reject it in a single negotiate_propose call (plan='reject-findings: <per-finding rationale>') before approving.",
       "",
     );
