@@ -47,6 +47,8 @@ const rubric = CATALOG.map((e) => ({
 // refinement, NOT re-scoring from scratch (the local structural score is
 // already done and trusted for the valid/invalid split).
 const weakEntries = Object.keys(evolution);
+const hasWeak = weakEntries.length > 0;
+
 let frontierPrompt = `You are the FRONTIER model judging prompt quality. A local model has already
 done the deterministic STRUCTURAL scoring (valid/invalid split) and generated
 strengthened variants. Your job is the judgment the local scorer cannot do:
@@ -55,10 +57,9 @@ strengthened variants. Your job is the judgment the local scorer cannot do:
    structurally valid (it has the right SHAPE: carries its inputs, states the
    role boundary, routes blocked work, has a termination contract, and —
    critically — does NOT hardcode a specific session's files/symbols). Rank
-   the structurally-valid variants by QUALITY: clarity, precision, no
-   redundancy, natural language, minimal length that still carries the
-   guarantees. A 100/100 structural score does NOT mean "best" — rank within
-   the valid set.
+   by QUALITY: clarity, precision, no redundancy, natural language, minimal
+   length that still carries the guarantees. A 100/100 structural score does
+   NOT mean "best" — rank within the valid set.
 
 2. RUBRIC REFINEMENT: Read the structural guarantees (the rubric) below. Flag
    any that are (a) too loose (pass a prompt that should fail) or (b) too tight
@@ -75,20 +76,29 @@ Respond in JSON:
   "verdict": "<one paragraph: did the structural harness catch the real gaps? any new failure mode?>"
 }
 
---- THE PROMPTS (structurally-weak entries, with their best variants) ---
+--- THE PROMPTS ${hasWeak ? "(structurally-weak entries, with their best variants)" : "(all entries — all structurally valid, rank by quality)"} ---
 
 `;
 
-for (const entryId of weakEntries) {
-  const entry = CATALOG.find((e) => e.id === entryId);
-  const evo = evolution[entryId];
-  if (!entry || !evo) continue;
-  // Re-score the best variant to show the frontier its structural breakdown.
-  const s = scoreVariant(entry, evo.bestPrompt);
-  frontierPrompt += `\n## ${entry.name} (${entry.phase}/${entry.role})\n\n`;
-  frontierPrompt += `Local structural score: ${s.score}/100 (op: ${evo.bestOperator}, ${evo.variantCount} variants)\n`;
-  frontierPrompt += `Guarantees: ${entry.guarantees.map((g) => `${g.id}(w${g.weight})`).join(", ")}\n\n`;
-  frontierPrompt += `Best variant:\n\`\`\`\n${evo.bestPrompt}\n\`\`\`\n\n`;
+if (hasWeak) {
+  for (const entryId of weakEntries) {
+    const entry = CATALOG.find((e) => e.id === entryId);
+    const evo = evolution[entryId];
+    if (!entry || !evo) continue;
+    const s = scoreVariant(entry, evo.bestPrompt);
+    frontierPrompt += `\n## ${entry.name} (${entry.phase}/${entry.role})\n\n`;
+    frontierPrompt += `Local structural score: ${s.score}/100 (op: ${evo.bestOperator}, ${evo.variantCount} variants)\n`;
+    frontierPrompt += `Guarantees: ${entry.guarantees.map((g) => `${g.id}(w${g.weight})`).join(", ")}\n\n`;
+    frontierPrompt += `Best variant:\n\`\`\`\n${evo.bestPrompt}\n\`\`\`\n\n`;
+  }
+} else {
+  // All entries are structurally valid — include the real prompts for quality ranking.
+  for (const entry of CATALOG) {
+    const rendered = renderReal(entry);
+    frontierPrompt += `\n## ${entry.name} (${entry.phase}/${entry.role})\n\n`;
+    frontierPrompt += `Guarantees: ${entry.guarantees.map((g) => `${g.id}(w${g.weight})`).join(", ")}\n\n`;
+    frontierPrompt += `Prompt:\n\`\`\`\n${rendered}\n\`\`\`\n\n`;
+  }
 }
 
 frontierPrompt += `--- THE RUBRIC (structural guarantees) ---\n\n`;
@@ -103,7 +113,7 @@ writeFileSync(
 
 console.log(`Wrote: ${join(OUT, "frontier-prompt.md")}`);
 console.log(`      ${join(OUT, "rubric.json")}`);
-console.log(`\n${weakEntries.length} structurally-weak entries for the frontier to judge.`);
+console.log(`\n${hasWeak ? `${weakEntries.length} structurally-weak entries for the frontier to judge.` : "All entries structurally valid — frontier ranks quality within the valid set."}`);
 console.log(`\nNEXT (engage the user):`);
 console.log(`  1. Send results/frontier-prompt.md to the frontier model.`);
 console.log(`  2. Save its JSON response to results/frontier-response.json.`);
