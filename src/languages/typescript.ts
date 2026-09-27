@@ -13,7 +13,7 @@ Toolchain:
 
 function ws(workspaceRoot?: string): string {
   if (!workspaceRoot || workspaceRoot === ".") return "";
-  return `Write all files under ${workspaceRoot}/. `;
+  return `Write all files under ${workspaceRoot}/.\n`;
 }
 
 const config: LanguageConfig = {

@@ -397,13 +397,19 @@ export const inputCoverage = (): Guarantee => ({
       for (let i = 0; i < lines.length - 1; i++) {
         const trimmed = lines[i].trim();
         const isLabel = /^[\w\s()-]+:\s*$/.test(trimmed);
-        if (isLabel && lines[i + 1].trim().length > 0) {
-          const labelWord = trimmed.replace(/:$/, "").trim().toLowerCase();
-          // Match if the label contains any of the input's words (stemmed).
-          const hasWord = words.some((w: string) => labelWord.includes(w));
-          if (hasWord) {
-            found = true;
-            break;
+        if (isLabel) {
+          // Look ahead to the next non-empty line (handles delimitUntrusted
+          // which inserts a blank line between the label and <<<BEGIN>>>).
+          let j = i + 1;
+          while (j < lines.length && lines[j].trim().length === 0) j++;
+          if (j < lines.length && lines[j].trim().length > 0) {
+            const labelWord = trimmed.replace(/:$/, "").trim().toLowerCase();
+            // Match if the label contains any of the input's words (stemmed).
+            const hasWord = words.some((w: string) => labelWord.includes(w));
+            if (hasWord) {
+              found = true;
+              break;
+            }
           }
         }
       }
@@ -416,8 +422,13 @@ export const inputCoverage = (): Guarantee => ({
     const lines = p.split("\n");
     for (let i = 0; i < lines.length - 1; i++) {
       const trimmed = lines[i].trim();
-      if (/^[\w\s-]+:\s*$/.test(trimmed) && lines[i + 1].trim().length > 0) {
-        slotTokens.add(trimmed.replace(/:$/, "").trim().toLowerCase());
+      if (/^[\w\s-]+:\s*$/.test(trimmed)) {
+        // Look ahead to next non-empty line (handles delimitUntrusted blank line).
+        let j = i + 1;
+        while (j < lines.length && lines[j].trim().length === 0) j++;
+        if (j < lines.length && lines[j].trim().length > 0) {
+          slotTokens.add(trimmed.replace(/:$/, "").trim().toLowerCase());
+        }
       }
     }
     // Also count inline __FORGE_*__ tokens as distinct slots.
@@ -468,7 +479,9 @@ export const CATALOG: PromptEntry[] = [
           /(verify|check|confirm|validate)\s+(each\s+)?(finding|one|them|it|these|the)\b/i.test(
             p,
           ) ||
-          /treat\s+(them|findings|these)\s+as\s+(heuristic|unverified|candidate)/i.test(p),
+          /treat\s+(them|findings|these)\s+as\s+(heuristic|unverified|candidate)/i.test(p) ||
+          // No findings to verify: the prompt explicitly states "(none)".
+          /findings:\s*\n\s*\(none\)/i.test(p),
       },
       {
         id: "names-mechanism",
@@ -616,7 +629,7 @@ export const CATALOG: PromptEntry[] = [
           "promptWriterPhaseB and promptNegotiateAutoAdvance currently omit this).",
         weight: 2,
         check: (p) =>
-          /(cannot|can't|must not|do not|don't|may not|never|only write|only modify)[^\n.]{0,50}test/i.test(
+          /(cannot|can't|must not|do not|don't|may not|never|only write|only modify)[^\n]{0,50}test/i.test(
             p,
           ),
       },
@@ -696,7 +709,7 @@ export const CATALOG: PromptEntry[] = [
           "must state the boundary (01a0d128 gap).",
         weight: 2,
         check: (p) =>
-          /(cannot|can't|must not|do not|don't|may not|never|only write|only modify)[^\n.]{0,50}test/i.test(
+          /(cannot|can't|must not|do not|don't|may not|never|only write|only modify)[^\n]{0,50}test/i.test(
             p,
           ),
       },
