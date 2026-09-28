@@ -101,14 +101,15 @@ Call negotiate_review now:
 // caller — reviewer-addressed prompts below replace it.
 
 export function promptTesterReviewWriterDispute(claim: string): string {
-  return `TESTER (dispute review). The Writer disputed a test:
+  return `TESTER (dispute review). The Writer disputed a test.
 
 Dispute claim:
-${claim}
+${delimitUntrusted(claim, "DISPUTE CLAIM")}
+${UNTRUSTED_DATA_GUARD}
 
-Use negotiate_review to proceed:
-  - decision='approve' → you concede: the test is wrong; you will fix it
-  - decision='<your rebuttal>' → you defend the test; the Writer must fix the code
+Use negotiate_review to respond:
+- decision='approve' means you concede: the test is wrong and you will fix it
+- decision='<your rebuttal>' means you defend the test: the Writer must fix the code
 
 Do not write files. After the negotiate_review call, stop producing tool calls.`;
 }
@@ -126,12 +127,13 @@ Do not write files. Call negotiate_review now.`;
 }
 
 export function promptWriterConcedeFix(claim: string): string {
-  return `WRITER (dispute fix). You accepted the Tester's report:
+  return `WRITER (dispute fix). You accepted the Tester's report.
 
 Dispute claim:
-${claim}
+${delimitUntrusted(claim, "DISPUTE CLAIM")}
+${UNTRUSTED_DATA_GUARD}
 
-Fix the flagged file(s) to resolve it. Write source files only.
+Fix the flagged file(s) to resolve it. Write source files only; do not modify *.test.ts.
 When the fix is applied, stop producing tool calls.`;
 }
 

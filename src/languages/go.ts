@@ -5,8 +5,7 @@ import { delimitUntrusted, UNTRUSTED_DATA_GUARD } from "../generic-prompts";
 
 // Toolchain commands only — style policy (naming, line limits) is not a role
 // contract and must not be injected into prompts (no-style-policy-bloat).
-const CONVENTIONS = `
-Toolchain:
+const CONVENTIONS = `Toolchain:
 - Use go test -json ./... for test output
 - Use go build ./... for compilation check
 - Use go test -cover ./... for coverage
@@ -33,39 +32,37 @@ const config: LanguageConfig = {
 `You are the TESTER. Write contract tests.
 
 Spec: ${specPath}
-${ws(workspaceRoot)}Read the spec's Test Strategy section first. It defines exactly which tests to write. Start with those tests. Do not explore the codebase — the spec is your contract.
+${ws(workspaceRoot)}Read the spec's Test Strategy section first. It defines exactly which tests to write. Start with those tests; the spec is your contract.
 
-If the spec has no Test Strategy section: read the codebase, identify the test contract (which files to test, which behaviors to cover, which edge cases matter), and write a "## Test Strategy" section into the spec file. Then write the tests defined by that section.
+If the spec has no Test Strategy section, read the codebase, identify the test contract (which files to test, which behaviors to cover, which edge cases matter), and write a "## Test Strategy" section into the spec file. Then write the tests that section defines.
 
-Write both *_test.go and *.go (tests) and Stubs (.go files with empty implementations).
+Write *_test.go files and empty stub .go files for the implementation.
 
 Tests must:
 - Cover all spec requirements
 - Include edge cases: empty, single-char, UTF-8, whitespace, case
 - Use table-driven tests where applicable
-- Be comprehensive enough to catch real bugs
 - Fail against the stubs until the Writer implements them
 
-When all tests are written, stop producing tool calls.`,
+Run the tests once to confirm they fail because of missing behavior, not because of compile errors. When all tests are written, stop producing tool calls.`,
 
     promptTesterPhaseARestart: (specPath: string, _buildTool: string, workspaceRoot?: string) =>
 `You are the TESTER. Write contract tests.
 
 Spec: ${specPath}
-${ws(workspaceRoot)}Read the spec's Test Strategy section first. It defines exactly which tests to write. Start with those tests. Do not explore the codebase — the spec is your contract.
+${ws(workspaceRoot)}Read the spec's Test Strategy section first. It defines exactly which tests to write. Start with those tests; the spec is your contract.
 
-If the spec has no Test Strategy section: read the codebase, identify the test contract (which files to test, which behaviors to cover, which edge cases matter), and write a "## Test Strategy" section into the spec file. Then write the tests defined by that section.
+If the spec has no Test Strategy section, read the codebase, identify the test contract (which files to test, which behaviors to cover, which edge cases matter), and write a "## Test Strategy" section into the spec file. Then write the tests that section defines.
 
-Write both *_test.go and *.go (tests) and Stubs (.go files with empty implementations).
+Write *_test.go files and empty stub .go files for the implementation.
 
 Tests must:
 - Cover all spec requirements
 - Include edge cases: empty, single-char, UTF-8, whitespace, case
 - Use table-driven tests where applicable
-- Be comprehensive enough to catch real bugs
 - Fail against the stubs until the Writer implements them
 
-When all tests are written, stop producing tool calls.`,
+Run the tests once to confirm they fail because of missing behavior, not because of compile errors. When all tests are written, stop producing tool calls.`,
 
     promptTesterCompileRetry: (compileError: string) =>
 `Compilation failed. Fix the compilation errors.
@@ -100,7 +97,7 @@ Concede with negotiate_propose("agree") if the test is correct and your code is 
 
 ${CONVENTIONS}
 
-When all tests pass, stop producing tool calls.`,
+Stop producing tool calls when all tests pass, or when every remaining failure is a test you have disputed via negotiate_propose.`,
 
     promptWriterPhaseBContinue: (failureSummary: string, failureCount: number, workspaceRoot?: string) =>
 `Phase B (Writer). Tests failed.
@@ -112,15 +109,15 @@ ${UNTRUSTED_DATA_GUARD}
 Do not modify *_test.go — test files are owned by the Tester.
 Dispute wrong tests via negotiate_propose.
 Concede with negotiate_propose("agree") if the test is correct and your code is wrong.
-When all tests pass, stop producing tool calls.`,
+Stop producing tool calls when all tests pass, or when every remaining failure is a test you have disputed via negotiate_propose.`,
 
     promptCleanerPhaseC: (workspaceRoot?: string) =>
-`Phase C (Cleaner). Refactor Go source files for readability:
+`Phase C (Cleaner). Refactor the Go source files for readability without changing behavior.
 
-- Return early. Extract helpers. Clear names.
-- Do not modify *_test.go — test files are owned by the Tester.
-- All tests must pass.
-${ws(workspaceRoot)}${CONVENTIONS}
+${ws(workspaceRoot)}Do not modify *_test.go; test files are owned by the Tester.
+All tests must still pass.
+
+${CONVENTIONS}
 
 When the refactor is complete and all tests pass, stop producing tool calls.`,
 
@@ -140,9 +137,9 @@ When all tests pass, stop producing tool calls.`,
 ${ws(workspaceRoot)}Do not modify *_test.go. All tests must pass.
 When done, stop producing tool calls.`,
 
-    promptTesterDisputeFix: (workspaceRoot?: string) =>
+    promptTesterDisputeFix: (workspaceRoot?: string, claim?: string, specPath?: string) =>
 `Conceded dispute. Fix the test in *_test.go to match the spec.
-${ws(workspaceRoot)}Do not modify non-test Go files. When done, stop producing tool calls.`,
+${specPath ? `Spec: ${specPath}\n` : ""}${claim ? delimitUntrusted(claim, "DISPUTE CLAIM") + "\n" : ""}${ws(workspaceRoot)}Do not modify non-test Go files. When done, stop producing tool calls.`,
   },
 
   refusalMessage: {

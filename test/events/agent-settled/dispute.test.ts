@@ -140,7 +140,7 @@ describe("handleDisputeFix", () => {
     expect(result.handled).toBe(true);
     expect(ctx.ui.setStatus).toHaveBeenCalledWith("loop", "Phase B — round 1 (dispute fix)");
     expect(pi.sentMessages).toHaveLength(1);
-    expect(pi.sentMessages[0].content).toBe(GO.prompts.promptTesterDisputeFix());
+    expect(pi.sentMessages[0].content).toBe(GO.prompts.promptTesterDisputeFix(undefined, undefined, "spec.md"));
     expect(pi.sentMessages[0].options).toEqual({ deliverAs: "followUp" });
     expect(state.dispute?.status).toBe("closed"); // dispute status updated to closed
     expect(pi.appendedEntries).toHaveLength(1); // commit entry

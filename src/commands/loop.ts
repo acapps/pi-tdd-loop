@@ -150,7 +150,7 @@ export function buildPhaseZeroPrompt(specText: string, analysis: SpecAnalysis): 
   }
 
   lines.push(
-    "Use negotiate_propose: plan='approve' if the spec is sound, otherwise provide feedback on the verified findings. After that call, stop producing tool calls.",
+    "Check each finding against the spec yourself and discard any that do not hold up; if the findings are empty, rely on your own review. Then call negotiate_propose: plan='approve' if the spec is sound, otherwise give feedback covering only the issues you confirmed. After that call, stop producing tool calls.",
   );
 
   return lines.join("\n");

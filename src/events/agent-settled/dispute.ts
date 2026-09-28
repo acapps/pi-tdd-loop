@@ -75,7 +75,7 @@ export async function handleDisputeFix(
   state.current.dispute = { ...d, status: "closed" };
   commit(state.current, pi, debug);
   ctx.ui.setStatus("loop", `Phase B — round ${state.current.round} (dispute fix)`);
-  sendPrompt(pi, lang.prompts.promptTesterDisputeFix(), state.current, debug);
+  sendPrompt(pi, lang.prompts.promptTesterDisputeFix(cwd, d.claim, state.current.specPath), state.current, debug);
   return { handled: true };
 }
 

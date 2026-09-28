@@ -35,7 +35,7 @@ interface LanguagePrompts {
   promptCleanerPhaseC: (workspaceRoot?: string) => string;
   promptCleanerRetry: (failureSummary: string, failureCount: number, workspaceRoot?: string) => string;
   promptCleanerRestart: (workspaceRoot?: string) => string;
-  promptTesterDisputeFix: (workspaceRoot?: string) => string;
+  promptTesterDisputeFix: (workspaceRoot?: string, claim?: string, specPath?: string) => string;
 }
 
 // --- Registry ---

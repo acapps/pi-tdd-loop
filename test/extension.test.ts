@@ -466,7 +466,7 @@ describe("/loop-restart command", () => {
     // Restart A delegates to full prompt (TESTER role, spec path, stubs/tests)
     expect(lastMsg.content).toContain("TESTER");
     expect(lastMsg.content).toContain("spec.md");
-    expect(lastMsg.content).toContain("Stubs");
+    expect(lastMsg.content).toContain("stub");
   });
 
   it("sends phase-appropriate prompt for B", async () => {

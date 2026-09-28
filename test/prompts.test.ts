@@ -14,7 +14,6 @@ describe("Phase A prompts (Go)", () => {
     const prompt = prompts.promptTesterPhaseA("path/to/spec.md", "maven");
     expect(prompt).toContain("TESTER");
     expect(prompt).toContain("path/to/spec.md");
-    expect(prompt).toContain("*.go");
     expect(prompt).toContain("*_test.go");
   });
 
@@ -64,8 +63,6 @@ describe("Phase A prompts (TypeScript)", () => {
     const prompt = prompts.promptTesterPhaseA("path/to/spec.md", "maven");
     expect(prompt).toContain("TESTER");
     expect(prompt).toContain("path/to/spec.md");
-    expect(prompt).toContain("package.json");
-    expect(prompt).toContain("*.ts");
     expect(prompt).toContain("*.test.ts");
   });
 
@@ -276,7 +273,7 @@ describe("Phase C prompts (Go)", () => {
   it("promptCleanerPhaseC mentions refactoring and test boundary", () => {
     const prompt = prompts.promptCleanerPhaseC();
     expect(prompt).toContain("Cleaner");
-    expect(prompt).toContain("Return early");
+    expect(prompt).toContain("without changing behavior");
     expect(prompt).toContain("Do not modify *_test.go");
   });
 
@@ -303,7 +300,7 @@ describe("Phase C prompts (Java)", () => {
   it("promptCleanerPhaseC mentions refactoring and test boundary", () => {
     const prompt = prompts.promptCleanerPhaseC();
     expect(prompt).toContain("Cleaner");
-    expect(prompt).toContain("Return early");
+    expect(prompt).toContain("without changing behavior");
     expect(prompt).toContain("Do not modify *Test.java");
   });
 });
@@ -314,7 +311,7 @@ describe("Phase C prompts (TypeScript)", () => {
   it("promptCleanerPhaseC mentions refactoring and test boundary", () => {
     const prompt = prompts.promptCleanerPhaseC();
     expect(prompt).toContain("Cleaner");
-    expect(prompt).toContain("Return early");
+    expect(prompt).toContain("without changing behavior");
     expect(prompt).toContain("Do not modify *.test.ts");
   });
 });

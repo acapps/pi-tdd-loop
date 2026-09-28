@@ -55,14 +55,12 @@ const DISPUTE_FIX_CONTENT =
 const DISPUTE_FIX_SP = `${BASE}\n\nYou are in Phase B dispute fix (Tester). You may write test files.`;
 
 const CLEANER_CONTENT =
-  "CLEANER. Refactor for readability:\n" +
-  "- Return early. Extract helpers. Clear names.\n" +
+  "CLEANER. Refactor for readability without changing behavior:\n" +
   `You may only write ${GO_SOURCE}. Do not modify ${GO_TEST}. All tests must pass.\n\n` +
-  "Phase C (Cleaner). Refactor Go source files for readability:\n" +
+  "Phase C (Cleaner). Refactor the Go source files for readability without changing behavior.\n" +
   "\n" +
-  "- Return early. Extract helpers. Clear names.\n" +
-  "- Do not modify *_test.go — test files are owned by the Tester.\n" +
-  "- All tests must pass.\n" +
+  "Do not modify *_test.go; test files are owned by the Tester.\n" +
+  "All tests must still pass.\n" +
   "\n" +
   "Toolchain:\n" +
   "- Use go test -json ./... for test output\n" +

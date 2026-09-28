@@ -262,7 +262,7 @@ describe("step 5 — disputeFix", () => {
 
     expect(await handleAgentSettled(input)).toBeUndefined();
     expect(pi.sentMessages).toHaveLength(1);
-    expect(pi.sentMessages[0].content).toBe(GO.prompts.promptTesterDisputeFix());
+    expect(pi.sentMessages[0].content).toBe(GO.prompts.promptTesterDisputeFix(undefined, undefined, "spec.md"));
     expect(pi.sentMessages[0].options).toEqual({ deliverAs: "followUp" });
     expect(ctx.ui.setStatus).toHaveBeenCalledWith("loop", "Phase B — round 1 (dispute fix)");
     expect(state.dispute?.status).toBe("closed"); // status changed to closed after handling
@@ -283,7 +283,7 @@ describe("step 5 — disputeFix", () => {
 
     expect(await handleAgentSettled(input)).toBeUndefined();
     expect(pi.sentMessages).toHaveLength(1);
-    expect(pi.sentMessages[0].content).toBe(GO.prompts.promptTesterDisputeFix());
+    expect(pi.sentMessages[0].content).toBe(GO.prompts.promptTesterDisputeFix(undefined, undefined, "spec.md"));
     expect(debug).not.toHaveBeenCalledWith("Dispute review pending");
     expect(pi.appendedEntries).toHaveLength(1); // one commit: dispute fix status changed to closed
   });

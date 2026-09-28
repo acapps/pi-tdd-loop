@@ -308,8 +308,7 @@ function buildCleanerPrompt(
   const prompt = lang.prompts.promptCleanerPhaseC(ws);
   return {
     message: buildContextMessage(
-      `CLEANER. Refactor for readability:\n` +
-      "- Return early. Extract helpers. Clear names.\n" +
+      `CLEANER. Refactor for readability without changing behavior:\n` +
       `You may only write ${lang.sourceFilePattern}. Do not modify ${lang.testFilePattern}. All tests must pass.\n\n` +
       prompt,
     ),
