@@ -123,11 +123,28 @@ export function cmdContinue(
         } else {
           s.phase = s.lastPhase;
         }
+        // Validate the starting position: if the last gate result shows a
+        // compile failure, warn the user that the gate will fail again.
+        const g = s.lastGateResult;
+        if (g && !g.compile) {
+          const err = g.compileError ? `\n${g.compileError.slice(0, 200)}` : "";
+          ctx.ui.notify(
+            `Warning: last gate failed on compile. Continuing will likely fail again.\n` +
+            `Fix the compile error before continuing.${err}`, "warning");
+        }
         resetPhaseState(s);
         ctx.ui.notify(`Continued from Phase ${s.phase}, round 1.`, "info");
         commit(s, pi, debug);
         sendPrompt(pi, buildContinuePrompt(s), s, debug);
         return;
+      }
+      // Validate: warn if the last gate result shows a compile failure.
+      const g2 = s.lastGateResult;
+      if (g2 && !g2.compile) {
+        const err = g2.compileError ? `\n${g2.compileError.slice(0, 200)}` : "";
+        ctx.ui.notify(
+          `Warning: last gate failed on compile. Continuing will likely fail again.\n` +
+          `Fix the compile error before continuing.${err}`, "warning");
       }
       resetPhaseState(s);
       ctx.ui.notify(`Continued from Phase ${s.phase}, round 1.`, "info");
