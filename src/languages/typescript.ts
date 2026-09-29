@@ -21,7 +21,7 @@ const config: LanguageConfig = {
   sourceFilePattern: "*.ts (non-test files)",
   testFilePattern: "*.test.ts",
   isTestFile: (path: string) => /\.test\.ts$/.test(path) || /\.spec\.ts$/.test(path),
-  isPhaseAAllowed: (path: string) => /\.test\.ts$/.test(path) || /\.spec\.ts$/.test(path) || /\.ts$/.test(path),
+  isPhaseAAllowed: (path: string) => /\.test\.ts$/.test(path) || /\.spec\.ts$/.test(path) || /\.ts$/.test(path) || /tsconfig(\.[^/]+)?\.json$/.test(path) || /package\.json$/.test(path) || /vitest\.config\.ts$/.test(path) || /jest\.config\.[^/]+$/.test(path) || /\.(eslintrc|prettierrc|biomerc)\.[^/]+$/.test(path),
 
   prompts: {
     promptTesterPhaseA: (specPath: string, _buildTool: string, workspaceRoot?: string) =>
@@ -139,7 +139,7 @@ ${specPath ? `Spec: ${specPath}\n` : ""}${claim ? delimitUntrusted(claim, "DISPU
   },
 
   refusalMessage: {
-    phaseA: "Phase A only: write test files and stubs. Cannot write other files.",
+    phaseA: "Phase A only: write test files, stubs, and project config (tsconfig.json, package.json, etc.). Cannot write source files.",
     negotiate: "Negotiation is discussion-only. No file writes allowed.",
     phaseC: "Phase B/C: you may only write source files (non-test). Cannot modify test files.",
   },

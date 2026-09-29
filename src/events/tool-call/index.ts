@@ -230,6 +230,9 @@ export function createRepeatedToolCallHandler(
   return (event: ToolCallEvent): ToolCallEventResult | undefined => {
     // Check reconnaissance limit first (catches varied read-only calls).
     const reconCount = bumpReconCounter(event.toolName, event.input);
+    if (reconCount > 0 && reconCount % 5 === 0) {
+      debug(`Recon counter: ${reconCount} read-only calls (limit ${RECON_READ_LIMIT})`);
+    }
     if (reconCount >= RECON_READ_LIMIT) {
       const msg = `Reconnaissance breaker: ${reconCount} read-only calls without a write — blocking`;
       debug(msg);

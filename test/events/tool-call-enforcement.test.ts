@@ -397,6 +397,18 @@ describe("Rule 5 — phase A blocks non-allowlisted project writes", () => {
     expect(result).toEqual({ block: true, reason: lang.refusalMessage.phaseA });
     expect(refusalData(pi)).toEqual([{ phase: "A", path: "", tool: "write" }]);
   });
+
+  it("allows go.mod writes (project config, net-new project setup)", () => {
+    const { result, pi, debug } = call({ state: { phase: "A" }, path: "go.mod" });
+    expect(result).toBeUndefined();
+    expect(debug).not.toHaveBeenCalled();
+    expect(pi.appendedEntries).toHaveLength(0);
+  });
+
+  it("allows go.sum writes (project config, net-new project setup)", () => {
+    const { result } = call({ state: { phase: "A" }, path: "go.sum" });
+    expect(result).toBeUndefined();
+  });
 });
 
 // ---------------------------------------------------------------------------

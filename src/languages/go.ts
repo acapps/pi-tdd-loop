@@ -25,7 +25,7 @@ const config: LanguageConfig = {
   sourceFilePattern: "*.go (non-test files)",
   testFilePattern: "*_test.go",
   isTestFile: (path: string) => /\b\w+_test\.go$/.test(path),
-  isPhaseAAllowed: (path: string) => /\b\w+_test\.go$/.test(path) || /\b\w+\.go$/.test(path),
+  isPhaseAAllowed: (path: string) => /\b\w+_test\.go$/.test(path) || /\b\w+\.go$/.test(path) || /go\.(mod|sum)$/.test(path),
 
   prompts: {
     promptTesterPhaseA: (specPath: string, _buildTool: string, workspaceRoot?: string) =>
@@ -143,7 +143,7 @@ ${specPath ? `Spec: ${specPath}\n` : ""}${claim ? delimitUntrusted(claim, "DISPU
   },
 
   refusalMessage: {
-    phaseA: "Phase A only: write test files and stubs. Cannot write other files.",
+    phaseA: "Phase A only: write test files, stubs, and project config (go.mod, go.sum). Cannot write source files.",
     negotiate: "Negotiation is discussion-only. No file writes allowed.",
     phaseC: "Phase B/C: you may only write source files (*.go). Cannot modify *_test.go.",
   },

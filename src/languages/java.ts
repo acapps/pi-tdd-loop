@@ -21,7 +21,7 @@ const config: LanguageConfig = {
   sourceFilePattern: "*.java (non-test files)",
   testFilePattern: "*Test.java",
   isTestFile: (path: string) => /\b\w+Test\.java$/.test(path),
-  isPhaseAAllowed: (path: string) => /\b\w+Test\.java$/.test(path) || /\b\w+\.java$/.test(path),
+  isPhaseAAllowed: (path: string) => /\b\w+Test\.java$/.test(path) || /\b\w+\.java$/.test(path) || /pom\.xml$/.test(path) || /build\.(gradle|gradle\.kts)$/.test(path),
 
   prompts: {
     promptTesterPhaseA: (specPath: string, buildTool: string, workspaceRoot?: string) =>
@@ -143,7 +143,7 @@ ${specPath ? `Spec: ${specPath}\n` : ""}${claim ? delimitUntrusted(claim, "DISPU
   },
 
   refusalMessage: {
-    phaseA: "Phase A only: write test files and stubs. Cannot write other files.",
+    phaseA: "Phase A only: write test files, stubs, and project config (pom.xml, build.gradle). Cannot write source files.",
     negotiate: "Negotiation is discussion-only. No file writes allowed.",
     phaseC: "Phase B/C: you may only write source files (non-test). Cannot modify test files.",
   },
