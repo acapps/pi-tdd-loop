@@ -124,6 +124,7 @@ function makeLangConfig() {
       promptTesterPhaseA: vi.fn((spec: string, bt: string, ws: string) => `A:${spec}:${bt}:${ws}`),
       promptTesterPhaseARestart: vi.fn((spec: string, bt: string, ws: string) => `A-R:${spec}:${bt}:${ws}`),
       promptTesterCompileRetry: vi.fn(() => "x"),
+      promptTesterZeroTestRetry: vi.fn(() => "x"),
       promptNegotiateAutoAdvance: vi.fn(() => "x"),
       promptWriterPhaseB: vi.fn((ws: string) => `B:${ws}`),
       promptWriterPhaseBContinue: vi.fn((sum: string, n: number, ws: string) => `B-C:${sum}:${n}:${ws}`),

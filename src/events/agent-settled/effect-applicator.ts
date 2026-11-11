@@ -311,6 +311,8 @@ export function buildRetryPrompt(
     case RETRY_PROMPTS.TESTER_COMPILE_RETRY:
     case RETRY_PROMPTS.TESTER_DISPUTE_FIX_COMPILE_FAIL:
       return lang.prompts.promptTesterCompileRetry(gateResult.compileError);
+    case RETRY_PROMPTS.TESTER_ZERO_TEST_RETRY:
+      return lang.prompts.promptTesterZeroTestRetry();
     case RETRY_PROMPTS.WRITER_PHASE_B_RETRY:
     case RETRY_PROMPTS.WRITER_DISPUTE_FIX_INCOMPLETE:
       return lang.prompts.promptWriterPhaseBContinue(summary, count, ws);

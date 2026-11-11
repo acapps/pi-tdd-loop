@@ -11,6 +11,8 @@ import { setupBranch } from "../git-workflow";
 import { commit } from "../commit";
 import { sendPrompt } from "../prompt";
 import { buildPhaseZeroPrompt } from "./loop";
+import type { LoopStateSnapshot } from "../state/checkpoint";
+import { createStateCheckpointManager } from "../state/checkpoint";
 import type { DebugFn } from "../events";
 
 export function resolveProjectCwd(specPath: string, cwd: string): string {
@@ -71,6 +73,29 @@ export function enterPhase0Review(
   ctx.ui.notify("Phase 0: Review findings before starting.", "info");
   ctx.ui.setStatus("loop", "Phase 0 — review pending");
   commit(state.current, pi, debug);
+
+  // fix-phase0-live-transcript-leaks: initialize the checkpoint manager
+  // and save a snapshot at Phase 0 entry.
+  const checkpointManager = createStateCheckpointManager("/tmp/loop-go-bak-state");
+  state.current.checkpointManager = checkpointManager;
+
+  // Save the initial Phase 0 state as a snapshot.
+  const initialState: LoopStateSnapshot = {
+    phase: "review",
+    round: state.current.round,
+    currentSpec: specText,
+    currentPlan: "",
+    task: "",
+    result: "",
+    metadata: "",
+    transcriptSummary: "",
+    snapshotId: "snap-phase0-initial",
+    timestamp: new Date().toISOString(),
+    agent: "",
+    transcriptTokenCount: 0,
+  };
+  checkpointManager.createSnapshot(initialState);
+
   sendPrompt(pi, reviewPrompt, state.current, debug);
 }
 

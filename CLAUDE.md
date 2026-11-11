@@ -43,6 +43,7 @@ Then I decide. Point = choice on purpose, not by default.
 - Every flag/command = API someone else must learn. Fewer, general beats many, narrow.
 - Works-on-my-spec-files does not equal works. Test with non-me examples.
 - When unsure: smaller, more general, more removable. Easy to grow later, hard to walk back.
+- Gate messages must be corrective, not just prohibitive. Re-state the role, state what to do, reference the spec. See internal/ruleset-role-compliance.md.
 
 ## TEST SPEED RULE (Tester prompt + all test authors)
 

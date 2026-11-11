@@ -67,6 +67,7 @@ function makeMockLang(): LanguageConfig {
       promptTesterPhaseA: () => "",
       promptTesterPhaseARestart: () => "",
       promptTesterCompileRetry: () => "",
+      promptTesterZeroTestRetry: () => "",
       promptNegotiateAutoAdvance: () => "",
       promptWriterPhaseB: vi.fn(() => "Phase B writer prompt"),
       promptWriterPhaseBContinue: () => "",

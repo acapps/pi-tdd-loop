@@ -15,6 +15,9 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { handleGateTransition, NO_GATE } from "../../../src/events/agent-settled/gate-transition";
+import { getNewTestFiles } from "../../../src/git-state";
+
+const getNewTestFilesMock = vi.mocked(getNewTestFiles);
 import { handleToolCall } from "../../../src/events/tool-call";
 import type { GateHandlerInput } from "../../../src/events/agent-settled/gate-transition";
 import type { LoopState, GateResult } from "../../../src/types";
@@ -29,6 +32,11 @@ vi.mock("../../../src/gates", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../../src/gates")>();
   return { ...actual, runGates: vi.fn() };
 });
+
+vi.mock("../../../src/git-state", () => ({
+  getNewTestFiles: vi.fn(() => ["test/example_test.go"]),
+  checkGitState: vi.fn(() => ({ clean: true, dirtyFiles: [], nonTestFiles: [], untrackedFiles: [], message: "clean" })),
+}));
 
 // checkScope is the only other I/O in the scope-check branch; mock it so the
 // skip-warning tests never touch git or the filesystem. readSpecForScopeCheck
@@ -134,6 +142,8 @@ let archiveSpy: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   runGatesMock.mockReset();
   runGatesMock.mockReturnValue(Promise.resolve(gate())); // default: all pass
+  getNewTestFilesMock.mockReset();
+  getNewTestFilesMock.mockReturnValue(["test/example_test.go"]); // default: tests exist
   // Default: spec unreadable (as before the mock existed) → scope check skips.
   checkScopeMock.mockReset();
   checkScopeMock.mockReturnValue({ ok: true, skipped: true, outOfScope: [], skipReason: "spec unreadable" });
@@ -232,6 +242,59 @@ describe("Phase A", () => {
     expect(ctx.ui.notify).toHaveBeenCalledWith("Phase A exhausted. Escalating to human.", "warning");
     expect(ctx.ui.setStatus).toHaveBeenCalledWith("loop", "escalated (Phase A exhausted)");
     expect(pi.sentMessages).toHaveLength(0);
+  });
+
+  // Zero-test gate (ruleset-role-compliance R3): Phase A produces no new
+  // test files → retry, not advance.
+  it("zero new test files, round < maxA → retry (not advance)", async () => {
+    getNewTestFilesMock.mockReturnValue([]);
+    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: true, allPassed: true, coverage: 0 })));
+    const { input, pi, ctx } = makeInput({ state: makeState({ phase: "A", round: 1 }) });
+    const result = await handleGateTransition(input);
+
+    expect(result.applied).toBe(true);
+    expect(result.state.phase).toBe("A"); // stays in A, does not advance to negotiate
+    expect(result.state.round).toBe(2);
+    expect(ctx.ui.setStatus).toHaveBeenCalledWith("loop", "Phase A — round 2");
+    expect(pi.sentMessages).toHaveLength(1);
+  });
+
+  // bug-phase-a-zero-test-prompt: the retry prompt must name the ACTUAL gate
+  // finding (zero test files), not claim a compile failure that did not occur
+  // (session 01a1c767: "Compilation failed" with an empty error block).
+  it("zero new test files → retry prompt names the zero-test finding, not a compile failure", async () => {
+    getNewTestFilesMock.mockReturnValue([]);
+    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: true, allPassed: true, coverage: 0 })));
+    const { input, pi } = makeInput({ state: makeState({ phase: "A", round: 1 }) });
+    await handleGateTransition(input);
+
+    expect(pi.sentMessages).toHaveLength(1);
+    const content = pi.sentMessages[0].content;
+    expect(content).toBe(GO.prompts.promptTesterZeroTestRetry());
+    expect(content).toContain("no new or modified test files");
+    expect(content).toContain("TESTER");
+    expect(content).not.toContain("Compilation failed");
+  });
+
+  it("zero new test files, round >= maxA → escalated", async () => {
+    getNewTestFilesMock.mockReturnValue([]);
+    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: true, allPassed: true, coverage: 0 })));
+    const { input, pi, ctx } = makeInput({ state: makeState({ phase: "A", round: 3, maxA: 3 }) });
+    const result = await handleGateTransition(input);
+
+    expect(result.applied).toBe(true);
+    expect(result.state.phase).toBe("escalated");
+    expect(ctx.ui.notify).toHaveBeenCalledWith("Phase A exhausted. Escalating to human.", "warning");
+    expect(pi.sentMessages).toHaveLength(0);
+  });
+
+  it("new test files exist → advance to negotiate (normal path)", async () => {
+    getNewTestFilesMock.mockReturnValue(["test/example_test.go"]);
+    runGatesMock.mockReturnValue(Promise.resolve(gate({ compile: true, allPassed: true, coverage: 85 })));
+    const { input } = makeInput({ state: makeState({ phase: "A", round: 1 }) });
+    const result = await handleGateTransition(input);
+
+    expect(result.state.phase).toBe("negotiate");
   });
 
   it("all pass → advance to negotiate: new state, writer negotiate prompt", async () => {

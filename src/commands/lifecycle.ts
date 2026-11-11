@@ -9,7 +9,6 @@ import { commit } from "../commit";
 import { startPhaseA } from "../phase-a";
 import { isIdleOrDone } from "../state-helpers";
 
-
 export function cmdCancel(
   state: { current: LoopState },
   pi: ExtensionAPI,
@@ -40,6 +39,11 @@ export function cmdApprove(
       if (state.current.phase !== "review") {
         ctx.ui.notify("Not in Phase 0 review. Run /loop <spec-path> to start.", "warning");
         return;
+      }
+
+      const checkpointManager = state.current.checkpointManager;
+      if (checkpointManager) {
+        checkpointManager.flush();
       }
 
       startPhaseA(state, pi, ctx, debug);

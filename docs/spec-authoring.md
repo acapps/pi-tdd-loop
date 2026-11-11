@@ -93,7 +93,12 @@ The assertion lives with the code that performs the behavior.
   removed (why the faithful change violates it)
 - New tests: one per newly pinned behavior (fallbacks, early returns,
   orderings, default branches; restored stale entry when the change touches
-  persisted state)
+  persisted state). "New tests: None" is only valid when it names the
+  verification mechanism instead — which existing tests pin the changed
+  behavior, and why the change is untestable at the unit level. A bare
+  "None" is a draft-quality Test Strategy: the Phase A zero-test gate will
+  fail the round and the retry prompt will name the finding, not a
+  compile error (internal/bug-phase-a-zero-test-prompt.md).
 - Untouched: files intentionally left alone, and until when. "All other
   tests kept unchanged" must name the mechanism that makes it true (e.g.
   optional fields keep old fixtures valid) — never bare.

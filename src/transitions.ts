@@ -32,6 +32,25 @@ export function computeTransition(
     return handleDisputeFixIncomplete(state, gate);
   }
   if (state.phase === "A" && gate.compile) {
+    // Zero-test check (ruleset-role-compliance R3): Phase A must produce
+    // at least one new or modified test file. If the count is 0, the gate
+    // passes vacuously — the Tester wrote no tests.
+    // bug-phase-a-zero-test-prompt: the retry prompt must name the ACTUAL
+    // gate finding (zero test files), not claim a compile failure that did
+    // not occur (session 01a1c767: empty error block, 3 misdiagnosed
+    // rounds, escalate).
+    if (gate.newTestFiles === 0) {
+      if (state.round < state.maxA) {
+        return {
+          state: incrementRound(state),
+          effect: retryEffect(state, RETRY_PROMPTS.TESTER_ZERO_TEST_RETRY),
+        };
+      }
+      return {
+        state: escalateTo(state, "A"),
+        effect: escalatedEffect("A"),
+      };
+    }
     return { state: advanceToNegotiate(state), effect: advanceEffect("negotiate", ADVANCE_PROMPTS.WRITER_NEGOTIATE) };
   }
   if (state.phase === "B") {

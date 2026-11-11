@@ -2,7 +2,7 @@
 
 export type Phase = "review" | "A" | "negotiate" | "B" | "C" | "done" | "escalated" | "idle";
 export type LanguageKey = "go" | "java" | "typescript";
-export type BuildTool = "maven" | "gradle" | "go";
+export type BuildTool = "maven" | "gradle" | "go" | "vitest" | "npm" | "pip" | "cargo";
 
 export interface LoopState {
   phase: Phase;
@@ -60,6 +60,17 @@ export interface LoopState {
   // /loop-restart (must NOT re-branch). `merged` flips true once the merge
   // into the mainline has landed.
   branch?: { name: string; base: string; merged: boolean };
+  // fix-phase0-live-transcript-leaks: bounded-state primitives for Phase 0.
+  // These fields are absent from the original LoopState and are added here
+  // to enable bounded transcript management and checkpoints.
+  checkpointManager?: import("./state/checkpoint").StateCheckpointManager;
+  tokenBudget?: number;
+  entriesBeforeCompact?: { id: string }[];
+  tokensInContext?: number;
+  transcriptTokenCount?: number;
+  checkpointManagerInit?: (bm: import("./state/checkpoint").StateCheckpointManager) => void;
+  _flush?: (state: LoopState) => string;
+  _current?: LoopState;
 }
 
 export interface FailingTest {
@@ -92,6 +103,7 @@ export interface GateResult {
   allPassed: boolean;   // THE verdict: test process exited 0 (spec: bug-gate-signal-integrity)
   coverage: number;
   failures: FailingTest[]; // display-only
+  newTestFiles?: number;   // Phase A: count of new/modified test files (ruleset-role-compliance R3)
 }
 
 // --- Golden project workspace (spec: golden-workspace-fix.md) ---
@@ -177,7 +189,7 @@ export interface ClarificationAddendum {
 
 export interface CommandContext {
   ui: {
-    notify: (message: string, level: string) => void;
+    notify: (message: string, level?: string) => void;
     setStatus: (key: string, text: string) => void;
   };
   sessionManager: {
@@ -190,4 +202,13 @@ export interface CommandContext {
 
 export function stateSummary(s: LoopState): string {
   return `Phase ${s.phase} round ${s.round}`;
+}
+
+// --- State checkpointing (fix: phase0-live-transcript-leaks) ---
+
+export interface StateCheckpointManagerInit {
+  // A factory function that creates and initializes the checkpoint manager.
+  // It should create the snapshot directory, load any existing snapshots,
+  // and return a snapshot of the current state.
+  init: (checkpointManager: import("./state/checkpoint").StateCheckpointManager) => void;
 }

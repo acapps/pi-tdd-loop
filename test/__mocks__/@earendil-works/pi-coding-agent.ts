@@ -42,12 +42,21 @@ export interface ExtensionAPI {
   registerShortcut(_shortcut: string, _options: any): void;
   registerFlag(_name: string, _options: any): void;
   getFlag(_name: string): boolean | string | undefined;
-  registerMessageRenderer<T>(_customType: string, _renderer: any): void;
+  registerMessageRenderer(_customType: string, _renderer: any): void;
   registerMarkdownTransformer(_transformer: any): void;
-  registerEntryRenderer<T>(_customType: string, _renderer: any): void;
-  sendMessage<T>(_message: any, _options?: any): void;
+  registerEntryRenderer(_customType: string, _renderer: any): void;
+  sendMessage(_message: any, _options?: any): void;
   sendUserMessage(content: string, options?: { deliverAs?: "steer" | "followUp" }): void;
-  appendEntry<T>(customType: string, data?: T): void;
+  appendEntry(customType: string, data?: any): void;
+  clearActiveEntries(): void;
+  cancelCurrentEntry(): void;
+  compact(): void;
+  enterBranch(_name: string): void;
+  leaveBranch(): void;
+  resetBranch(): void;
+  off(_event: string, _handler: (...args: any[]) => any): void;
+  once(_event: string, _handler: (...args: any[]) => any): void;
+  emit(_event: string, ..._args: any[]): void;
   setSessionName(_name: string): void;
   getSessionName(): string | undefined;
   setLabel(_entryId: string, _label: string | undefined): void;
@@ -159,6 +168,16 @@ export function createMockExtensionAPI(): MockExtensionAPI {
     appendEntry(customType: string, data?: any): void {
       appendedEntries.push({ customType, data });
     },
+
+    clearActiveEntries(): void {},
+    cancelCurrentEntry(): void {},
+    compact(): void {},
+    enterBranch(_name: string): void {},
+    leaveBranch(): void {},
+    resetBranch(): void {},
+    off(_event: string, _handler: (...args: any[]) => any): void {},
+    once(_event: string, _handler: (...args: any[]) => any): void {},
+    emit(_event: string, ..._args: any[]): void {},
 
     setSessionName: () => {},
     getSessionName: () => undefined,

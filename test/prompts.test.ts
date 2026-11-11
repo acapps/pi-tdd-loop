@@ -30,6 +30,39 @@ describe("Phase A prompts (Go)", () => {
     expect(prompt).toContain("Compilation failed");
     expect(prompt).toContain("type mismatch");
   });
+
+  // bug-phase-a-zero-test-prompt: corrective (R1) — role re-stated, actual
+  // gate finding named, escape hatch for a spec that genuinely needs no
+  // new tests.
+  it("promptTesterZeroTestRetry is corrective: role + finding + negotiate escape hatch", () => {
+    const prompt = prompts.promptTesterZeroTestRetry();
+    expect(prompt).toContain("no new or modified test files");
+    expect(prompt).toContain("TESTER");
+    expect(prompt).toContain("Test Strategy");
+    expect(prompt).toContain("negotiate_propose");
+    expect(prompt).not.toContain("Compilation failed");
+  });
+
+  it("promptTesterZeroTestRetry names the Go test pattern", () => {
+    expect(prompts.promptTesterZeroTestRetry()).toContain("*_test.go");
+  });
+});
+
+describe("promptTesterZeroTestRetry (all languages)", () => {
+  it.each(["go", "java", "typescript"] as const)("%s: corrective, role + finding + escape hatch", (key) => {
+    const prompt = getLanguageConfig(key).prompts.promptTesterZeroTestRetry();
+    expect(prompt).toContain("no new or modified test files");
+    expect(prompt).toContain("You are the TESTER");
+    expect(prompt).toContain("Test Strategy");
+    expect(prompt).toContain("negotiate_propose");
+    expect(prompt).not.toContain("Compilation failed");
+  });
+
+  it("each language names its own test pattern", () => {
+    expect(getLanguageConfig("go").prompts.promptTesterZeroTestRetry()).toContain("*_test.go");
+    expect(getLanguageConfig("java").prompts.promptTesterZeroTestRetry()).toContain("*Test.java");
+    expect(getLanguageConfig("typescript").prompts.promptTesterZeroTestRetry()).toContain("*.test.ts");
+  });
 });
 
 describe("Phase A prompts (Java)", () => {

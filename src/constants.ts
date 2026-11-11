@@ -11,6 +11,7 @@ export const PHASES = ["review", "A", "negotiate", "B", "C", "done", "escalated"
 
 export const RETRY_PROMPTS = {
   TESTER_COMPILE_RETRY: "tester_compile_retry",
+  TESTER_ZERO_TEST_RETRY: "tester_zero_test_retry",
   WRITER_PHASE_B_RETRY: "writer_phase_b_retry",
   CLEANER_RETRY: "cleaner_retry",
   WRITER_DISPUTE_FIX_INCOMPLETE: "writer_dispute_fix_incomplete",

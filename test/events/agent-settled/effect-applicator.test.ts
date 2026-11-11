@@ -95,6 +95,7 @@ function makeMockLang(): any {
     isTestFile: (path: string) => path.endsWith("_test.go"),
     prompts: {
       promptTesterCompileRetry: vi.fn((err: string) => `Compile error: ${err}`),
+      promptTesterZeroTestRetry: vi.fn(() => "Zero test retry"),
       promptWriterPhaseB: vi.fn(() => "Phase B"),
       promptWriterPhaseBContinue: vi.fn((summary: string, count: number) => `Continue: ${count} failures\n${summary}`),
       promptCleanerRetry: vi.fn((summary: string, count: number) => `Cleaner retry: ${count} failures\n${summary}`),

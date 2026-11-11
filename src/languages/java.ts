@@ -72,6 +72,16 @@ ${UNTRUSTED_DATA_GUARD}
 
 When done, stop producing tool calls.`,
 
+    promptTesterZeroTestRetry: () =>
+`Phase A gate: no new or modified test files detected.
+
+You are the TESTER. Write contract tests (*Test.java) — the gate cannot advance until at least one new or modified test file exists.
+Read the spec's Test Strategy section. It defines exactly which tests to write; write those.
+
+If the spec genuinely requires no new tests (e.g. a refactor pinned by existing tests), do not stop — raise it via negotiate_propose so the test contract is agreed before the loop burns its retry budget.
+
+When the test files are written, stop producing tool calls.`,
+
     promptNegotiateAutoAdvance: (negotiateResolution: string, workspaceRoot?: string) =>
 `Advancing to Phase B without explicit approval. Write Java source files.
 
@@ -143,9 +153,9 @@ ${specPath ? `Spec: ${specPath}\n` : ""}${claim ? delimitUntrusted(claim, "DISPU
   },
 
   refusalMessage: {
-    phaseA: "Phase A only: write test files, stubs, and project config (pom.xml, build.gradle). Cannot write source files.",
-    negotiate: "Negotiation is discussion-only. No file writes allowed.",
-    phaseC: "Phase B/C: you may only write source files (non-test). Cannot modify test files.",
+    phaseA: "You are the TESTER. Write contract tests (*Test.java) and stub .java files — not source files. Read the spec's Test Strategy section for your contract. This file is outside Phase A scope.",
+    negotiate: "Negotiation is discussion-only. No file writes allowed. Use negotiate_propose to propose a resolution.",
+    phaseC: "You are the WRITER (Phase B) or CLEANER (Phase C). Write source files (*.java, non-test) — not test files. Test files (*Test.java) are owned by the Tester. Dispute wrong tests via negotiate_propose.",
   },
 };
 

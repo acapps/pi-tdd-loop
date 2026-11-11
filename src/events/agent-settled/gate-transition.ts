@@ -13,6 +13,8 @@ import type { EventCtx } from "../index";
 import type { LanguageConfig } from "../../languages";
 import { runGates } from "../../gates";
 import { checkScope, readSpecForScopeCheck, getGitUntrackedFiles } from "../../scope-check";
+import { getLanguageConfig } from "../../languages";
+import { getNewTestFiles } from "../../git-state";
 import { getLiveMetrics, accumulateGate } from "../../metrics";
 import * as T from "../../transitions";
 import { applyEffect } from "./effect-applicator";
@@ -113,6 +115,23 @@ export async function handleGateTransition(
           "Scope check skipped: the active spec has no parseable ## Inventory file list — out-of-scope edits are not being gated this run.",
           "warning",
         );
+      }
+    }
+
+    // Phase A zero-test check: the gate must verify that at least one new or
+    // modified test file exists. Without this, the Tester can produce zero
+    // tests and the gate passes vacuously (session 01a0f4db).
+    // Returns null when git is unavailable — in that case, newTestFiles stays
+    // undefined and the transition proceeds as before (backwards compatible).
+    if (gate && phase === "A" && gate.compile) {
+      const newTests = getNewTestFiles(gateCwd, language);
+      if (newTests !== null) {
+        gate.newTestFiles = newTests.length;
+        if (newTests.length === 0) {
+          debug(`Phase A zero-test check: no new test files detected`);
+        } else {
+          debug(`Phase A zero-test check: ${newTests.length} new/modified test file(s)`);
+        }
       }
     }
 
