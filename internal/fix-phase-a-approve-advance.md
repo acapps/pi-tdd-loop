@@ -2,7 +2,7 @@
 
 ## Problem
 
-**Verified current state as of writing (commit 32cc09d):**
+**Verified current state as of writing (commit cd9abf7):**
 
 When the Tester calls `negotiate_propose("approve")` in Phase A, the loop
 enters `escalated` state and pauses, telling the human to run `/loop-continue`
@@ -59,19 +59,27 @@ surfaced verbatim, the loop pauses, the human decides via `/loop-continue`.
 
 ## Interface
 
-No signature changes. The change is in the *handler* for Phase A's `negotiate_propose`:
-
 - `src/tools/policy.ts`: `PROPOSE_POLICY.A` changes from `"escalate"` to
   `"phaseA"`. The `ProposePolicy` type union gains one value:
   `"phase0" | "negotiate" | "dispute" | "escalate" | "reject" | "phaseA"`.
-- `src/tools/phase0.ts`: new function `executePhaseAApprove` (or inline in
-  `handlePropose`) that calls `transitionToPhaseB` (the same helper used by
-  negotiate → Phase B).
+- `src/tools/phase0.ts`: new function `executePhaseAApprove`. Calls
+  `transitionToPhaseB` (the shared helper), then **overrides**
+  `state.current.lastPhase = "A"` before the helper persists. Rationale:
+  `resetForPhaseB` (called inside `transitionToPhaseB`) hardcodes
+  `lastPhase = "negotiate"` (`src/tools/state-io.ts:34`) because the helper
+  was written for the negotiate → B path. For the Phase A approve path, the
+  semantic origin is `"A"`, and the scope-check baseline re-capture
+  (`src/tools/state-io.ts:89`, `src/events/agent-settled/effect-applicator.ts:115`)
+  already lists `"A"` as a valid origin — so the override is safe and correct.
+- `src/tools/types.ts`: new helper `isPhaseAApproval(plan: string): boolean`,
+  defined as `plan.trim().toLowerCase() === "approve"`. This is a **new**
+  helper, not a reuse of `isApproval` — see Behavior for the rationale.
 
-**Persisted state:** no new fields. `phase`, `lastPhase`, `round`,
-`turnsThisPhase`, `justTransitioned`, `dispute` are all set by
-`transitionToPhaseB` / `resetForPhaseB` (existing, verified in
-`src/tools/state-io.ts:20-41`).
+**Persisted state:** no new fields. `phase`, `round`, `turnsThisPhase`,
+`justTransitioned`, `dispute` are set by `transitionToPhaseB` /
+`resetForPhaseB` (existing, verified in `src/tools/state-io.ts:20-41`).
+`lastPhase` is set by `resetForPhaseB` to `"negotiate"`, then **overridden**
+to `"A"` by `executePhaseAApprove` before `persistState` runs.
 
 ## Behavior
 
@@ -79,11 +87,33 @@ No signature changes. The change is in the *handler* for Phase A's `negotiate_pr
 
 | Condition | Action | State after | Effect |
 |---|---|---|---|
-| `plan === "approve"` (case-insensitive, trimmed) | `executePhaseAApprove` | `phase="B"`, `lastPhase="A"`, `round=1`, `turnsThisPhase=1`, `justTransitioned=true`, `dispute={status:"none"}` | `advance` to Phase B, `notify="Approved — moving to Phase B."`, `prompt=WRITER_PHASE_B` |
-| `plan !== "approve"` | `executeEscalatePropose` (existing) | `phase="escalated"`, `lastPhase="A"` | `escalated`, `notify=<plan verbatim>`, `status="escalated (proposal surfaced)"` |
+| `isPhaseAApproval(plan)` is true | `executePhaseAApprove` | `phase="B"`, `lastPhase="A"`, `round=1`, `turnsThisPhase=1`, `justTransitioned=true`, `dispute={status:"none"}` | `advance` to Phase B, `notify="Approved — moving to Phase B."`, `prompt=WRITER_PHASE_B` |
+| `isPhaseAApproval(plan)` is false | `executeEscalatePropose` (existing) | `phase="escalated"`, `lastPhase="A"` | `escalated`, `notify=<plan verbatim>`, `status="escalated (proposal surfaced)"` |
 
-**Evaluation order:** check `plan.trim().toLowerCase() === "approve"` first.
-If true, advance. Otherwise, escalate (existing path, unchanged).
+**Evaluation order:** `isPhaseAApproval(plan)` is checked first in the
+`"phaseA"` case of `handlePropose`. If true, `executePhaseAApprove`.
+Otherwise, `executeEscalatePropose` (existing path, unchanged).
+
+**Approve-detection predicate:**
+
+`isPhaseAApproval(plan: string): boolean` in `src/tools/types.ts`:
+
+```ts
+export function isPhaseAApproval(plan: string): boolean {
+  return plan.trim().toLowerCase() === "approve";
+}
+```
+
+This is a **new helper**, deliberately distinct from `isApproval`
+(`src/tools/types.ts:56`, which accepts `"approve" | "approved"` with no
+trim or case-folding). Rationale: `isApproval` is for `negotiate_review`
+decisions (a different tool, a different semantic — the human's review
+verdict). `isPhaseAApproval` is for `negotiate_propose` in Phase A (the
+Tester's self-approval of the contract). The two paths have different
+input sources (human-typed review decision vs. LLM-generated proposal text),
+so they warrant different predicates. The Phase 0 path
+(`handlePropose` case `"phase0"`, `plan === "approve"`) is **unchanged** —
+it is not in scope for this spec.
 
 **Verbatim pins:**
 
@@ -91,20 +121,54 @@ If true, advance. Otherwise, escalate (existing path, unchanged).
   `transitionToPhaseB` in `src/tools/state-io.ts:25`).
 - `prompt` key: `ADVANCE_PROMPTS.WRITER_PHASE_B` (`"writer_phase_b"`).
 - `status`: `"Phase B — round 1"`.
+- `ToolResult` text on approve: `"Approved. Moving to Phase B."` — the
+  signal to the Tester/agent that the tool call succeeded. (Distinct from
+  the `notify` string, which is for the human.)
 - `ESCALATE_NOTICE` (for non-approve): unchanged — `"Your proposal has been
   surfaced to the human and the loop is paused. Wait for the human's decision
   — do not take further action. To resume: /loop-continue (or /loop-restart
   <phase>)."`.
 
-**Side-effect contract (approve path):**
+**Side-effect contract (approve path), in order:**
 
 1. `pi.appendEntry("loop-negotiate", { phase: "A", round: <current>, action: "approve", text: plan.slice(0, 500) })`
-2. `resetForPhaseB(state)` — sets `phase="B"`, `lastPhase="A"`, `round=1`, `turnsThisPhase=1`, `justTransitioned=true`, `dispute={status:"none"}`, clears `negotiateReprompted`, `negotiateProposed`, `negotiateFeedback`, `negotiateResolution`.
-3. `persistState(state, pi, debug)` — commits the new state.
-4. `ctx.ui.setStatus("loop", "Phase B — round 1")`.
-5. Re-capture scope-check baseline via `captureGitBaseline(getWorkspaceRoot(specPath))` (existing logic in `applyTransitionEffect`, triggered by `effect.type === "advance" && effect.phase === "B" && lastPhase === "A"`).
-6. `ctx.ui.notify("Approved — moving to Phase B.", "info")`.
-7. `deliverAdvancePrompt(pi, state.current, lang, effect, debug)` — sends the Writer the Phase B prompt.
+2. `transitionToPhaseB(state, pi, ctx, debug)` — internally calls
+   `resetForPhaseB(state)` (sets `phase="B"`, `lastPhase="negotiate"`,
+   `round=1`, `turnsThisPhase=1`, `justTransitioned=true`,
+   `dispute={status:"none"}`, clears `negotiateReprompted`,
+   `negotiateProposed`, `negotiateFeedback`, `negotiateResolution`), then
+   `applyTransitionEffect` (persists, sets status, re-captures scope-check
+   baseline, notifies, delivers advance prompt).
+3. **Override:** `state.current.lastPhase = "A"` — corrects the
+   `resetForPhaseB` hardcode. This runs AFTER `transitionToPhaseB` returns
+   (i.e., after the state is already persisted with `lastPhase="negotiate"`).
+   The override is a second mutation that must be persisted: call
+   `persistState(state, pi, debug)` again after the override.
+
+   **Wait — this is wrong.** `transitionToPhaseB` calls `persistState`
+   internally (via `applyTransitionEffect`). If we override `lastPhase`
+   after `transitionToPhaseB` returns, we need a second `persistState`
+   call. This is correct but slightly unusual. Alternative: extract the
+   `resetForPhaseB` logic, set `lastPhase="A"` BEFORE calling
+   `applyTransitionEffect`, so there is only one persist.
+
+   **Chosen approach:** `executePhaseAApprove` does NOT call
+   `transitionToPhaseB`. Instead it replicates the two steps:
+   (a) `resetForPhaseB(state)` — but with `lastPhase` set to `"A"` instead
+   of `"negotiate"`. Since `resetForPhaseB` is private to `state-io.ts`,
+   the cleanest path is: call `transitionToPhaseB` (which does the full
+   sequence including persist + notify + deliverAdvancePrompt), then
+   override `lastPhase = "A"` and call `persistState` again. Two persists
+   is acceptable — the second one is a correction, not a new transition.
+
+   **Final sequence:**
+   1. `pi.appendEntry("loop-negotiate", ...)` (action: "approve")
+   2. `transitionToPhaseB(state, pi, ctx, debug)` — full helper, one persist
+   3. `state.current.lastPhase = "A"` — override
+   4. `persistState(state, pi, debug)` — second persist (correction)
+   5. `return { content: [{ text: "Approved. Moving to Phase B." }] }`
+
+4. (steps 2-5 above are the full sequence; no additional side effects)
 
 **Quirks list:**
 
@@ -115,6 +179,10 @@ If true, advance. Otherwise, escalate (existing path, unchanged).
 - **Current behavior, do not fix:** `negotiate_review` in Phase A is still
   `"reject"` (unchanged). The Tester does not call `negotiate_review` in Phase
   A; the human does via `/loop-approve` (which is a command, not a tool).
+- **Current behavior, do not fix:** the Phase 0 approve path
+  (`handlePropose` case `"phase0"`, `plan === "approve"`) uses a bare string
+  comparison, not `isPhaseAApproval`. This is intentional — Phase 0 is a
+  different semantic (human review verdict) and is not in scope.
 
 **Intended shifts:**
 
@@ -122,14 +190,20 @@ If true, advance. Otherwise, escalate (existing path, unchanged).
   `"A × propose('approve') → still escalate"` is **intentionally invalidated**
   by this change. It must be rewritten to assert the new behavior (advance to
   Phase B, not escalate). This is not a quirk; it is the bug being fixed.
+- The scope-check baseline re-capture in `src/tools/state-io.ts:89` and
+  `src/events/agent-settled/effect-applicator.ts:115` checks
+  `lastPhase === "A" || lastPhase === "negotiate"`. After this change, the
+  Phase A approve path will have `lastPhase="A"` (not `"negotiate"`), so the
+  re-capture will fire on the `"A"` branch. This is the correct behavior —
+  the baseline should be re-captured when entering Phase B from Phase A.
 
 **Ownership:**
 
 - `src/tools/phase0.ts` owns `executePhaseAApprove` (new function).
 - `src/tools/policy.ts` owns `PROPOSE_POLICY` (the `A` entry changes).
 - `src/tools/negotiate.ts` owns the dispatcher (`handlePropose` — the `switch`
-  on `PROPOSE_POLICY[phase]` gains a new case or the `A` case special-cases
-  approve before falling through).
+  gains a `"phaseA"` case).
+- `src/tools/types.ts` owns `isPhaseAApproval` (new helper).
 - `test/tools-split/behavior.test.ts` asserts the new behavior.
 
 ## Inventory
@@ -138,41 +212,27 @@ If true, advance. Otherwise, escalate (existing path, unchanged).
 
 | File | Change |
 |---|---|
-| `src/tools/policy.ts` | `PROPOSE_POLICY.A`: `"escalate"` → `"phaseA"` (new value) or keep `"escalate"` and special-case in handler (see Implementation Note) |
-| `src/tools/phase0.ts` | Add `executePhaseAApprove` function |
-| `src/tools/negotiate.ts` | `handlePropose`: add `"phaseA"` case to the switch (or special-case `A` + `"approve"` before the switch) |
-| `test/tools-split/behavior.test.ts` | Rewrite the `"A × propose('approve')"` test; add a test for non-approve in Phase A (should still escalate) |
+| `src/tools/policy.ts` | `PROPOSE_POLICY.A`: `"escalate"` → `"phaseA"`; `ProposePolicy` type union gains `"phaseA"` |
+| `src/tools/phase0.ts` | Add `executePhaseAApprove` function; import `transitionToPhaseB` from `./state-io` (already imports `persistState` from same module) |
+| `src/tools/negotiate.ts` | `handlePropose`: add `"phaseA"` case to the switch; import `executePhaseAApprove` from `./phase0`; import `isPhaseAApproval` from `./types` |
+| `src/tools/types.ts` | Add `isPhaseAApproval` helper |
+| `test/tools-split/behavior.test.ts` | Rewrite the `"A × propose('approve')"` test; add 4 new tests |
 
-**Implementation Note:** Two approaches are viable:
-
-1. **New policy value:** `PROPOSE_POLICY.A = "phaseA"`, new case in
-   `handlePropose` that checks `plan === "approve"` → `executePhaseAApprove`,
-   else → `executeEscalatePropose`. This is cleaner but changes the policy
-   type union.
-
-2. **Special-case in existing `"escalate"` case:** In `handlePropose`, when
-   `phase === "A"` and `plan.trim().toLowerCase() === "approve"`, call
-   `executePhaseAApprove` instead of `executeEscalatePropose`. The policy
-   mapping stays `"escalate"`, but the handler branches. This is less clean
-   (the policy name lies) but avoids a type change.
-
-**Recommendation:** Approach 1. The policy value should match what the handler
-does. The type union `ProposePolicy` gains one value; the switch gains one
-case. The `"escalate"` case is unchanged (it still handles `escalated` phase
-and non-approve Phase A proposals via the fallthrough).
-
-Wait — re-reading: if `PROPOSE_POLICY.A = "phaseA"`, then non-approve
-proposals in Phase A hit the `"phaseA"` case, which must then escalate. So
-the `"phaseA"` case is: `if (plan === "approve") → advance; else → escalate`.
-This is correct and explicit.
+**Implementation Note:** `PROPOSE_POLICY.A = "phaseA"`. The `"phaseA"` case
+in `handlePropose` is: `if (isPhaseAApproval(plan)) → executePhaseAApprove;
+else → executeEscalatePropose`. The `"escalate"` case is unchanged (it still
+handles the `escalated` phase). Non-approve Phase A proposals hit the
+`"phaseA"` case and fall through to `executeEscalatePropose` — same behavior
+as today, just routed through a different case label.
 
 **Imports:**
 
 | File | Added | Removed |
 |---|---|---|
 | `src/tools/phase0.ts` | `import { persistState, transitionToPhaseB } from "./state-io"` (was: `persistState` only) | — |
-| `src/tools/negotiate.ts` | `import { executePhaseAApprove } from "./phase0"` | — |
+| `src/tools/negotiate.ts` | `import { executePhaseAApprove } from "./phase0"`; `import { isPhaseAApproval } from "./types"` | — |
 | `src/tools/policy.ts` | — | — |
+| `src/tools/types.ts` | — (no new imports; `isPhaseAApproval` is a pure string function) | — |
 
 **Call sites:**
 
@@ -183,16 +243,18 @@ This is correct and explicit.
 
 - `executePhaseAApprove` is exported from `src/tools/phase0.ts` (for the
   dispatcher to import). Not a public API — internal only.
+- `isPhaseAApproval` is exported from `src/tools/types.ts` (for the dispatcher
+  to import). Not a public API — internal only.
 
 ## Test Strategy
 
-**Baseline:** 1801/1801 passing as of commit 32cc09d.
+**Baseline:** 1801/1801 passing as of commit cd9abf7.
 
 **Per-test disposition:**
 
 | Test | File | Disposition |
 |---|---|---|
-| `"A × propose('approve') → still escalate (no hidden auto-advance from Phase A)"` | `test/tools-split/behavior.test.ts:250` | **Rewritten** — old assertion: `phase === "escalated"`, `result` contains `"Wait for the human's decision"`. New assertion: `phase === "B"`, `lastPhase === "A"`, `round === 1`, `notify` called with `"Approved — moving to Phase B."`, `result` does NOT contain `"Wait for the human's decision"`. |
+| `"A × propose('approve') → still escalate (no hidden auto-advance from Phase A)"` | `test/tools-split/behavior.test.ts:250` | **Rewritten** — old assertion: `phase === "escalated"`, `result` contains `"Wait for the human's decision"`. New assertion: `phase === "B"`, `lastPhase === "A"`, `round === 1`, `notify` called with `"Approved — moving to Phase B."`, `result.content[0].text` is `"Approved. Moving to Phase B."`. |
 | `"A × propose → surfaced to human, loop paused (escalated)"` (the `it.each` test at line 224) | `test/tools-split/behavior.test.ts:224` | **Kept** — this test uses a non-approve plan (`"The spec genuinely needs no new tests"`), so it still escalates. No change. |
 
 **New tests:**
@@ -203,18 +265,20 @@ This is correct and explicit.
    Asserts `ui.notify` called with `"Approved — moving to Phase B."` and
    `"info"` level. Asserts `ui.setStatus` called with `"Phase B — round 1"`.
    Asserts the `loop-negotiate` entry has `action: "approve"`.
-2. `"A × propose('APPROVE') → advances (case-insensitive)"` — same as above
-   but with uppercase input.
-3. `"A × propose('approve  ') → advances (trimmed)"` — same as above with
-   trailing spaces.
-4. `"A × propose('not approve') → still escalates"` — asserts `phase="escalated"`,
-   `lastPhase="A"`, `notify` contains the plan verbatim, `result` contains
-   `"Wait for the human's decision"`.
+   Asserts `result.content[0].text` is `"Approved. Moving to Phase B."`.
+2. `"A × propose('APPROVE') → advances (case-insensitive)"` — same as #1
+   but with uppercase input. Asserts `phase === "B"`.
+3. `"A × propose('approve  ') → advances (trimmed)"` — same as #1 with
+   trailing spaces. Asserts `phase === "B"`.
+4. `"A × propose('not approve') → still escalates"` — asserts
+   `phase="escalated"`, `lastPhase="A"`, `notify` contains the plan verbatim,
+   `result.content[0].text` contains `"Wait for the human's decision"`.
 
 **Untouched:** all other tests in `test/tools-split/behavior.test.ts` and the
 full suite. The change is isolated to the Phase A propose handler; no other
 phase or tool is affected. Mechanism: the `PROPOSE_POLICY` mapping for other
-phases is unchanged, and `executeEscalatePropose` is unchanged.
+phases is unchanged, `executeEscalatePropose` is unchanged, and `isApproval`
+(negotiate_review) is unchanged.
 
 **Live-toolchain rules:** N/A — no tests spawn real tools. All tests mock
 `pi`, `ctx.ui`, and use in-memory state.
@@ -224,28 +288,34 @@ phases is unchanged, and `executeEscalatePropose` is unchanged.
 | File | Change |
 |---|---|
 | `src/tools/policy.ts` | `PROPOSE_POLICY.A` value changed; `ProposePolicy` type union gains `"phaseA"` |
-| `src/tools/phase0.ts` | `executePhaseAApprove` added |
-| `src/tools/negotiate.ts` | `handlePropose` switch gains `"phaseA"` case |
+| `src/tools/phase0.ts` | `executePhaseAApprove` added; import line updated |
+| `src/tools/negotiate.ts` | `handlePropose` switch gains `"phaseA"` case; 2 imports added |
+| `src/tools/types.ts` | `isPhaseAApproval` added |
 | `test/tools-split/behavior.test.ts` | 1 test rewritten, 4 tests added |
 
 ## Acceptance Criteria
 
-1. `npx vitest run` passes (1801 + 4 new = 1805 tests, or 1804 if the rewritten
-   test replaces one).
+1. `npx vitest run` passes (1801 + 4 new = 1805 tests; the rewritten test
+   replaces one, so net +4).
 2. `npx tsc --noEmit` is clean.
 3. `grep -rn 'executePhaseAApprove' src/` returns exactly 2 hits: the definition
    in `phase0.ts` and the import in `negotiate.ts`.
-4. `grep -n '"phaseA"' src/tools/policy.ts` returns exactly 1 hit (the
-   `PROPOSE_POLICY.A` entry).
-5. `grep -n 'executePhaseAApprove' test/` returns 0 hits (the function is
+4. `grep -rn 'isPhaseAApproval' src/` returns exactly 3 hits: the definition
+   in `types.ts`, the import in `negotiate.ts`, and the call in `negotiate.ts`.
+5. `grep -n '"phaseA"' src/tools/policy.ts` returns exactly 2 hits: the type
+   union and the `PROPOSE_POLICY.A` entry.
+6. `grep -n 'executePhaseAApprove' test/` returns 0 hits (the function is
    internal; tests exercise it via `runPropose`, not by importing it directly).
-6. The test `"A × propose('approve') → advances to Phase B round 1"` passes
-   and asserts `state.current.phase === "B"` (not `"escalated"`).
+7. The test `"A × propose('approve') → advances to Phase B round 1"` passes
+   and asserts `state.current.phase === "B"` and `state.current.lastPhase === "A"`.
 
 ## Dependencies
 
 - `transitionToPhaseB` in `src/tools/state-io.ts` — existing, verified. Called
   by the new `executePhaseAApprove`.
+- `persistState` in `src/tools/state-io.ts` — existing, verified. Called twice
+  by `executePhaseAApprove` (once via `transitionToPhaseB`, once for the
+  `lastPhase` correction).
 - `captureGitBaseline` in `src/scope-check.ts` — existing (commit 32cc09d).
   Called by `applyTransitionEffect` when `effect.type === "advance" &&
   effect.phase === "B" && lastPhase === "A"`.
@@ -255,4 +325,7 @@ phases is unchanged, and `executeEscalatePropose` is unchanged.
 
 | # | Severity | Finding | Disposition |
 |---|---|---|---|
-| 1 | needs-doc | The `PROPOSE_POLICY` type union (`ProposePolicy`) is defined in `policy.ts` but not explicitly listed in this spec's Interface section. The spec should pin the exact union: `"phase0" \| "negotiate" \| "dispute" \| "escalate" \| "reject" \| "phaseA"`. | Accepted — added to Interface. |
+| 1 | needs-doc | The `PROPOSE_POLICY` type union (`ProposePolicy`) is not explicitly listed in the Interface section. | Accepted — pinned the full union in Interface. |
+| 2 | blocker | Spec claims `resetForPhaseB` sets `lastPhase="A"`. It does not — `state-io.ts:34` hardcodes `"negotiate"`, pinned by `behavior.test.ts:397`. | Accepted — spec now documents the override: `executePhaseAApprove` calls `transitionToPhaseB` (which persists with `lastPhase="negotiate"`), then overrides `lastPhase="A"` and calls `persistState` again. The two-persist sequence is pinned in the side-effect contract. |
+| 3 | needs-doc | Approve-detection predicate inconsistent with `isApproval` (no trim/case-fold in `isApproval`; spec's tests demand both). | Accepted — new helper `isPhaseAApproval` in `types.ts`, defined as `plan.trim().toLowerCase() === "approve"`. Documented as deliberately distinct from `isApproval` (different tool, different input source). Phase 0 path unchanged. |
+| 4 | needs-doc | `ToolResult` text not pinned. | Accepted — pinned as `"Approved. Moving to Phase B."` (distinct from the `notify` string). Added to test assertions. |
