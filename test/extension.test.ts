@@ -1402,9 +1402,11 @@ describe("Phase × Tool policy matrix", () => {
     expect(true).toBe(true);
   });
 
-  // --- Rows 5-12: A/C/done/escalated/idle × {propose,review} → reject ---
+  // --- Rows 5-8: A/C × {propose,review} ---
+  // A × propose is now the ESCALATE row (bug-phase-a-zero-test-prompt §6):
+  // the plan is surfaced to the human and the loop pauses. C × propose and
+  // A/C × review still reject.
   const rejectPhases: Array<[string, string]> = [
-    ["A", "Phase A"],
     ["C", "Phase C"],
   ];
 
@@ -1455,6 +1457,30 @@ describe("Phase × Tool policy matrix", () => {
       expect(refusals[refusals.length - 1].data.tool).toBe("negotiate_review");
     });
   }
+
+  // --- A × propose → escalate (bug-phase-a-zero-test-prompt §6) ---
+  it("A × propose → surfaced to human, loop paused (escalated)", async () => {
+    const restartHandler = findCommand(api, "loop-restart");
+    await restartHandler("A", api._mockCtx);
+
+    const tool = findTool(api, "negotiate_propose");
+    const result = await tool.execute(
+      "call-1", { plan: "The spec genuinely needs no new tests" }, undefined, undefined, api._mockExecCtx,
+    );
+
+    // Surfaced verbatim to the human; loop paused.
+    expect(api._mockCtx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("The spec genuinely needs no new tests"),
+      "warning",
+    );
+    expect(api._mockCtx.ui.setStatus).toHaveBeenCalledWith("loop", "escalated (proposal surfaced)");
+    expect(result.content[0].text).toContain("Wait for the human's decision");
+
+    // Logged as an escalate action.
+    const logs = api.appendedEntries.filter((e: any) => e.customType === "loop-negotiate");
+    expect(logs.length).toBeGreaterThanOrEqual(1);
+    expect(logs[logs.length - 1].data.action).toBe("escalate");
+  });
 
   // --- Rows 13-16: negotiate/B × {propose,review} → existing behavior spot-checks ---
 

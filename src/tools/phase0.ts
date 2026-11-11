@@ -4,6 +4,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { startPhaseA } from "../phase-a";
 import { persistState } from "./state-io";
+import { ESCALATE_NOTICE } from "./policy";
 import type { StateRef, ToolCtx, ToolResult, Debug } from "./types";
 
 /**
@@ -57,4 +58,35 @@ export function executeReject(
     reason: "not-available-in-phase",
   });
   return { content: [{ text }] };
+}
+
+/**
+ * Escalate: Phase A / escalated — the tool is open. The plan is surfaced to
+ * the human verbatim (notify) and the loop pauses (escalated) for a decision.
+ * The agent does not act on the plan; the human does.
+ * (bug-phase-a-zero-test-prompt §6 — the Tester's escape hatch for a spec
+ * that genuinely needs no new tests; bug-escalated-no-reentry §5 — the same
+ * re-entry point once the human has directed work outside the loop.)
+ */
+export function executeEscalatePropose(
+  state: StateRef,
+  pi: ExtensionAPI,
+  ctx: ToolCtx,
+  debug: Debug,
+  plan: string,
+): ToolResult {
+  const prevPhase = state.current.phase;
+  debug(`negotiate_propose escalate in phase ${prevPhase}: ${plan.slice(0, 60)}`);
+  pi.appendEntry("loop-negotiate", {
+    phase: prevPhase,
+    round: state.current.round,
+    action: "escalate",
+    text: plan.slice(0, 500),
+  });
+  state.current.phase = "escalated";
+  state.current.lastPhase = prevPhase;
+  persistState(state, pi, debug);
+  ctx.ui.notify(`Loop paused for human decision.\n\n${plan}`, "warning");
+  ctx.ui.setStatus("loop", "escalated (proposal surfaced)");
+  return { content: [{ text: ESCALATE_NOTICE }] };
 }

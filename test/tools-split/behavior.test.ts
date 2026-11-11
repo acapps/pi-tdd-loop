@@ -192,10 +192,8 @@ describe("factory surface — negotiate_review", () => {
 
 describe("policy matrix — propose", () => {
   const rejects: Array<[Phase, string]> = [
-    ["A", "negotiate_propose is not available in this phase."],
     ["C", "negotiate_propose is not available in this phase."],
     ["done", "negotiate_propose is not available in this phase."],
-    ["escalated", "negotiate_propose is not available in this phase."],
     ["idle", "negotiate_propose is not available in this phase."],
   ];
 
@@ -214,6 +212,46 @@ describe("policy matrix — propose", () => {
       tool: "negotiate_propose",
       reason: "not-available-in-phase",
     });
+  });
+
+  // bug-phase-a-zero-test-prompt §6 / bug-escalated-no-reentry §5:
+  // Phase A and escalated OPEN the tool — the plan is surfaced verbatim to
+  // the human, the loop pauses (escalated), and the agent is told to wait.
+  // Note: when the state is ALREADY escalated, lastPhase is whatever the
+  // escalation came from (A/negotiate/B/C) — the origin-gated invariant
+  // forbids escalated-from-escalated, so the fixture must carry a
+  // valid origin.
+  it.each<Phase>(["A", "escalated"])("%s × propose → surfaced to human, loop paused (escalated)", async (phase) => {
+    const state = makeState({ phase, lastProposal: "seed", lastPhase: phase === "escalated" ? "B" : "A" });
+    const ctx = makeCtx();
+    const { pi, result } = await runPropose(state, "The spec genuinely needs no new tests", ctx);
+
+    // The plan is surfaced verbatim (human decision, not agent decision).
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("The spec genuinely needs no new tests"),
+      "warning",
+    );
+    expect(ctx.ui.setStatus).toHaveBeenCalledWith("loop", "escalated (proposal surfaced)");
+    expect(state.current.phase).toBe("escalated");
+    expect(state.current.lastProposal).toBe("seed"); // no poisoning
+
+    // The escalation is logged + persisted (final entry is loop-state).
+    const logs = pi.appendedEntries.filter((e: any) => e.customType === "loop-negotiate");
+    expect(logs).toHaveLength(1);
+    expect(logs[0].data.action).toBe("escalate");
+    expect(logs[0].data.text).toBe("The spec genuinely needs no new tests");
+    expect(lastEntry(pi).customType).toBe("loop-state");
+
+    // The agent is told to wait — not to act on the plan.
+    expect(result.content[0].text).toContain("Wait for the human's decision");
+    expect(result.content[0].text).toContain("/loop-continue");
+  });
+
+  it("A × propose('approve') → still escalate (no hidden auto-advance from Phase A)", async () => {
+    const state = makeState({ phase: "A" });
+    const { result } = await runPropose(state, "approve");
+    expect(state.current.phase).toBe("escalated");
+    expect(result.content[0].text).toContain("Wait for the human's decision");
   });
 
   it("negotiate × propose('plan') → proposal recorded, negotiateProposed=true, persisted", async () => {
@@ -300,7 +338,6 @@ describe("policy matrix — review", () => {
     ["A"],
     ["C"],
     ["done"],
-    ["escalated"],
     ["idle"],
   ];
 

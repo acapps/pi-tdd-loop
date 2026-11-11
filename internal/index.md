@@ -40,6 +40,17 @@ Conventions for specs in this directory: [docs/spec-authoring.md](../docs/spec-a
 | [done-fix-scope-check-baseline.md](done-fix-scope-check-baseline.md) | bug | **done** (2026-09-25, `fix-scope-check-baseline`) | Scope-check flagged pre-existing untracked files as out-of-scope (session 01a0d6aa: 5 consecutive identical failures). Fixed: `state.baselineDirtyFiles` captured at spec start, filtered at gate time. |
 | [done-bug-coverage-noop-ts.md](done-bug-coverage-noop-ts.md) | bug | done | TS row closed by ts-gate-coverage-provider. Java row closed by gate-signal-integrity refactor (jacoco optional, unmeasurable = skip). 2026-09-27 |
 
+## Open bugs (from retrospective 01a0f4db, 2026-10-01)
+
+| Spec | Type | Status | Notes |
+|---|---|---|---|
+| [bug-bash-heredoc-gate-bypass.md](bug-bash-heredoc-gate-bypass.md) | bug | **open** | **Critical.** Phase gates bypassable via `cat >` bash heredoc. 34 bypasses in one session. Tool-call handler must pattern-detect file mutations in bash commands. |
+| [bug-phase-a-zero-test-gate.md](bug-phase-a-zero-test-gate.md) | bug | **open** | Phase A gate passes with zero new test files. Gate cannot distinguish "tests pass" from "no tests exist." |
+| [bug-phase-a-zero-test-prompt.md](bug-phase-a-zero-test-prompt.md) | bug | **open** | Zero-test retry prompt misdiagnoses as compile failure (empty error block). Fix: corrective zero-test prompt + negotiate escape hatch + spec-authoring "New tests: None" rule. |
+| [bug-escalated-no-reentry.md](bug-escalated-no-reentry.md) | bug | **open** | Escalated state is a dead end: work done in free chat while escalated never gets gated; `negotiate_propose` was a wall. Fix: `/loop-continue` re-enters + gates; `negotiate_propose` open in A/escalated (surfaces plan to human, no auto-transition). |
+| [ruleset-role-compliance.md](ruleset-role-compliance.md) | ruleset | **open** | Role compliance: corrective gate messages, spec language-agnosticism, zero-test gate, bash bypass |
+| [bug-negotiate-empty-resolution.md](bug-negotiate-empty-resolution.md) | bug | **open** | Negotiate auto-advances to Phase B with empty resolution. Writer gets no contract. |
+
 ## Feature specs (not bug-specs)
 
 | Spec | Type | Status | Notes |
