@@ -5,8 +5,10 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import * as T from "../transitions";
 import { ADVANCE_PROMPTS } from "../constants";
 import { getLanguageConfig } from "../languages";
+import { getWorkspaceRoot } from "../types";
 import { commit } from "../commit";
 import { deliverAdvancePrompt } from "../events/agent-settled/effect-applicator";
+import { captureGitBaseline } from "../scope-check";
 import type { StateRef, ToolCtx, Debug } from "./types";
 
 /** Snapshot the current state into the session log (single commit point). */
@@ -76,6 +78,22 @@ export function applyTransitionEffect(
   debug(`applying transition: ${effect.type}`);
   persistState(state, pi, debug);
   ctx.ui.setStatus("loop", "status" in effect ? effect.status : "Phase B — round 1");
+  // Re-capture the scope-check baseline when entering Phase B: Phase A's
+  // test files are now "pre-existing" for Phase B's scope check, not
+  // contamination (session 01a1c767).
+  //
+  // Captured in the *project* cwd (workspace-aware): for a golden project
+  // the spec's Inventory paths are relative to test/golden/<project>/, and
+  // the dirty set has to be read from the same directory the gate runs in.
+  if (effect.type === "advance" && effect.phase === "B" &&
+      (state.current.lastPhase === "A" || state.current.lastPhase === "negotiate")) {
+    const projectCwd = getWorkspaceRoot(state.current.specPath);
+    const baseline = captureGitBaseline(projectCwd);
+    if (baseline !== null) {
+      state.current.baselineDirtyFiles = baseline;
+      debug(`Scope-check baseline re-captured for Phase B: ${baseline.length} file(s)`);
+    }
+  }
   // Deliver the advance prompt via the shared helper so the tool-call path
   // stays in sync with the agent-settled applier (bug-advance-effect-dual-path).
   if (effect.type === "advance" && effect.prompt) {

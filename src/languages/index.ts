@@ -66,12 +66,27 @@ export function isValidLanguage(key: string): key is LanguageKey {
 
 export interface DetectedProject {
   language: LanguageKey;
-  buildTool?: BuildTool;
+  buildTool: BuildTool;
+}
+
+/**
+ * The build tool a language falls back to when the project gives no
+ * signal. Only Java reads buildTool in the gates (maven vs gradle);
+ * for go/typescript the value is display-only (the gate commands
+ * dispatch on language). src/commands/loop.ts uses this when
+ * detectProject comes back without a buildTool.
+ */
+export function defaultBuildToolFor(language: LanguageKey): BuildTool {
+  switch (language) {
+    case "go": return "go";
+    case "java": return "maven";
+    case "typescript": return "maven";
+  }
 }
 
 export function detectProject(cwd: string): DetectedProject | null {
   // Go
-  if (existsSync(join(cwd, "go.mod"))) return { language: "go" };
+  if (existsSync(join(cwd, "go.mod"))) return { language: "go", buildTool: "go" };
 
   // Java (Maven)
   if (existsSync(join(cwd, "pom.xml"))) return { language: "java", buildTool: "maven" };
@@ -82,7 +97,7 @@ export function detectProject(cwd: string): DetectedProject | null {
   }
 
   // TypeScript
-  if (existsSync(join(cwd, "tsconfig.json"))) return { language: "typescript" };
+  if (existsSync(join(cwd, "tsconfig.json"))) return { language: "typescript", buildTool: defaultBuildToolFor("typescript") };
 
   return null;
 }

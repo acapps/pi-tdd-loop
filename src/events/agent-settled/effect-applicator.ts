@@ -13,6 +13,7 @@ import * as GP from "../../generic-prompts";
 import { RETRY_PROMPTS, ADVANCE_PROMPTS } from "../../constants";
 import { formatFailures } from "../../gates";
 import { archiveSpecFile } from "../../spec-archive";
+import { captureGitBaseline } from "../../scope-check";
 import { commitAndMerge, verifyMergeComplete, promptMergeConflict } from "../../git-workflow";
 import { sendPrompt } from "../../prompt";
 import { getLiveMetrics, finalize, formatReport, accumulatePhaseTransition } from "../../metrics";
@@ -105,6 +106,18 @@ export function applyAdvanceEffect(input: EffectInput): EffectResult {
   ctx.ui.setStatus("loop", effect.status);
   if (effect.phase === "C") {
     archiveSpecBeforePhaseC(state, ctx, debug);
+  }
+  // Re-capture the scope-check baseline when entering Phase B from Phase A
+  // or negotiate: Phase A's test files are now "pre-existing" for Phase B's
+  // scope check, not contamination. Without this, Phase A's output is
+  // flagged as out-of-scope in Phase B (session 01a1c767: Writer conceded
+  // to a scope-check dispute it shouldn't have had to make).
+  if (effect.phase === "B" && (state.lastPhase === "A" || state.lastPhase === "negotiate")) {
+    const baseline = captureGitBaseline(ctx.cwd);
+    if (baseline !== null) {
+      state.baselineDirtyFiles = baseline;
+      debug(`Scope-check baseline re-captured for Phase B: ${baseline.length} file(s)`);
+    }
   }
   if (effect.prompt) {
     deliverAdvancePrompt(pi, state, lang, effect, debug);

@@ -7,10 +7,10 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { CommandContext, LoopState, LanguageKey, BuildTool, SpecAnalysis } from "../types";
 import * as R from "../reviewer";
-import { detectProject, isValidLanguage } from "../languages";
+import { detectProject, isValidLanguage, defaultBuildToolFor } from "../languages";
 import { initLiveMetrics } from "../metrics";
 import { parseLoopArgs, loadLoopConfig, mergeLoopArgs } from "../selectors";
-import { getGitUntrackedFiles } from "../scope-check";
+import { captureGitBaseline } from "../scope-check";
 import { delimitUntrusted, UNTRUSTED_DATA_GUARD } from "../generic-prompts";
 import {
   resolveProjectCwd, runPhase0Baseline, applyBranchSetup, enterPhase0Review,
@@ -65,7 +65,16 @@ export function cmdLoop(
         return;
       }
       const language = (merged.language || detected?.language || "go") as LanguageKey;
-      const buildTool = (detected?.buildTool || "maven") as BuildTool;
+      // The build tool follows the language the user asked for, not whatever
+      // detectProject happened to find. An explicit --language flag is a
+      // statement about the project, so the tool derives from that language.
+      // Without --language, fall back to the detected build tool, then to
+      // the language default. (session 01a1c767: --language typescript on a
+      // TS project still showed "typescript / go" because the tool came
+      // from a blind fallback, not from the language.)
+      const buildTool = (merged.language
+        ? defaultBuildToolFor(language)
+        : (detected?.buildTool ?? defaultBuildToolFor(language))) as BuildTool;
       if (!runPhase0Baseline(projectCwd, language, buildTool, ctx, debug)) return;
 
       state.current = createInitialState(
@@ -77,7 +86,7 @@ export function cmdLoop(
       // fix-scope-check-baseline: capture the git dirty set at spec start.
       // This is the baseline the scope-check uses to filter out pre-existing
       // untracked/modified files at gate time.
-      const baseline = getGitUntrackedFiles(projectCwd);
+      const baseline = captureGitBaseline(projectCwd);
       if (baseline !== null) {
         state.current.baselineDirtyFiles = baseline;
         debug(`Scope-check baseline: ${baseline.length} pre-existing dirty file(s)`);

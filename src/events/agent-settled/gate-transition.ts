@@ -12,7 +12,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { EventCtx } from "../index";
 import type { LanguageConfig } from "../../languages";
 import { runGates } from "../../gates";
-import { checkScope, readSpecForScopeCheck, getGitUntrackedFiles } from "../../scope-check";
+import { checkScope, readSpecForScopeCheck, captureGitBaseline } from "../../scope-check";
 import { getLanguageConfig } from "../../languages";
 import { getNewTestFiles } from "../../git-state";
 import { getLiveMetrics, accumulateGate } from "../../metrics";
@@ -82,11 +82,11 @@ export async function handleGateTransition(
     if (gate && outcome.kind === "result" && (phase === "B" || phase === "C")) {
       const specText = readSpecForScopeCheck(gateCwd, state.specPath);
 
-      // Re-capture baseline if missing (restored session): the first Phase B/C
-      // gate captures the current dirty set as the baseline so that subsequent
-      // gates can filter out pre-existing files.
+      // Re-capture baseline if missing (restored session). The A→B transition
+      // re-captures the baseline in effect-applicator.ts so that Phase A's
+      // test files are "pre-existing" for Phase B's scope check.
       if (state.baselineDirtyFiles === undefined) {
-        const baseline = getGitUntrackedFiles(gateCwd);
+        const baseline = captureGitBaseline(gateCwd);
         if (baseline !== null) {
           state.baselineDirtyFiles = baseline;
           debug(`Scope-check baseline captured: ${baseline.length} file(s)`);

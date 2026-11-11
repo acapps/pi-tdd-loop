@@ -132,13 +132,19 @@ export function getGitDirtyFiles(cwd: string): string[] | null {
 }
 
 /**
- * Get only the untracked files (?? prefix) from `git status --porcelain`.
- * Used for the scope-check baseline: pre-existing untracked files are
- * "just other work in the repo" and should not block the gate. Modified
- * tracked files (M) are NOT included — their dirty state is meaningful
- * (content changed) and they must still be checked against the Inventory.
+ * Get the full git dirty set (modified + staged + untracked) as paths
+ * relative to `cwd`. Used for the scope-check baseline: pre-existing dirty
+ * files (modified OR untracked) are "just other work in the repo" and
+ * should not block the gate. New modifications by the Writer during the
+ * loop will show up as dirty-but-not-in-baseline and are checked against
+ * the Inventory.
+ *
+ * Returns null when `cwd` is not inside a git repository.
+ *
+ * Named for what it does (captures the baseline), not what the files are —
+ * the set includes modified AND untracked, not just untracked.
  */
-export function getGitUntrackedFiles(cwd: string): string[] | null {
+export function captureGitBaseline(cwd: string): string[] | null {
   try {
     const out = execSync("git status --porcelain", {
       cwd,
@@ -148,9 +154,11 @@ export function getGitUntrackedFiles(cwd: string): string[] | null {
     const files: string[] = [];
     for (const line of out.split("\n")) {
       if (line.length < 4) continue;
-      // Only untracked: "?? path"
-      if (!line.startsWith("??")) continue;
+      // All dirty files: modified (M), staged (A/R/D), untracked (??).
+      // Rename: "R  old -> new" — take the new path.
       let path = line.slice(3).trim();
+      const arrow = path.indexOf(" -> ");
+      if (arrow !== -1) path = path.slice(arrow + 4);
       // Quoted paths (unicode): "path" — strip the quotes.
       if (path.startsWith('"') && path.endsWith('"')) path = path.slice(1, -1);
       if (path) files.push(path);

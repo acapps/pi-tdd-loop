@@ -24,7 +24,12 @@ vi.mock("../../src/baseline", () => ({
   formatBaselineFailure: vi.fn((r: unknown) => JSON.stringify(r)),
 }));
 vi.mock("../../src/git-workflow", () => ({ setupBranch: vi.fn() }));
-vi.mock("../../src/languages", () => ({ detectProject: vi.fn(), isValidLanguage: vi.fn((k: string) => ["go","java","typescript"].includes(k)) }));
+vi.mock("../../src/languages", () => ({
+  detectProject: vi.fn(),
+  isValidLanguage: vi.fn((k: string) => ["go","java","typescript"].includes(k)),
+  defaultBuildToolFor: vi.fn((k: string) => k === "go" ? "go" : "maven"),
+  getLanguageConfig: vi.fn(() => ({})),
+}));
 vi.mock("../../src/commit", () => ({ commit: vi.fn() }));
 vi.mock("../../src/prompt", () => ({ sendPrompt: vi.fn() }));
 vi.mock("../../src/metrics", () => ({ initLiveMetrics: vi.fn() }));
@@ -338,5 +343,53 @@ describe("cmdLoop", () => {
       expect.stringContaining("Invalid language"), "error");
     expect(state.current.language).toBe("typescript");
     expect(state.current.phase).toBe("review");
+  });
+
+  // session 01a1c767: --language typescript on a TS project still showed
+  // "typescript / go" because the build tool came from a blind fallback,
+  // not from the language the user asked for.
+  //
+  // NOTE: vi.mock factories are not applied in vitest 4.1.11 (the real
+  // module always runs), so detectProject here hits the repo's go.mod.
+  // The null-detection path is covered by the unit tests in
+  // languages-detect.test.ts (which mock node:fs, not the module).
+  it("--language typescript → buildTool follows the language, not the detected project", async () => {
+    const { state } = setup();
+    (Selectors.mergeLoopArgs as ReturnType<typeof vi.fn>).mockReturnValue({
+      specPath: "s.md", language: "typescript", coverage: 80, timeout: 60,
+      branch: undefined, autoApprove: undefined,
+      maxA: 3, maxNegotiate: 3, maxB: 5, maxC: 3, maxDispute: 3, maxTurnsPerPhase: 5,
+    });
+    await cmdLoop(state, makeApi(), debug).handler("", makeCtx());
+    expect(state.current.language).toBe("typescript");
+    // The detected project is go (repo has go.mod), but the user asked for
+    // typescript. The build tool must follow the language, not the detection.
+    // With the old blind fallback this would be "go"; now it's
+    // defaultBuildToolFor("typescript") = "maven".
+    expect(state.current.buildTool).toBe("maven");
+  });
+
+  it("--language go → buildTool is go (matches both language and detection)", async () => {
+    const { state } = setup();
+    (Selectors.mergeLoopArgs as ReturnType<typeof vi.fn>).mockReturnValue({
+      specPath: "s.md", language: "go", coverage: 80, timeout: 60,
+      branch: undefined, autoApprove: undefined,
+      maxA: 3, maxNegotiate: 3, maxB: 5, maxC: 3, maxDispute: 3, maxTurnsPerPhase: 5,
+    });
+    await cmdLoop(state, makeApi(), debug).handler("", makeCtx());
+    expect(state.current.language).toBe("go");
+    expect(state.current.buildTool).toBe("go");
+  });
+
+  it("detected.buildTool wins over the language default when present", async () => {
+    const { state } = setup({ detected: { language: "java", buildTool: "gradle" } });
+    (Selectors.mergeLoopArgs as ReturnType<typeof vi.fn>).mockReturnValue({
+      specPath: "s.md", language: undefined, coverage: 80, timeout: 60,
+      branch: undefined, autoApprove: undefined,
+      maxA: 3, maxNegotiate: 3, maxB: 5, maxC: 3, maxDispute: 3, maxTurnsPerPhase: 5,
+    });
+    await cmdLoop(state, makeApi(), debug).handler("", makeCtx());
+    expect(state.current.language).toBe("java");
+    expect(state.current.buildTool).toBe("gradle");
   });
 });

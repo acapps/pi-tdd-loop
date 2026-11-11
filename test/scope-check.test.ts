@@ -9,7 +9,7 @@ vi.mock("node:child_process", () => ({
 }));
 
 import { execSync } from "node:child_process";
-import { parseInventory, checkScope, getGitUntrackedFiles } from "../src/scope-check";
+import { parseInventory, checkScope, captureGitBaseline } from "../src/scope-check";
 
 const mockExecSync = vi.mocked(execSync);
 
@@ -288,36 +288,36 @@ describe("checkScope", () => {
   });
 });
 
-describe("getGitUntrackedFiles", () => {
+describe("captureGitBaseline", () => {
   beforeEach(() => {
     mockExecSync.mockReset();
   });
 
   const CWD = "/project";
 
-  it("returns only untracked (??) files", () => {
+  it("returns all dirty files (modified + untracked)", () => {
     mockExecSync.mockReturnValue(
       " M src/foo.ts\n?? prompt-evolution/\n M src/bar.ts\n?? test/new.test.ts\n",
     );
-    const r = getGitUntrackedFiles(CWD);
-    expect(r).toEqual(["prompt-evolution/", "test/new.test.ts"]);
+    const r = captureGitBaseline(CWD);
+    expect(r).toEqual(["src/foo.ts", "prompt-evolution/", "src/bar.ts", "test/new.test.ts"]);
   });
 
-  it("returns empty array when no untracked files", () => {
-    mockExecSync.mockReturnValue(" M src/foo.ts\n M src/bar.ts\n");
-    const r = getGitUntrackedFiles(CWD);
+  it("returns empty array when no dirty files", () => {
+    mockExecSync.mockReturnValue("");
+    const r = captureGitBaseline(CWD);
     expect(r).toEqual([]);
   });
 
   it("returns null when not a git repository", () => {
     mockExecSync.mockImplementation(() => { throw new Error("not a git repo"); });
-    const r = getGitUntrackedFiles(CWD);
+    const r = captureGitBaseline(CWD);
     expect(r).toBeNull();
   });
 
   it("handles quoted paths", () => {
     mockExecSync.mockReturnValue('?? "prompt-ünïcode/"\n');
-    const r = getGitUntrackedFiles(CWD);
+    const r = captureGitBaseline(CWD);
     expect(r).toEqual(["prompt-ünïcode/"]);
   });
 });
