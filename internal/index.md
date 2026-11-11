@@ -4,6 +4,8 @@ Conventions for specs in this directory: [docs/spec-authoring.md](../docs/spec-a
 
 **Status legend:** `open` = ready to implement; `blocked` = has a hard dependency; `done` = implemented and verified (rename file `done-`-prefix).
 
+| [fix-phase-a-approve-advance.md](fix-phase-a-approve-advance.md) | bug | **open** | `negotiate_propose("approve")` in Phase A pauses the loop (escalated) instead of advancing to Phase B. The human must manually run `/loop-continue`. Fix: approve → `transitionToPhaseB` directly, no pause. Non-approve proposals still escalate. |
+
 ## Active specs
 
 | Spec | Type | Status | Dependencies (hard → soft) |
