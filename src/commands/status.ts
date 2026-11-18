@@ -14,6 +14,7 @@ import * as GP from "../generic-prompts";
 import { formatFailures } from "../gates";
 import { getPhaseMax } from "../phase-max";
 import { resetPhaseState, isIdleOrDone, resolvePhaseArg } from "../state-helpers";
+import { recaptureBaselineForPhaseB } from "../scope-check";
 
 export function buildContinuePrompt(state: LoopState): string {
   const lang = getLanguageConfig(state.language);
@@ -133,6 +134,7 @@ export function cmdContinue(
             `Fix the compile error before continuing.${err}`, "warning");
         }
         resetPhaseState(s);
+        if (s.phase === "B") recaptureBaselineForPhaseB(s.specPath, ctx.cwd, debug);
         ctx.ui.notify(`Continued from Phase ${s.phase}, round 1.`, "info");
         commit(s, pi, debug);
         sendPrompt(pi, buildContinuePrompt(s), s, debug);
@@ -147,6 +149,7 @@ export function cmdContinue(
           `Fix the compile error before continuing.${err}`, "warning");
       }
       resetPhaseState(s);
+      if (s.phase === "B") recaptureBaselineForPhaseB(s.specPath, ctx.cwd, debug);
       ctx.ui.notify(`Continued from Phase ${s.phase}, round 1.`, "info");
       ctx.ui.setStatus("loop", `Phase ${s.phase} — round 1`);
       commit(s, pi, debug);
@@ -184,6 +187,7 @@ export function handlePhaseRestart(
   state.current.phase = phase;
   resetPhaseState(state.current);
   state.current.lastPhase = phase;
+  if (phase === "B") recaptureBaselineForPhaseB(state.current.specPath, ctx.cwd, debug);
   debug(`Command: /loop-restart ${phase} → round 1`);
   ctx.ui.notify(`Restarted from Phase ${phase}, round 1.`, "info");
   ctx.ui.setStatus("loop", `Phase ${phase} — round 1`);

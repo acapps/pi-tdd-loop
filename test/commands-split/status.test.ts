@@ -58,6 +58,12 @@ import * as Prompt from "../../src/prompt";
 import * as SH from "../../src/state-helpers";
 import * as PhaseMax from "../../src/phase-max";
 import * as Gates from "../../src/gates";
+import { recaptureBaselineForPhaseB } from "../../src/scope-check";
+
+vi.mock("../../src/scope-check", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/scope-check")>();
+  return { ...actual, recaptureBaselineForPhaseB: vi.fn() };
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -430,5 +436,43 @@ describe("handlePhaseRestart", () => {
     expect(SH.resetPhaseState).toHaveBeenCalled();
     expect(Commit.commit).toHaveBeenCalled();
     expect(Prompt.sendPrompt).toHaveBeenCalled();
+  });
+});
+
+// ================================================================
+// Phase B re-entry re-captures the scope-check baseline
+// (so Phase A's on-disk test files are "pre-existing", not contamination)
+// ================================================================
+
+describe("Phase B re-entry re-captures the scope-check baseline", () => {
+  it("handlePhaseRestart B re-captures the baseline for the gate", () => {
+    (Lang.getLanguageConfig as ReturnType<typeof vi.fn>).mockReturnValue(makeLangConfig());
+    (Lang.detectProject as ReturnType<typeof vi.fn>).mockReturnValue(null);
+    const state = { current: makeState() };
+    handlePhaseRestart(state, makeApi(), debug, makeCtx("/tmp/proj"), "B");
+    expect(recaptureBaselineForPhaseB).toHaveBeenCalledWith(
+      state.current.specPath,
+      "/tmp/proj",
+      debug,
+    );
+  });
+
+  it("handlePhaseRestart C does NOT re-capture (only Phase B needs it)", () => {
+    (Lang.getLanguageConfig as ReturnType<typeof vi.fn>).mockReturnValue(makeLangConfig());
+    (Lang.detectProject as ReturnType<typeof vi.fn>).mockReturnValue(null);
+    const state = { current: makeState() };
+    handlePhaseRestart(state, makeApi(), debug, makeCtx("/tmp/proj"), "C");
+    expect(recaptureBaselineForPhaseB).not.toHaveBeenCalled();
+  });
+
+  it("cmdContinue from escalated with 'B' re-captures the baseline", async () => {
+    (Lang.getLanguageConfig as ReturnType<typeof vi.fn>).mockReturnValue(makeLangConfig());
+    const state = { current: makeState({ phase: "escalated", lastPhase: "B" }) };
+    await cmdContinue(state, makeApi(), debug).handler("B", makeCtx("/tmp/proj"));
+    expect(recaptureBaselineForPhaseB).toHaveBeenCalledWith(
+      state.current.specPath,
+      "/tmp/proj",
+      debug,
+    );
   });
 });
