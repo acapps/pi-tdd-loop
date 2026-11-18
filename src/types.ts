@@ -121,33 +121,11 @@ export interface GateResult {
  * Golden project specs are under test/golden/. Self-refactor specs are under
  * internal/ (no test/golden/ prefix).
  */
-export function isGoldenProject(specPath: string): boolean {
-  return specPath.startsWith("test/golden/");
-}
-
-/**
- * For golden projects: returns the project directory (parent of spec.md).
- * For self-refactors: returns "." (cwd, no constraint).
- */
-export function getWorkspaceRoot(specPath: string): string {
-  if (!isGoldenProject(specPath)) return ".";
-  const parts = specPath.split("/");
-  parts.pop(); // remove "spec.md"
-  return parts.join("/");
-}
-
-/**
- * Returns true when `path` is within `workspaceRoot`.
- * A path is within the workspace if it starts with the workspace root
- * (as a directory prefix). The workspace root itself is not a valid
- * write target (you write files *under* it).
- */
-export function isWorkspacePath(path: string, workspaceRoot: string): boolean {
-  if (workspaceRoot === ".") return true; // self-refactor: no constraint
-  const normalized = path.startsWith("/") ? path : "/" + path;
-  const root = workspaceRoot.startsWith("/") ? workspaceRoot : "/" + workspaceRoot;
-  return normalized.startsWith(root + "/");
-}
+// --- Workspace path helpers + state summary (src/types.ts split, step 5) ---
+// Implementation moved to src/workspace.ts and src/state-summary.ts;
+// re-exported here so existing importers ("from "./types"") are unchanged.
+export { isGoldenProject, getWorkspaceRoot, isWorkspacePath } from "./workspace";
+export { stateSummary } from "./state-summary";
 
 // --- Phase 0: Spec Review Types ---
 
@@ -208,9 +186,7 @@ export interface CommandContext {
 
 // --- Debug helpers ---
 
-export function stateSummary(s: LoopState): string {
-  return `Phase ${s.phase} round ${s.round}`;
-}
+// (stateSummary moved to src/state-summary.ts; re-exported above.)
 
 // --- State checkpointing (fix: phase0-live-transcript-leaks) ---
 
