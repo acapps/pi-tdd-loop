@@ -475,4 +475,35 @@ describe("Phase B re-entry re-captures the scope-check baseline", () => {
       debug,
     );
   });
+
+  // The re-capture must STORE its result — a call that discards the return
+  // value leaves the stale Phase 0 baseline in place and the gate re-flags
+  // Phase A's files (session 01a1c72a: /loop-continue B never advanced).
+  it("handlePhaseRestart B assigns the re-captured baseline to state.current.baselineDirtyFiles", () => {
+    (Lang.getLanguageConfig as ReturnType<typeof vi.fn>).mockReturnValue(makeLangConfig());
+    (Lang.detectProject as ReturnType<typeof vi.fn>).mockReturnValue(null);
+    const baseline = ["core/runtime.test.ts", "index.ts"];
+    (recaptureBaselineForPhaseB as ReturnType<typeof vi.fn>).mockReturnValue(baseline);
+    const state = { current: makeState() };
+    handlePhaseRestart(state, makeApi(), debug, makeCtx("/tmp/proj"), "B");
+    expect(state.current.baselineDirtyFiles).toBe(baseline);
+  });
+
+  it("cmdContinue B assigns the re-captured baseline to state.current.baselineDirtyFiles", async () => {
+    (Lang.getLanguageConfig as ReturnType<typeof vi.fn>).mockReturnValue(makeLangConfig());
+    const baseline = ["core/runtime.test.ts"];
+    (recaptureBaselineForPhaseB as ReturnType<typeof vi.fn>).mockReturnValue(baseline);
+    const state = { current: makeState({ phase: "escalated", lastPhase: "B" }) };
+    await cmdContinue(state, makeApi(), debug).handler("B", makeCtx("/tmp/proj"));
+    expect(state.current.baselineDirtyFiles).toBe(baseline);
+  });
+
+  it("cmdContinue B keeps the existing baseline when the re-capture returns null", async () => {
+    (Lang.getLanguageConfig as ReturnType<typeof vi.fn>).mockReturnValue(makeLangConfig());
+    (recaptureBaselineForPhaseB as ReturnType<typeof vi.fn>).mockReturnValue(null);
+    const existing = ["pre-existing.ts"];
+    const state = { current: makeState({ phase: "escalated", lastPhase: "B", baselineDirtyFiles: existing }) };
+    await cmdContinue(state, makeApi(), debug).handler("B", makeCtx("/tmp/proj"));
+    expect(state.current.baselineDirtyFiles).toBe(existing);
+  });
 });
