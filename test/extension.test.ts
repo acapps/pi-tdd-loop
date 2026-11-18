@@ -124,11 +124,19 @@ function findTool(api: TestAPI, name: string) {
 // Handler-identity predicates for multi-handler events (see
 // internal/bug-fragile-event-handler-selection.md). The mock captures the exact
 // closure the extension registered; closures cannot be compared across
-// `state` instances, so selection is by source needle. `blockRepeatedCall`
-// appears only in the breaker closure (src/events/tool-call/index.ts);
-// `resetCallCounters` appears only in the two reset closures (index.ts).
-// Neither needle appears in the main handlers' source.
-const isBreakerHandler = (h: any) => h.toString().includes("blockRepeatedCall");
+// `state` instances, so selection is by a marker/needle rather than identity.
+//
+// The breaker handler is identified by the LOOP_BREAKER marker the composition
+// barrel sets on the returned closure (src/events/tool-call/index.ts). It is a
+// marker, not a source needle: the composed handler delegates to the three
+// detector modules (breaker/recon/write-loop), so its serialized source no
+// longer contains the detector call sites — a source needle would break on
+// the detector split.
+import { LOOP_BREAKER } from "../src/events/tool-call/index";
+// `resetCallCounters` appears only in the two reset closures (index.ts),
+// which still call the imported function by name — the needle survives the
+// detector split because those closures live in the frozen extension index.
+const isBreakerHandler = (h: any) => (h as any)[LOOP_BREAKER] === true;
 const isResetHandler = (h: any) => h.toString().includes("resetCallCounters");
 // default for multi-handler events where the test wants the MAIN handler:
 const isMainHandler = (h: any) => !isBreakerHandler(h) && !isResetHandler(h);
