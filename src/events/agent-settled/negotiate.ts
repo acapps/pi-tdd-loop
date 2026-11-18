@@ -3,7 +3,7 @@
 // feedback → Writer revision, reprompt, auto-advance, or escalate.
 // Spec: internal/04-implement-agent-settled-handlers.md (R1, G2); round wiring: internal/07-wire-negotiate-review.md.
 
-import type { LoopState } from "../../types";
+import { getWorkspaceRoot, type LoopState } from "../../types";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { EventCtx } from "../index";
 import type { LanguageConfig } from "../../languages";
@@ -11,6 +11,7 @@ import * as T from "../../transitions";
 import * as GP from "../../generic-prompts";
 import { REPROMPT_KEYS } from "../../constants";
 import { sendPrompt } from "../../prompt";
+import { recaptureBaselineForPhaseB } from "../../scope-check";
 
 // --- Types ---
 
@@ -48,7 +49,22 @@ export function handleNegotiateSettled(
   const proposed = state.negotiateProposed === true;
   const feedbackPending = (state.negotiateFeedback ?? "") !== "";
   debug(`Negotiate: settle (round ${state.round}, proposed=${proposed}, feedback=${feedbackPending}, reprompted=${state.negotiateReprompted})`);
-  const { state: newState, effect } = T.computeNegotiateTransition(state);
+  const { state: newStateRaw, effect } = T.computeNegotiateTransition(state);
+
+  // The auto-advance into Phase B bypasses the gate's effect applier, so it
+  // would skip the scope-check baseline re-capture the other B-entry paths do.
+  // Without this, Phase A's test files (created by the Tester) are read
+  // against the stale Phase 0 baseline and flagged as out-of-scope
+  // contamination (session 01a1c72a). Re-capture here and bake the result into
+  // the returned state; the dispatcher reassigns state.current from it. The
+  // input state is never mutated (pure-state contract).
+  let newState = newStateRaw;
+  if (effect.type === "advance" && effect.phase === "B") {
+    const baseline = recaptureBaselineForPhaseB(state.specPath, ctx.cwd, debug);
+    if (baseline !== null) {
+      newState = { ...newState, baselineDirtyFiles: baseline };
+    }
+  }
 
   if (effect.type === "review-request") {
     deliverReviewRequest(state, effect, pi, ctx, debug);
@@ -59,7 +75,7 @@ export function handleNegotiateSettled(
   } else if (effect.type === "reprompt") {
     deliverReprompt(effect, pi, ctx, state, debug);
   } else if (effect.type === "advance") {
-    deliverAdvance(effect, pi, ctx, lang, state, debug);
+    deliverAdvance(effect, pi, ctx, lang, newState, debug);
   }
   return { handled: true, newState };
 }

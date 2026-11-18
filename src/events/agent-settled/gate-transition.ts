@@ -5,7 +5,7 @@
 //  - G3: state.current.lastGateResult is set ONLY on a real gate result —
 //    never on error (a gate that could not run is not a gate result).
 
-import type { LoopState, GateResult } from "../../types";
+import type { LoopState, GateResult, FailingTest, DisputeState } from "../../types";
 import { getWorkspaceRoot } from "../../types";
 import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -76,6 +76,11 @@ export async function handleGateTransition(
 
     const gate = outcome.kind === "result" ? outcome.result! : null;
 
+    // The test verdict BEFORE the scope-check (a gate-level contamination
+    // check) can override it. Captured here so a resolved dispute can restore
+    // it — see excludeResolvedDisputeFailures below.
+    const intrinsicVerdict = gate?.allPassed ?? false;
+
     // Scope check (cross-spec contamination): a green gate with dirty files
     // outside the active spec's Inventory is a scope violation, not a pass.
     // Skips cleanly when the check cannot run (non-git cwd, no Inventory).
@@ -132,6 +137,22 @@ export async function handleGateTransition(
         } else {
           debug(`Phase A zero-test check: ${newTests.length} new/modified test file(s)`);
         }
+      }
+    }
+
+    // bug-dispute-resolves-gate-failure: a conceded / defended / closed dispute
+    // has cleared the specific failures it resolved. Re-evaluate the Phase B
+    // gate without them, restoring the test verdict, so a disputed-and-approved
+    // failure (e.g. the false-positive scope-check in session 01a1c72a) can't
+    // be re-detected on every gate run and pin the loop before Phase C. A gate
+    // that failed on a *real* test still has intrinsicVerdict=false, so it does
+    // not advance until that test is actually fixed.
+    if (gate && phase === "B" && state.dispute && isResolvedDispute(state.dispute)) {
+      const { failures, removed } = excludeResolvedDisputeFailures(gate, state.dispute.resolvedFailures);
+      if (removed) {
+        gate.failures = failures;
+        gate.allPassed = intrinsicVerdict && failures.length === 0;
+        debug(`Dispute resolved: excluded resolved failure(s); ${failures.length} remaining (Phase B gate)`);
       }
     }
 
@@ -195,4 +216,35 @@ function errorGateResult(error?: string): GateResult {
     coverage: 0,
     failures: [],
   };
+}
+
+// A dispute has been resolved (the reviewer conceded or defended it, or the
+// turn that resolved it has since closed it). While resolved, the gate excludes
+// the failures the dispute cleared — see excludeResolvedDisputeFailures.
+function isResolvedDispute(dispute: DisputeState | undefined): boolean {
+  return !!dispute && (dispute.status === "conceded" || dispute.status === "defended" || dispute.status === "closed");
+}
+
+/**
+ * Remove the failures a resolved dispute has cleared from a gate result.
+ *
+ * Matched by test + subtest, and for the scope-check also by the flagged file
+ * (output) — so a NEW out-of-scope file introduced after the concede is still
+ * caught, while the already-approved one is excluded. Returns the remaining
+ * failures and whether anything was removed. An empty/absent resolved set is a
+ * no-op, so undisputed gates behave exactly as before.
+ */
+function excludeResolvedDisputeFailures(
+  gate: GateResult,
+  resolved: FailingTest[] | undefined,
+): { failures: FailingTest[]; removed: boolean } {
+  if (!resolved || resolved.length === 0) return { failures: gate.failures, removed: false };
+  const remaining = gate.failures.filter((f) =>
+    !resolved.some((r) =>
+      r.test === f.test &&
+      (r.subtest === f.subtest) &&
+      (r.output === f.output)
+    ),
+  );
+  return { failures: remaining, removed: remaining.length !== gate.failures.length };
 }

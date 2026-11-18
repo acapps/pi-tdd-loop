@@ -6,6 +6,7 @@ import { getLiveMetrics, accumulateDispute } from "../metrics";
 import { persistState, logEscalation } from "./state-io";
 import type { StateRef, ToolCtx, ToolResult, Debug } from "./types";
 import { isApproval, buildReviewResult } from "./types";
+import type { FailingTest } from "../types";
 
 /** Entry logging: a dispute filing / resolution entry. */
 export function logDisputeEntry(state: StateRef, pi: ExtensionAPI, debug: Debug, text: string): void {
@@ -63,6 +64,24 @@ export function executeWriterConcedeDispute(
   };
 }
 
+/**
+ * Gate failures the Writer is disputing — recorded at filing so the Phase B
+ * gate can exclude them once the dispute is resolved. The dispute claim names
+ * the failing check (e.g. "scope-check/out-of-scope files is a false positive"),
+ * so we keep only the recorded gate failures whose test name appears in the
+ * claim. That clears exactly the disputed failure(s), not every gate failure.
+ * Returns undefined when there is nothing to record (no gate result yet, or
+ * no matching failure) — the gate then behaves exactly as before.
+ */
+function resolveDisputedFailures(state: StateRef, claim: string): FailingTest[] | undefined {
+  const failures = state.current.lastGateResult?.failures;
+  if (!Array.isArray(failures) || failures.length === 0) return undefined;
+  const matched = failures.filter((f) => claim.includes(f.test));
+  return matched.length > 0
+    ? matched.map((f) => ({ test: f.test, subtest: f.subtest, output: f.output }))
+    : undefined;
+}
+
 export function handleBDisputePropose(
   state: StateRef,
   pi: ExtensionAPI,
@@ -84,6 +103,13 @@ export function handleBDisputePropose(
     filer,
     claim: plan,
     filedRound: state.current.round,
+    // Record the gate failures this dispute is clearing, so the Phase B gate
+    // can exclude them once the dispute is resolved. Without this a
+    // disputed-and-approved failure (e.g. a false-positive scope-check) is
+    // re-detected on every gate run and can pin the loop forever (session
+    // 01a1c72a). Matched against the claim so only the disputed failure(s)
+    // are recorded — not every gate failure.
+    resolvedFailures: resolveDisputedFailures(state, plan),
   };
   // The dispute interrupts the normal flow. Clear justTransitioned so the
   // next settle runs the gate (the Writer/Tester did work after the phase

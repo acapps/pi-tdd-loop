@@ -95,6 +95,14 @@ export interface DisputeState {
   decision?: string;
   // Round at filing — for the redelivery prompt.
   filedRound?: number;
+  // Gate failures this dispute resolved (recorded at filing from
+  // lastGateResult). The Phase B gate excludes these while the dispute is
+  // resolved, so a disputed-and-approved failure can't pin the loop forever
+  // (session 01a1c72a: a conceded scope-check dispute never let the loop
+  // advance). Matched by test+subtest, and for the scope-check also by the
+  // flagged file (output) so a NEW out-of-scope file after a concede is still
+  // caught. Absent = nothing recorded (the gate behaves as before).
+  resolvedFailures?: FailingTest[];
 }
 
 export interface GateResult {

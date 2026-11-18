@@ -450,6 +450,73 @@ describe("Phase B", () => {
       ctx});
     expect(blockedNull).toBeUndefined();
   });
+
+  it("resolved dispute clears a false-positive scope-check failure → advances to C", async () => {
+    // Tests actually pass; the only gate failure is the (conceded) scope-check.
+    runGatesMock.mockReturnValue(Promise.resolve(gate({ allPassed: true, coverage: 85 })));
+    checkScopeMock.mockReturnValue({ ok: false, skipped: false, outOfScope: ["core/runtime.test.ts"], skipReason: undefined });
+    const { input } = makeInput({
+      state: makeState({
+        phase: "B",
+        round: 3,
+        dispute: {
+          status: "closed",
+          resolvedFailures: [{ test: "scope-check", subtest: "out-of-scope files", output: "core/runtime.test.ts" }],
+        },
+      }),
+    });
+    const result = await handleGateTransition(input);
+    expect(result.applied).toBe(true);
+    expect(result.state.phase).toBe("C");
+  });
+
+  it("resolved dispute does NOT clear an unrelated real failure → still retries", async () => {
+    runGatesMock.mockReturnValue(Promise.resolve(gate({ allPassed: false, coverage: 0, failures: [{ test: "TestAdd", subtest: "", output: "boom" }] })));
+    checkScopeMock.mockReturnValue({ ok: true, skipped: true, outOfScope: [], skipReason: undefined });
+    const { input, pi } = makeInput({
+      state: makeState({
+        phase: "B",
+        round: 1,
+        dispute: {
+          status: "conceded",
+          resolvedFailures: [{ test: "scope-check", subtest: "out-of-scope files", output: "core/runtime.test.ts" }],
+        },
+      }),
+    });
+    const result = await handleGateTransition(input);
+    expect(result.applied).toBe(true);
+    expect(result.state.round).toBe(2);
+    expect(pi.sentMessages).toHaveLength(1);
+  });
+
+  it("conceded dispute with no recorded failures still fails the scope-check → no regression", async () => {
+    runGatesMock.mockReturnValue(Promise.resolve(gate({ allPassed: true, coverage: 85 })));
+    checkScopeMock.mockReturnValue({ ok: false, skipped: false, outOfScope: ["core/runtime.test.ts"], skipReason: undefined });
+    const { input } = makeInput({
+      state: makeState({ phase: "B", round: 1, dispute: { status: "conceded", filer: "writer" } }),
+    });
+    const result = await handleGateTransition(input);
+    expect(result.state.round).toBe(2);
+  });
+
+  it("resolved dispute excludes only the exact flagged file — a NEW out-of-scope file is still caught", async () => {
+    runGatesMock.mockReturnValue(Promise.resolve(gate({ allPassed: true, coverage: 85 })));
+    // The approved file is core/runtime.test.ts; the Writer also touched a new
+    // out-of-scope file, other-spec.ts — the exclusion must not hide it.
+    checkScopeMock.mockReturnValue({ ok: false, skipped: false, outOfScope: ["core/runtime.test.ts", "other-spec.ts"], skipReason: undefined });
+    const { input } = makeInput({
+      state: makeState({
+        phase: "B",
+        round: 1,
+        dispute: {
+          status: "conceded",
+          resolvedFailures: [{ test: "scope-check", subtest: "out-of-scope files", output: "core/runtime.test.ts" }],
+        },
+      }),
+    });
+    const result = await handleGateTransition(input);
+    expect(result.state.round).toBe(2); // still fails — the new file is flagged
+  });
 });
 
 // --- Phase C ---

@@ -120,6 +120,50 @@ describe("justTransitioned + dispute interaction", () => {
     );
   });
 
+  it("handleBDisputePropose records only the disputed gate failures (matched by claim)", () => {
+    const state = makeState({
+      dispute: { status: "none" },
+      lastGateResult: {
+        compile: true,
+        compileError: "",
+        allPassed: false,
+        coverage: 0,
+        failures: [
+          { test: "scope-check", subtest: "out-of-scope files", output: "core/runtime.test.ts" },
+          { test: "TestAdd", subtest: "", output: "boom" },
+        ],
+      },
+    });
+
+    handleBDisputePropose(
+      { current: state } as any,
+      makeMockPi(),
+      vi.fn(),
+      makeToolCtx(),
+      "scope-check/out-of-scope files is a false positive — core/runtime.test.ts is Tester-owned",
+    );
+
+    // Only the failure whose test name appears in the claim is recorded, so a
+    // resolved dispute clears exactly the disputed failure, not every gate one.
+    expect(state.dispute?.resolvedFailures).toEqual([
+      { test: "scope-check", subtest: "out-of-scope files", output: "core/runtime.test.ts" },
+    ]);
+  });
+
+  it("handleBDisputePropose records nothing when there is no gate result yet", () => {
+    const state = makeState({ dispute: { status: "none" }, lastGateResult: undefined });
+
+    handleBDisputePropose(
+      { current: state } as any,
+      makeMockPi(),
+      vi.fn(),
+      makeToolCtx(),
+      "scope-check/out-of-scope files is a false positive",
+    );
+
+    expect(state.dispute?.resolvedFailures).toBeUndefined();
+  });
+
   it("handleBDisputePropose (concede path) clears justTransitioned via executeWriterConcedeDispute", () => {
     const state = makeState({
       dispute: { status: "filed", filer: "tester", claim: "Test Z", filedRound: 1 },

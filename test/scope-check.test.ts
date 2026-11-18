@@ -9,7 +9,7 @@ vi.mock("node:child_process", () => ({
 }));
 
 import { execSync } from "node:child_process";
-import { parseInventory, checkScope, captureGitBaseline } from "../src/scope-check";
+import { parseInventory, checkScope, captureGitBaseline, recaptureBaselineForPhaseB } from "../src/scope-check";
 
 const mockExecSync = vi.mocked(execSync);
 
@@ -319,5 +319,35 @@ describe("captureGitBaseline", () => {
     mockExecSync.mockReturnValue('?? "prompt-ünïcode/"\n');
     const r = captureGitBaseline(CWD);
     expect(r).toEqual(["prompt-ünïcode/"]);
+  });
+});
+
+describe("recaptureBaselineForPhaseB", () => {
+  beforeEach(() => {
+    mockExecSync.mockReset();
+  });
+
+  const CWD = "/proj";
+
+  it("self-refactor: reads the dirty set from cwd (wsRoot '.')", () => {
+    mockExecSync.mockReturnValue("?? core/runtime.test.ts\n");
+    const r = recaptureBaselineForPhaseB("internal/fix-foo.md", CWD, vi.fn());
+    expect(mockExecSync).toHaveBeenCalledWith("git status --porcelain", expect.objectContaining({ cwd: CWD }));
+    expect(r).toEqual(["core/runtime.test.ts"]);
+  });
+
+  it("golden project: reads from the workspace-root subdir, not cwd", () => {
+    mockExecSync.mockReturnValue("?? spec.md\n");
+    const r = recaptureBaselineForPhaseB("test/golden/proj/spec.md", CWD, vi.fn());
+    expect(mockExecSync).toHaveBeenCalledWith("git status --porcelain", expect.objectContaining({ cwd: `${CWD}/test/golden/proj` }));
+    expect(r).toEqual(["spec.md"]);
+  });
+
+  it("returns null (leaves any existing baseline) when cwd is not a git repo", () => {
+    mockExecSync.mockImplementation(() => { throw new Error("not a git repo"); });
+    const debug = vi.fn();
+    const r = recaptureBaselineForPhaseB("internal/fix-foo.md", CWD, debug);
+    expect(r).toBeNull();
+    expect(debug).not.toHaveBeenCalled();
   });
 });

@@ -27,7 +27,8 @@
 
 import { execSync } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
-import { resolve, isAbsolute } from "node:path";
+import { resolve, isAbsolute, join } from "node:path";
+import { getWorkspaceRoot } from "./types";
 
 export interface ScopeCheckResult {
   /** true when no out-of-scope files were found (or the check was skipped). */
@@ -167,6 +168,34 @@ export function captureGitBaseline(cwd: string): string[] | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Re-capture the scope-check baseline when the loop enters Phase B. Phase A's
+ * test files (and any other work already on disk at B-start) must count as
+ * "pre-existing" for Phase B's contamination check, not as out-of-scope edits.
+ *
+ * Returns the baseline, or null when `cwd` is not a git repo (caller leaves
+ * any existing baseline untouched). Workspace-aware: the dirty set is read
+ * from the same directory the gate runs in, so Inventory paths resolve
+ * correctly for a golden project. This is the shared form of the inline
+ * re-captures in the tool/gate B-entry paths — the negotiate auto-advance
+ * path also calls it, because it bypasses the gate's effect applier and would
+ * otherwise skip the re-capture and flag the Tester's new test file as
+ * contamination (session 01a1c72a).
+ */
+export function recaptureBaselineForPhaseB(
+  specPath: string,
+  cwd: string,
+  debug: (msg: string) => void,
+): string[] | null {
+  const wsRoot = getWorkspaceRoot(specPath);
+  const gateCwd = wsRoot === "." ? cwd : join(cwd, wsRoot);
+  const baseline = captureGitBaseline(gateCwd);
+  if (baseline !== null) {
+    debug(`Scope-check baseline re-captured for Phase B: ${baseline.length} file(s)`);
+  }
+  return baseline;
 }
 
 /**
