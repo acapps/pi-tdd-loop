@@ -48,6 +48,21 @@ export function isApproval(decision: string): boolean {
 }
 
 /**
+ * fix-phase-a-approve-advance: `negotiate_propose` in Phase A advances to
+ * Phase B iff the plan is exactly "approve" (case-insensitive, trimmed).
+ *
+ * Deliberately distinct from `isApproval` (which accepts "approved" with no
+ * trim/case-folding): `isApproval` is for `negotiate_review` decisions
+ * (human-typed review verdict); `isPhaseAApproval` is for `negotiate_propose`
+ * in Phase A (LLM-generated proposal text, Tester self-approval). Different
+ * input sources, different predicates. The Phase 0 path (`plan === "approve"`)
+ * is unchanged — out of scope for this spec.
+ */
+export function isPhaseAApproval(plan: string): boolean {
+  return plan.trim().toLowerCase() === "approve";
+}
+
+/**
  * fix-negotiate-confirm-approval-loop §1 + session 01a0a668: a Writer
  * proposal is a confirmation iff the first word is "agree" (case-
  * insensitive, trimmed). Trailing text is explanation, not a condition:

@@ -5,10 +5,10 @@ import * as GP from "../generic-prompts";
 import { getLanguageConfig } from "../languages";
 import { sendPrompt } from "../prompt";
 import { persistState, logNegotiateEntry, transitionToPhaseB } from "./state-io";
-import { isApproval, isAgreeProposal, buildProposeResult, buildReviewResult } from "./types";
+import { isApproval, isPhaseAApproval, isAgreeProposal, buildProposeResult, buildReviewResult } from "./types";
 import type { StateRef, ToolCtx, ToolResult, Debug } from "./types";
 import { handleBDisputePropose, handleBDisputeReview } from "./dispute";
-import { executePhase0Approve, executePhase0Feedback, executeReject, executeEscalatePropose } from "./phase0";
+import { executePhase0Approve, executePhase0Feedback, executeReject, executeEscalatePropose, executePhaseAApprove } from "./phase0";
 import {
   PROPOSE_POLICY, REVIEW_POLICY, PROPOSE_REJECT_TEXT, REVIEW_REJECT_TEXT,
   PROPOSE_PARAMETERS, REVIEW_PARAMETERS,
@@ -51,6 +51,11 @@ function handlePropose(
         return executePhase0Approve(state, pi, ctx, debug);
       }
       return executePhase0Feedback(state, pi, ctx, debug, plan);
+    case "phaseA":
+      // fix-phase-a-approve-advance: approve → Phase B, else escalate.
+      return isPhaseAApproval(plan)
+        ? executePhaseAApprove(state, pi, ctx, debug, plan)
+        : executeEscalatePropose(state, pi, ctx, debug, plan);
     case "escalate":
       return executeEscalatePropose(state, pi, ctx, debug, plan);
     case "reject":

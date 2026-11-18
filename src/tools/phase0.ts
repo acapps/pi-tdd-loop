@@ -3,7 +3,7 @@
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { startPhaseA } from "../phase-a";
-import { persistState } from "./state-io";
+import { persistState, transitionToPhaseB } from "./state-io";
 import { ESCALATE_NOTICE } from "./policy";
 import type { StateRef, ToolCtx, ToolResult, Debug } from "./types";
 
@@ -58,6 +58,42 @@ export function executeReject(
     reason: "not-available-in-phase",
   });
   return { content: [{ text }] };
+}
+
+/**
+ * Phase A approve (fix-phase-a-approve-advance): the Tester's self-approval
+ * of the contract advances directly to Phase B round 1 — no pause, no
+ * /loop-continue. Sequence (pinned in the spec's side-effect contract):
+ *   1. log the loop-negotiate entry (action "approve", trimmed plan text)
+ *   2. transitionToPhaseB — full helper (reset, persist, status, notify,
+ *      scope-check baseline re-capture, advance prompt)
+ *   3. override lastPhase = "A" (resetForPhaseB hardcodes "negotiate")
+ *   4. persistState again — the lastPhase correction
+ *   5. return the success text (distinct from the human-facing notify)
+ */
+export function executePhaseAApprove(
+  state: StateRef,
+  pi: ExtensionAPI,
+  ctx: ToolCtx,
+  debug: Debug,
+  plan: string,
+): ToolResult {
+  const decision = plan.trim();
+  debug(`negotiate_propose approve in Phase A: ${decision.slice(0, 60)}`);
+  pi.appendEntry("loop-negotiate", {
+    phase: "A",
+    round: state.current.round,
+    action: "approve",
+    text: decision.slice(0, 500),
+  });
+  transitionToPhaseB(state, pi, ctx, debug);
+  // The tool-call path does not notify (the agent-settled applier owns the
+  // settle-path notify — bug-advance-effect-dual-path); this advance is
+  // initiated by the Tester, so the human-facing notify happens here.
+  ctx.ui.notify("Approved — moving to Phase B.", "info");
+  state.current.lastPhase = "A";
+  persistState(state, pi, debug);
+  return { content: [{ text: "Approved. Moving to Phase B." }] };
 }
 
 /**

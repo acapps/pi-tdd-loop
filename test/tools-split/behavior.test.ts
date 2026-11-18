@@ -36,8 +36,11 @@ vi.mock("node:fs", () => ({
 import * as Tool from "../../src/tools";
 import * as GP from "../../src/generic-prompts";
 import { initLiveMetrics, clearLiveMetrics, getLiveMetrics } from "../../src/metrics";
+import { getLanguageConfig } from "../../src/languages";
 import type { LoopState, Phase } from "../../src/types";
 import { createMockExtensionAPI } from "../__mocks__/@earendil-works/pi-coding-agent";
+import { isPhaseAApproval } from "../../src/tools/types";
+import { PROPOSE_POLICY, type ProposePolicy } from "../../src/tools/policy";
 
 // --- Fixtures -----------------------------------------------------------
 
@@ -247,11 +250,146 @@ describe("policy matrix — propose", () => {
     expect(result.content[0].text).toContain("/loop-continue");
   });
 
-  it("A × propose('approve') → still escalate (no hidden auto-advance from Phase A)", async () => {
+  it("A × propose('approve') → advances to Phase B round 1 (fix-phase-a-approve-advance)", async () => {
+    const state = makeState({ phase: "A", round: 3, lastPhase: "review" });
+    const ctx = makeCtx();
+    const { pi, result } = await runPropose(state, "approve", ctx);
+
+    // Full state after the call.
+    expect(state.current.phase).toBe("B");
+    expect(state.current.lastPhase).toBe("A");
+    expect(state.current.round).toBe(1);
+    expect(state.current.turnsThisPhase).toBe(1);
+    expect(state.current.justTransitioned).toBe(true);
+    expect(state.current.dispute).toEqual({ status: "none" });
+
+    // Human is told via notify (distinct from the ToolResult text).
+    expect(ctx.ui.notify).toHaveBeenCalledWith("Approved — moving to Phase B.", "info");
+    // UI status.
+    expect(ctx.ui.setStatus).toHaveBeenCalledWith("loop", "Phase B — round 1");
+
+    // Negotiate entry logged with action "approve".
+    const logs = pi.appendedEntries.filter((e: any) => e.customType === "loop-negotiate");
+    expect(logs).toHaveLength(1);
+    expect(logs[0].data.action).toBe("approve");
+    expect(logs[0].data.phase).toBe("A");
+    expect(logs[0].data.round).toBe(3);
+    expect(logs[0].data.text).toBe("approve");
+
+    // The Writer receives the Phase B advance prompt.
+    const lang = getLanguageConfig("go");
+    const expectedPrompt = lang.prompts.promptWriterPhaseB(".");
+    expect(sentPrompts(pi)).toContain(expectedPrompt);
+
+    // Persisted with the corrected lastPhase="A" as the FINAL entry.
+    const entries = lastStateEntries(pi);
+    expect(entries.length).toBeGreaterThanOrEqual(1);
+    expect(lastEntry(pi).customType).toBe("loop-state");
+    expect(lastEntry(pi).data.lastPhase).toBe("A");
+    expect(lastEntry(pi).data.phase).toBe("B");
+
+    // The agent is told the tool call succeeded — NOT told to wait.
+    expect(result.content[0].text).toBe("Approved. Moving to Phase B.");
+    expect(result.content[0].text).not.toContain("Wait for the human's decision");
+  });
+
+  it("A × propose('APPROVE') → advances (case-insensitive)", async () => {
     const state = makeState({ phase: "A" });
-    const { result } = await runPropose(state, "approve");
+    const ctx = makeCtx();
+    const { pi, result } = await runPropose(state, "APPROVE", ctx);
+
+    expect(state.current.phase).toBe("B");
+    expect(state.current.lastPhase).toBe("A");
+    expect(ctx.ui.notify).toHaveBeenCalledWith("Approved — moving to Phase B.", "info");
+    expect(result.content[0].text).toBe("Approved. Moving to Phase B.");
+    const logs = pi.appendedEntries.filter((e: any) => e.customType === "loop-negotiate");
+    expect(logs[0].data.text).toBe("APPROVE");
+  });
+
+  it("A × propose('approve  ') → advances (trimmed)", async () => {
+    const state = makeState({ phase: "A" });
+    const ctx = makeCtx();
+    const { pi, result } = await runPropose(state, "approve  ", ctx);
+
+    expect(state.current.phase).toBe("B");
+    expect(state.current.lastPhase).toBe("A");
+    expect(ctx.ui.notify).toHaveBeenCalledWith("Approved — moving to Phase B.", "info");
+    expect(result.content[0].text).toBe("Approved. Moving to Phase B.");
+    const logs = pi.appendedEntries.filter((e: any) => e.customType === "loop-negotiate");
+    expect(logs[0].data.text).toBe("approve"); // trimmed before logging
+  });
+
+  it("A × propose('not approve') → still escalates", async () => {
+    const state = makeState({ phase: "A", lastPhase: "review" });
+    const ctx = makeCtx();
+    const { pi, result } = await runPropose(state, "not approve", ctx);
+
+    expect(state.current.phase).toBe("escalated");
+    expect(state.current.lastPhase).toBe("A");
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("not approve"),
+      "warning",
+    );
+    expect(ctx.ui.setStatus).toHaveBeenCalledWith("loop", "escalated (proposal surfaced)");
+    expect(result.content[0].text).toContain("Wait for the human's decision");
+
+    const logs = pi.appendedEntries.filter((e: any) => e.customType === "loop-negotiate");
+    expect(logs).toHaveLength(1);
+    expect(logs[0].data.action).toBe("escalate");
+    expect(logs[0].data.text).toBe("not approve");
+    expect(lastEntry(pi).customType).toBe("loop-state");
+  });
+
+  it("A × propose('approved') → still escalates (isPhaseAApproval is exact-match, not isApproval)", async () => {
+    const state = makeState({ phase: "A" });
+    const ctx = makeCtx();
+    const { result } = await runPropose(state, "approved", ctx);
+
+    // isApproval would accept "approved"; isPhaseAApproval must not.
     expect(state.current.phase).toBe("escalated");
     expect(result.content[0].text).toContain("Wait for the human's decision");
+  });
+
+  it("A × propose('I approve the contract') → still escalates (approve is not a standalone word)", async () => {
+    const state = makeState({ phase: "A" });
+    const { result } = await runPropose(state, "I approve the contract");
+    expect(state.current.phase).toBe("escalated");
+    expect(result.content[0].text).toContain("Wait for the human's decision");
+  });
+
+  describe("isPhaseAApproval — pure predicate (fix-phase-a-approve-advance)", () => {
+    it("accepts 'approve' case-insensitively and trimmed", () => {
+      expect(isPhaseAApproval("approve")).toBe(true);
+      expect(isPhaseAApproval("APPROVE")).toBe(true);
+      expect(isPhaseAApproval("Approve")).toBe(true);
+      expect(isPhaseAApproval("  approve\n")).toBe(true);
+      expect(isPhaseAApproval("approve  ")).toBe(true);
+    });
+
+    it("rejects near-misses, including isApproval's 'approved'", () => {
+      expect(isPhaseAApproval("approved")).toBe(false);
+      expect(isPhaseAApproval("I approve")).toBe(false);
+      expect(isPhaseAApproval("approve tests")).toBe(false);
+      expect(isPhaseAApproval("")).toBe(false);
+      expect(isPhaseAApproval(" ")).toBe(false);
+      expect(isPhaseAApproval("agreement")).toBe(false);
+    });
+  });
+
+  describe("PROPOSE_POLICY — phaseA routing (fix-phase-a-approve-advance)", () => {
+    it("maps Phase A to the new 'phaseA' policy value", () => {
+      expect(PROPOSE_POLICY["A"]).toBe("phaseA" as ProposePolicy);
+    });
+
+    it("leaves every other phase's policy unchanged", () => {
+      expect(PROPOSE_POLICY["review"]).toBe("phase0");
+      expect(PROPOSE_POLICY["negotiate"]).toBe("negotiate");
+      expect(PROPOSE_POLICY["B"]).toBe("dispute");
+      expect(PROPOSE_POLICY["C"]).toBe("reject");
+      expect(PROPOSE_POLICY["done"]).toBe("reject");
+      expect(PROPOSE_POLICY["escalated"]).toBe("escalate");
+      expect(PROPOSE_POLICY["idle"]).toBe("reject");
+    });
   });
 
   it("negotiate × propose('plan') → proposal recorded, negotiateProposed=true, persisted", async () => {

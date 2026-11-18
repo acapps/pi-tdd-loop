@@ -6,12 +6,12 @@
 
 import type { Phase } from "../types";
 
-export type ProposePolicy = "phase0" | "negotiate" | "dispute" | "escalate" | "reject";
+export type ProposePolicy = "phase0" | "negotiate" | "dispute" | "escalate" | "reject" | "phaseA";
 export type ReviewPolicy = "phase0" | "negotiate" | "dispute" | "reject";
 
 export const PROPOSE_POLICY: Record<Phase, ProposePolicy> = {
   review: "phase0", negotiate: "negotiate", B: "dispute",
-  A: "escalate", C: "reject", done: "reject", escalated: "escalate", idle: "reject",
+  A: "phaseA", C: "reject", done: "reject", escalated: "escalate", idle: "reject",
 };
 export const REVIEW_POLICY: Record<Phase, ReviewPolicy> = {
   review: "phase0", negotiate: "negotiate", B: "dispute",
