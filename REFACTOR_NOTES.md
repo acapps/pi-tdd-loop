@@ -164,3 +164,222 @@ split needed (those dirs already exist and are populated).
 - tsc + tests match baseline (1828 pass, tsc clean).
 - Registered surface byte-identical to snapshot above.
 - Each commit small + revertible (`refactor: extract <thing>`).
+
+---
+
+# Round 2 — whole-codebase behavior-preserving refactor (2026, branch `refactor/behavior-preserving` from `main` @ `32733f1`)
+
+## Scope reality check (round 2)
+`index.ts` is frozen (M3 SHA-256 pin, Option A above) and is already a thin
+composition root. The round-1 plan is exhausted. Round 2 targets the remaining
+hotspots in `src/`, ranked by (pain x risk). Same prime directive: **no
+behavior changes**.
+
+## Phase 0 map (round 2)
+
+### Module inventory (src/, 8,675 lines total)
+
+| Module | Lines | Purpose | Deps / notes |
+|---|---|---|---|
+| `src/reviewer.ts` | 617 | Phase 0 spec reviewer | **Mixed I/O + pure logic + prompt strings** (smell #1). I/O: `readSpec` (fs), `validateTestRunner` (execSync). Pure: `analyzeSpec`, detectors, formatters. |
+| `src/transitions.ts` | 390 | Pure transition engine | Clean: pure, no I/O. Hotspot: 8-variant `TransitionEffect` union, 14 private helpers, 5 exported functions |
+| `src/events/tool-call/index.ts` | 381 | Repeated-call / recon / write-loop breakers | **3 independent detectors in one file** sharing per-turn module state (smell #2). Pure key logic + I/O handlers + module-level counters |
+| `src/events/agent-settled/effect-applicator.ts` | 369 | Applies retry/advance/done/escalated effects | **Mixed**: 4 effect appliers + git merge-back workflow (commitAndMerge/verifyMergeComplete) + prompt builders |
+| `src/events/before-agent.ts` | 317 | Role prompt injection | Mostly prompt strings; `buildDisputeFixPrompt` mutates state + commits (smell #3, minor) |
+| `src/spec-command.ts` | 283 | /spec one-shot Author | **Mixed**: fs I/O (`resolveGoal`, `readRubric`) + prompt rendering + command wiring |
+| `src/scope-check.ts` | 272 | Cross-spec contamination gate | execSync git + pure Inventory parsing |
+| `src/git-workflow.ts` | 261 | Opt-in --branch lifecycle | execFile git + pure name/prompt helpers |
+| `src/gates.ts` | 247 | Gate runner | execSync + pure parsers |
+| `src/types.ts` | 222 | Shared types + 4 helper fns | `getWorkspaceRoot`/`isWorkspacePath`/`stateSummary`/`isGoldenProject` are logic, not types (smell #4, minor) |
+| `src/metrics.ts` | 219 | Live metrics | Pure + module-level `liveMetrics` singleton (documented) |
+| `src/tools/negotiate.ts` | 199 | negotiate tool handlers | Policy dispatch; clean |
+| `src/commands/status.ts` | 199 | /loop-status etc. | Prompt builders + command factories |
+| `src/state-validation.ts` | 194 | State restore validation | Pure, clean |
+| `src/events/agent-settled/index.ts` | 190 | Settle dispatcher | Clean dispatcher |
+| `src/bug-spec.ts` | 190 | Bug spec rendering | Mixed pure + fs write |
+| `src/events/tool-call.ts` | 180 | Path enforcement | Flat sibling of `tool-call/index.ts` (confusing names, do NOT merge — spec 02) |
+| `src/tools/dispute.ts` | 179 | Dispute tool handlers | Clean |
+| `src/events/session-start.ts` | 169 | Session restore | Clean |
+| `src/selectors.ts` | 165 | Status/args/config | Mixed: `loadLoopConfig` reads fs, rest pure |
+| `src/generic-prompts.ts` | 165 | Language-agnostic prompts | Pure strings |
+| `src/commands/loop.ts` | 165 | /loop command | I/O via reviewer/baseline; clean |
+
+(`index.ts` 117 — frozen by M3; `src/languages/*` 486 — per-language configs,
+clean; remaining files < 140 lines, clean.)
+
+### Public surface consumed externally
+- **Host:** `index.ts` default export only (frozen).
+- **Tests import src modules directly** (not just via index): `src/reviewer`
+  (7 test files — 2 of which `vi.mock("../../src/reviewer")`), `src/transitions`
+  (3 files, `import * as T` namespace), `src/events/tool-call/index` (2 files),
+  plus ~20 more modules. **Test imports are part of the diffable surface:**
+  moving a module path requires updating test imports in the same commit.
+
+### Module-level mutable state (complete list)
+| State | Owner | Writers | Readers |
+|---|---|---|---|
+| `counters` (Map) | `events/tool-call/index.ts` | handler via `bumpCounter` | `resetCallCounters` |
+| `reconReadCount` (int) | `events/tool-call/index.ts` | `bumpReconCounter` | `resetReconCounters` |
+| `writeLoopCounters` (Map) | `events/tool-call/index.ts` | `bumpWriteLoopCounter` | `resetReconCounters` (clears it) |
+| `gateInFlight` (bool) | `events/agent-settled/gate-transition.ts` | `handleGateTransition` try/finally | same fn |
+| `liveMetrics` | `src/metrics.ts` | `initLiveMetrics`/`clearLiveMetrics` | `getLiveMetrics` |
+| `lastState` | `index.ts` (frozen) | default export | `__getStateForTest` |
+
+Import-time side effects: `index.ts` `getLanguageConfig("go")` (frozen); nothing else.
+
+### External I/O
+- fs: `reviewer.ts`, `spec-command.ts`, `scope-check.ts`, `selectors.ts`, `bug-spec.ts`, `spec-archive.ts`, `state/checkpoint.ts`, `spec-path.ts`
+- child_process: `reviewer.ts` (execSync), `gates.ts`, `scope-check.ts`, `git-workflow.ts` (execFile), `git-state.ts`, `baseline.ts`, `commit.ts` (env `PI_LOOP_RUNNER`)
+- env: `PI_LOOP_RUNNER` only (`prompt.ts:24`, `commit.ts:50`)
+- No network.
+
+### Test coverage
+1,828 tests / 65 files, all passing. Every module above has direct unit tests.
+Untested in isolation: `src/state-validation.ts` edge set is thin; `src/selectors.ts`
+`loadLoopConfig` fs paths are tested via mocks; `src/state/checkpoint.ts` (92 lines)
+is tested via `test/state-validation.test.ts` adjacency. e2e: `test/e2e/quality.ts`
+(explicit-only, real toolchain).
+
+## Smells and hotspots (ranked pain x risk)
+
+1. **`src/reviewer.ts` (617) — mixed I/O + pure logic + prompt strings.**
+   Highest pain: the file is the largest in src and its responsibilities are
+   orthogonal (spec file reading, runner pre-flight check, spec analysis,
+   finding formatting). Highest risk: 7 test files import it, 2 `vi.mock` it.
+   Mitigation: keep `src/reviewer.ts` as a barrel **re-exporting every existing
+   name from the new submodules** — the module path is unchanged, so vi.mock
+   intercepts are unaffected; move code verbatim into submodules.
+2. **`src/events/tool-call/index.ts` (381) — 3 detectors + shared per-turn state.**
+   Medium pain, low-medium risk. The three detectors (repeated-call, recon,
+   write-loop) are independent except for the reset contract
+   (`resetCallCounters` + `resetReconCounters` clear all three — pinned). Split
+   into `tool-call/breaker.ts` (repeated-call), `tool-call/recon.ts`,
+   `tool-call/write-loop.ts`, with the shared reset in one place; index.ts
+   re-exports the public names so `index.ts` and tests are untouched.
+3. **`src/events/agent-settled/effect-applicator.ts` (369) — git merge-back
+   workflow tangled in the effect applier.**
+   Medium pain, medium risk: `mergeBranchBack`/`verifyBranchMerge`/`handleMergeConflict`
+   (~120 lines) are the --branch workflow; `deliverAdvancePrompt`/prompt builders
+   are prompt concerns. Extract `agent-settled/merge-back.ts` + move prompt
+   builders to `agent-settled/prompts.ts`; re-export from effect-applicator so
+   `index.ts` (events barrel) type re-exports and tests keep resolving.
+4. **`src/spec-command.ts` (283) — fs I/O + prompt rendering + command in one file.**
+   Low-medium pain, low risk. Extract `src/spec-author.ts` (pure prompt
+   rendering: `renderAuthorPrompt`, `RULES`, `TEMPLATE_OUTLINE`, helpers) and
+   `src/spec-io.ts` (fs: `resolveGoal`, `findGoalFile`, `readRubric`).
+   spec-command.ts keeps the command factory + arg parsing and re-exports.
+5. **`src/types.ts` (222) — 4 helper functions in the types file.**
+   Low pain, low risk. Move `isGoldenProject`/`getWorkspaceRoot`/`isWorkspacePath`/
+   `stateSummary` to `src/workspace.ts` (+ `stateSummary` → `src/state-summary.ts`
+   or same file); re-export from types.ts. ~20 importer files keep working via
+   the re-exports; no import edits needed.
+6. **`src/events/before-agent.ts` (317) — `buildDisputeFixPrompt` mutates state
+   + commits inside a "prompt builder".** Minor: it is a documented, pinned
+   side-effect (R3 comment). Not splitting — the file is mostly verbatim prompt
+   strings; moving them would churn strings. Flagged as debt, not refactored.
+7. **`src/transitions.ts` (390)** — large but pure, cohesive, well-tested
+   (3 dedicated test files). Splitting effect/state-builder halves is possible
+   but low value against its size; **defer** unless the round budget allows.
+
+## Prioritized plan (each step = one commit, `refactor: <what>`)
+
+| # | Step | Scope | Benefit | Risk |
+|---|---|---|---|---|
+| 1 | `src/reviewer.ts` → `src/reviewer/{io,analysis,format}.ts` + barrel re-export | verbatim move, 3 submodules | largest file decomposed; I/O isolated | medium (test imports via barrel path) |
+| 2 | `src/events/tool-call/index.ts` → `breaker.ts` + `recon.ts` + `write-loop.ts` + thin index | verbatim move; reset contract preserved in one module | 3 detectors isolated; per-turn state explicit | low-medium (counter state ownership) |
+| 3 | `src/spec-command.ts` → `src/spec-author.ts` + `src/spec-io.ts` + thin spec-command | verbatim move | I/O / prompt / command separated | low |
+| 4 | `src/events/agent-settled/effect-applicator.ts` → `merge-back.ts` + `prompts.ts` + thin effect-applicator (re-exports) | verbatim move | applier stays focused; git workflow isolated | medium (events barrel re-exports) |
+| 5 | `src/types.ts` helpers → `src/workspace.ts` + `src/state-summary.ts`, re-export from types.ts | verbatim move | types file is types; logic named | low |
+| 6 | (defer) `src/transitions.ts` split | — | — | deferred: pure + cohesive; low value/risk ratio |
+
+## Phase 1: baseline (round 2, @ `32733f1`, clean tree)
+
+- **Typecheck** (`npx tsc --noEmit`): exit 0.
+- **Tests** (`npx vitest run`): 65 files, 1828 tests, all pass (~11s).
+- Lint/build: none configured (tsc noEmit is the build gate).
+- **Safety net:** the existing 1,828-test suite covers every module targeted.
+  Public-surface snapshot = the export lists in the map above, diffed after
+  each step (plus `git diff --stat` must show only moves within each step).
+
+## Observed issues (not fixed)
+
+- `src/events/tool-call.ts` (path enforcement) and `src/events/tool-call/index.ts`
+  (loop breakers) are two unrelated modules with nearly identical paths — a
+  future reader will assume they are one. Renaming is out of scope (public
+  names).
+- `src/types.ts` `CommandContext` duplicates the shape inlined in
+  `src/spec-command.ts` (its own `CommandContext` interface) — two
+  structurally-identical types, neither imports the other.
+- `src/transitions.ts` `escalateTo(fromPhase: string)` takes `string`, not
+  `Phase` — the type is looser than the call sites use.
+- `src/reviewer.ts` `buildSummaryTable` builds a RegExp from `f.category` at
+  call time (per row) — works, but the escaping is inline and untested for
+  exotic categories. Left as-is (behavior).
+
+## Status
+
+- **Step 1 DONE** (commit `138fb16`): `src/reviewer.ts` → `src/reviewer/{io,analysis,format}.ts` + barrel. Verbatim move; module path unchanged so all 7 test importers (incl. the 2 `vi.mock("src/reviewer")` sites) are untouched. tsc clean, 1828/1828 pass.
+- **Step 2 ABORTED + fully reverted**. The tool-call breaker is **byte-pinned by test source-needle inspection**: `test/extension.test.ts:131` identifies the registered breaker handler via `handler.toString().includes("blockRepeatedCall")` — the handler's *own* serialized source must contain that call site. Any split of the handler into composing modules breaks the needle (verified empirically: 7 test failures, including order-detection and 6 counter-behavior pins). This is the same freeze class as the M3 `index.ts` SHA pin: a documented test seam that forbids structural surgery on this module. `src/events/tool-call/index.ts` is treated as **frozen** for this round.
+- **Step 3 DONE** (commit `dfba8aa`): `src/spec-command.ts` → `src/spec-author.ts` (pure prompt rendering) + `src/spec-io.ts` (fs I/O) + thin spec-command (command factory + arg parsing + re-exports). Verbatim move; all names re-exported so importers and `vi.mock` intercepts are unchanged. tsc clean, 1828/1828 pass.
+- **Step 4 DONE** (commit `5a7abb8`): `src/events/agent-settled/effect-applicator.ts` → `merge-back.ts` (git --branch workflow: `mergeBranchBack`, `verifyBranchMerge`, `handleMergeConflict`) + `prompts.ts` (prompt builders: `buildRetryPrompt`, `buildAdvancePrompt`) + thin effect-applicator (4 effect appliers + `deliverAdvancePrompt` + re-exports). Verbatim move; all names re-exported. tsc clean, 1828/1828 pass.
+- **Step 5 DONE** (commit `7a74054`): `src/types.ts` helpers → `src/workspace.ts` (`isGoldenProject`, `getWorkspaceRoot`, `isWorkspacePath`) + `src/state-summary.ts` (`stateSummary`). Re-exported from types.ts — zero importer edits. tsc clean, 1828/1828 pass.
+- **Step 6 DEFERRED** (as planned): `src/transitions.ts` — pure, cohesive, 3 dedicated test files; low value/risk ratio.
+
+## Phase 3: final verification
+
+- **Typecheck** (`npx tsc --noEmit`): exit 0.
+- **Tests** (`npx vitest run`): 65 files, 1828 tests, all pass.
+- **`index.ts`**: byte-identical to main (0 lines diff) — M3 pin intact.
+- **Public surface**: all original module paths and export names resolve identically
+  (barrel re-exports verified by the full test suite, which imports every
+  affected module directly). No new public names; no removed names.
+- **No new cycles**: all new modules are leaves or one-level-deep (reviewer/*,
+  spec-author, spec-io, merge-back, prompts, workspace, state-summary).
+- **No behavior changes**: every move was verbatim; the only structural
+  difference is module boundaries. Strings, prompts, registration order,
+  and persisted-state formats are untouched.
+
+## Final structure (new/changed files)
+
+```
+src/reviewer.ts              — barrel (was 617 lines of mixed logic)
+src/reviewer/io.ts           — readSpec, validateTestRunner (I/O)
+src/reviewer/analysis.ts     — analyzeSpec, validateSpecStructure, detectors (pure)
+src/reviewer/format.ts       — formatFinding, buildClarificationAddendum, formatAddendum, buildSummaryTable (pure)
+
+src/spec-command.ts          — command factory + arg parsing + re-exports (was 283)
+src/spec-author.ts           — renderAuthorPrompt, RULES, TEMPLATE_OUTLINE (pure)
+src/spec-io.ts               — resolveGoal, readRubric, normalizeOutDir (fs)
+
+src/events/agent-settled/effect-applicator.ts — 4 appliers + deliverAdvancePrompt + re-exports (was 369)
+src/events/agent-settled/merge-back.ts        — mergeBranchBack, verifyBranchMerge, handleMergeConflict
+src/events/agent-settled/prompts.ts           — buildRetryPrompt, buildAdvancePrompt, RESOLUTION_BLOCK
+
+src/types.ts                 — types only + re-exports (was 222)
+src/workspace.ts             — isGoldenProject, getWorkspaceRoot, isWorkspacePath
+src/state-summary.ts         — stateSummary
+```
+
+## Deviations from plan
+
+- Step 2 (tool-call split) was **aborted** after empirical verification that
+  the test suite byte-pins the handler's serialized source. The split was
+  fully reverted (working tree clean, 1828/1828 green). This is a documented
+  design decision in the test file ("source-needle" identification) that
+  overrides the structural benefit of the split.
+
+## Remaining debt
+
+- `src/events/tool-call/index.ts` (381 lines, 3 detectors) — frozen by the
+  source-needle test seam. A future round could re-baseline the needle test
+  (human decision) and then split.
+- `src/transitions.ts` (390 lines) — deferred; pure and cohesive, low
+  value/risk ratio for a split.
+- `src/events/before-agent.ts` (317 lines) — mostly verbatim prompt strings;
+  `buildDisputeFixPrompt` has a documented, pinned state mutation + commit
+  inside a "prompt builder" (R3 comment). Not splitting.
+- `src/events/tool-call.ts` vs `src/events/tool-call/index.ts` naming
+  collision — public names, out of scope.
+- `src/types.ts` `CommandContext` duplicates the shape inlined in
+  `src/spec-command.ts` — two structurally-identical types, neither imports
+  the other (observed issue, not fixed).
