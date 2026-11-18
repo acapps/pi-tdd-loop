@@ -4,19 +4,23 @@
 // effect family from gate-transition.ts (spec 04). No new error handling.
 
 import type { LoopState, GateResult } from "../../types";
-import { getWorkspaceRoot } from "../../types";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { EventCtx } from "../index";
 import type { LanguageConfig } from "../../languages";
 import type * as T from "../../transitions";
 import * as GP from "../../generic-prompts";
-import { RETRY_PROMPTS, ADVANCE_PROMPTS } from "../../constants";
-import { formatFailures } from "../../gates";
 import { archiveSpecFile } from "../../spec-archive";
 import { captureGitBaseline } from "../../scope-check";
-import { commitAndMerge, verifyMergeComplete, promptMergeConflict } from "../../git-workflow";
 import { sendPrompt } from "../../prompt";
 import { getLiveMetrics, finalize, formatReport, accumulatePhaseTransition } from "../../metrics";
+import { mergeBranchBack, verifyBranchMerge } from "./merge-back";
+import { buildRetryPrompt, buildAdvancePrompt } from "./prompts";
+
+// Split (refactor step 4): git merge-back → ./merge-back.ts; prompt builders
+// → ./prompts.ts. Re-exported so every importer (incl. tests importing from
+// "effect-applicator") keeps resolving.
+export { mergeBranchBack, verifyBranchMerge } from "./merge-back";
+export { buildRetryPrompt, buildAdvancePrompt } from "./prompts";
 
 // --- Types ---
 
@@ -205,96 +209,6 @@ function reportDone(state: LoopState, effect: DoneEffect, pi: ExtensionAPI, ctx:
   );
 }
 
-// Git branch workflow (opt-in via --branch): merge the feature branch back
-// into the mainline at the done effect. Returns a Promise that resolves when
-// the merge has been attempted:
-//   - "merged"   — clean merge; state.branch.merged is set.
-//   - "conflict" — the Writer was prompted for the single resolution attempt;
-//                  the merge is left in progress (MERGE_HEAD set). The next
-//                  settle verifies the outcome (verifyBranchMerge) and
-//                  escalates if the attempt failed.
-//   - "error"    — the merge could not run; the branch is left in place.
-// The done effect always reports loop completion (the merge is a post-step);
-// the caller awaits this before sending the completion prompt.
-export async function mergeBranchBack(
-  state: { current: LoopState },
-  pi: ExtensionAPI,
-  ctx: EventCtx,
-  debug: (msg: string) => void,
-): Promise<"merged" | "conflict" | "error"> {
-  const branch = state.current.branch;
-  if (!branch || branch.merged) return "merged";
-
-  const outcome = await commitAndMerge(ctx.cwd, branch, state.current.language);
-  if (outcome.kind === "merged") {
-    branch.merged = true;
-    ctx.ui.notify(`Merged '${branch.name}' into '${branch.base}'.`, "info");
-    debug(`--branch merge: clean (${branch.name} → ${branch.base})`);
-    return "merged";
-  }
-  if (outcome.kind === "conflict") {
-    handleMergeConflict(outcome, branch, state.current, pi, ctx, debug);
-    return "conflict";
-  }
-  debug(`--branch merge: ERROR (${outcome.error})`);
-  ctx.ui.notify(
-    `Merge back failed: ${outcome.error} — the feature branch is left unmerged. Resolve manually.`,
-    "warning",
-  );
-  return "error";
-}
-
-// A merge conflict was detected: notify the user, set the UI status, and give
-// the Writer one turn to resolve it. The merge is left in progress (MERGE_HEAD
-// set); the next settle verifies the outcome via verifyBranchMerge.
-function handleMergeConflict(
-  outcome: { files: string[] },
-  branch: { name: string; base: string },
-  state: LoopState,
-  pi: ExtensionAPI,
-  ctx: EventCtx,
-  debug: (msg: string) => void,
-): void {
-  debug(`--branch merge: CONFLICT (${outcome.files.length} files)`);
-  ctx.ui.notify(
-    `Merge conflict merging '${branch.name}' into '${branch.base}' — the Writer gets one turn to resolve it.`,
-    "warning",
-  );
-  ctx.ui.setStatus("loop", `merge conflict — Writer resolving (${branch.name})`);
-  sendPrompt(pi, promptMergeConflict(outcome.files), state, debug);
-}
-
-// Verify the Writer's single conflict-resolution attempt. Called from the
-// settle dispatcher when the loop is done but the merge is still in progress.
-// Returns true when the merge is complete (state.branch.merged set), false
-// when it is still broken (the caller escalates — the single attempt is spent).
-export async function verifyBranchMerge(
-  state: { current: LoopState },
-  ctx: EventCtx,
-  debug: (msg: string) => void,
-): Promise<boolean> {
-  const branch = state.current.branch;
-  if (!branch || branch.merged) return true;
-
-  const outcome = await verifyMergeComplete(ctx.cwd);
-  if (outcome.kind === "merged") {
-    branch.merged = true;
-    ctx.ui.notify(`Merge complete: '${branch.name}' is now in '${branch.base}'.`, "info");
-    debug(`--branch merge: verified complete (${branch.name} → ${branch.base})`);
-    return true;
-  }
-  const detail = outcome.kind === "conflict"
-    ? `${outcome.files.length} conflicted file(s) remain`
-    : outcome.error;
-  ctx.ui.notify(
-    `Merge conflict resolution failed (${detail}). The Writer's single attempt is spent — resolving manually: "git merge --continue" or "git merge --abort" on '${branch.base}'.`,
-    "warning",
-  );
-  ctx.ui.setStatus("loop", `merge conflict — ESCALATED (manual resolution needed)`);
-  debug(`--branch merge: ESCALATED (${detail})`);
-  return false;
-}
-
 export function applyEscalatedEffect(input: EffectInput): EffectResult {
   const { ctx, debug } = input;
   const effect = input.effect as EscalatedEffect;
@@ -303,67 +217,4 @@ export function applyEscalatedEffect(input: EffectInput): EffectResult {
   ctx.ui.notify(effect.notify, "warning");
   ctx.ui.setStatus("loop", effect.status);
   return { applied: true };
-}
-
-// --- Prompt builders ---
-// Exported (G5): the fallback defaults are only directly testable
-// through an export.
-
-export function buildRetryPrompt(
-  promptType: string,
-  lang: LanguageConfig,
-  gateResult: GateResult,
-  state?: LoopState,
-): string {
-  const failures = gateResult.failures;
-  const summary = formatFailures(failures);
-  const count = failures.length;
-  const ws = state ? getWorkspaceRoot(state.specPath) : undefined;
-
-  switch (promptType) {
-    case RETRY_PROMPTS.TESTER_COMPILE_RETRY:
-    case RETRY_PROMPTS.TESTER_DISPUTE_FIX_COMPILE_FAIL:
-      return lang.prompts.promptTesterCompileRetry(gateResult.compileError);
-    case RETRY_PROMPTS.TESTER_ZERO_TEST_RETRY:
-      return lang.prompts.promptTesterZeroTestRetry();
-    case RETRY_PROMPTS.WRITER_PHASE_B_RETRY:
-    case RETRY_PROMPTS.WRITER_DISPUTE_FIX_INCOMPLETE:
-      return lang.prompts.promptWriterPhaseBContinue(summary, count, ws);
-    case RETRY_PROMPTS.CLEANER_RETRY:
-      return lang.prompts.promptCleanerRetry(summary, count, ws);
-    default:
-      return "Fix the issues and try again.";
-  }
-}
-
-// fix-negotiated-resolution-dropped: boundary language appended to the Phase B
-// prompt when a negotiated resolution names a test-file change. Instructs the
-// Writer to implement the source half, leave the test half to the Tester, and
-// not claim completion while the test half is outstanding.
-function RESOLUTION_BLOCK(resolution: string): string {
-  return `\n\nNegotiated resolution:\n${resolution}\n\nImplement the source half of the resolution. Do not modify test files — test files are owned by the Tester. If the resolution requires test changes, implement the source half and report the test half as pending the Tester. Do not claim the resolution is complete if the test half is outstanding.`;
-}
-
-export function buildAdvancePrompt(
-  promptType: string,
-  state: LoopState,
-  lang: LanguageConfig,
-): string {
-  const ws = getWorkspaceRoot(state.specPath);
-  switch (promptType) {
-    case ADVANCE_PROMPTS.WRITER_NEGOTIATE:
-      return GP.promptWriterNegotiate(state.specPath, lang.testFilePattern);
-    case ADVANCE_PROMPTS.WRITER_PHASE_B: {
-      const base = lang.prompts.promptWriterPhaseB(ws);
-      // fix-negotiated-resolution-dropped: carry the agreed resolution into
-      // the Phase B prompt with boundary language so the Writer knows what
-      // was agreed and what it can/can't do.
-      if (!state.negotiateResolution) return base;
-      return base + RESOLUTION_BLOCK(state.negotiateResolution);
-    }
-    case ADVANCE_PROMPTS.CLEANER_PHASE_C:
-      return lang.prompts.promptCleanerPhaseC(ws);
-    default:
-      return promptType;
-  }
 }
