@@ -1,4 +1,130 @@
-# REFACTOR_NOTES — `index.ts` behavior-preserving refactor
+# REFACTOR_NOTES — behavior-preserving refactor
+
+## Round 3 — fresh Phase 0 assessment (current state, 2026)
+
+> This section is the **current** assessment and supersedes the planning in the
+> earlier rounds below. All of the round-1 and round-2 planned work is already
+> **committed to `main`** (commits `138fb16`, `dfba8aa`, `5a7abb8`, `7a74054`,
+> `67acffe`, `e18ab36`). This round re-derives the map from the live tree and
+> proposes only what is genuinely left to do.
+
+### Prime directive (unchanged)
+**No behavior changes.** Structural refactor only. No bug fixes, no renaming of
+user-facing names, no registration-order changes, no string/prompt changes, no
+config/persisted-state format changes. Findings → "Observed issues (not fixed)".
+
+### Bottom line (read this first)
+The extension is **already thoroughly refactored** and the high-value work is
+done. `index.ts` is a frozen ~117-line composition root (M3 SHA-256 pin). The
+three largest mixed-responsibility files (`reviewer.ts`, `events/tool-call/index.ts`,
+`effect-applicator.ts`) and `spec-command.ts` and `types.ts` helpers have all been
+decomposed into focused submodules with barrel re-exports, verbatim moves, and
+unchanged public surfaces. The remaining files are either (a) pure/cohesive and
+low-value to split, (b) I/O-bound with pinned behavior, or (c) type-only changes
+with host-contract ambiguity. **There is no remaining low-risk, high-value step.**
+
+### Baseline (live tree, dirty — see caveat)
+- **Typecheck** (`npx tsc --noEmit`): **exit 0, clean.**
+- **Tests** (`npx vitest run`): **1825 pass / 1 fail** (64 files). The single
+  failure is **pre-existing and unrelated to this refactor**:
+  `test/tools-split/structure.test.ts` "has no runtime dependencies block" expects
+  `pkg.dependencies` to be `undefined`, but `zod` was added as a dependency in
+  commit `e18ab36` (`fix: add zod dependency`, already on `main`). This is a
+  stale test-vs-dependency mismatch, not a behavior regression. **Not fixed here**
+  (out of scope; arguably the test should be updated, but that's a separate concern).
+- **Lint/build:** none configured; `tsc --noEmit` is the build gate.
+- **Duration:** ~22s default suite.
+
+### Working-tree caveat
+`main` is dirty: `vitest.config.ts` (e2e exclusion), untracked `prompt-forge/*`
+(a dev tool, **not** imported by the extension), and `test/e2e/prompt-benchmark.test.ts`.
+`prompt-forge/` is dev-only scaffolding and is **out of scope** for this refactor
+(the extension entry is `index.ts` → `src/` only). A dedicated branch +
+`git add` of only touched files would be used before any edit (Phase 1).
+
+### Current module map (src/, ~8,900 lines)
+Already modular. Largest remaining files:
+
+| Module | Lines | Nature | Refactor-leverage |
+|---|---|---|---|
+| `src/transitions.ts` | 390 | **Pure**, cohesive, 3 dedicated tests | Low — split yields little; defer |
+| `src/events/before-agent.ts` | 317 | Prompt strings + 1 pinned side-effect (`buildDisputeFixPrompt` mutates state + commits) | Low — verbatim strings; side-effect is pinned |
+| `src/scope-check.ts` | 272 | execSync git + pure Inventory parsing | I/O-bound, pinned behavior |
+| `src/git-workflow.ts` | 261 | execFile git + pure helpers | I/O-bound, pinned |
+| `src/gates.ts` | 247 | execSync + pure parsers | I/O-bound, pinned |
+| `src/commands/status.ts` | 199 | Prompt builders + command factories | Clean |
+| `src/tools/{dispute,negotiate}.ts` | ~7.5k each | Policy dispatch; `tools/policy.ts` is a closed exhaustive matrix (compile-checked) | Clean |
+| `src/events/tool-call/index.ts` | 167 | Composition barrel (already split into breaker/recon/write-loop) | Done |
+| `src/reviewer/*`, `src/spec-author.ts`, `src/spec-io.ts`, `src/workspace.ts`, `src/state-summary.ts`, `agent-settled/merge-back.ts`, `agent-settled/prompts.ts` | — | New submodules from committed rounds | Done |
+
+### Public surface (SNAPSHOT — must stay identical)
+- **Host entry:** default export of `index.ts` (frozen, M3 SHA-256 pinned).
+- **Commands (11):** `spec, loop, loop-approve, loop-status, loop-continue,
+  loop-restart, loop-debug, loop-cancel, loop-stop, loop-patch, loop-decompose`
+  (registration order pinned).
+- **Tools (2):** `negotiate_propose`, `negotiate_review`.
+- **Event hooks (7 registrations, order pinned):** agent_settled, session_start,
+  before_agent_start, tool_call (path enforcement), tool_call (loop breaker),
+  turn_start (reset), agent_settled (reset).
+- **Test-only seam:** `__getStateForTest()`.
+- **Test-import surface:** the suite imports many `src/*` modules directly; moving
+  a module path requires updating those imports in the same commit. Barrel
+  re-exports are the migration safety net.
+
+### Module-level mutable state (complete)
+| State | Owner | Notes |
+|---|---|---|
+| `counters` Map | `events/tool-call/breaker.ts` | per-turn; reset via barrel |
+| `reconReadCount` | `events/tool-call/recon.ts` | per-turn |
+| `writeLoopCounters` Map | `events/tool-call/write-loop.ts` | cleared by `resetReconCounters` |
+| `gateInFlight` bool | `events/agent-settled/gate-transition.ts` | try/finally scoped |
+| `liveMetrics` | `src/metrics.ts` | documented singleton |
+| `lastState` | `index.ts` (frozen) | test seam |
+
+Import-time side effects: only `index.ts` `getLanguageConfig("go")` (frozen).
+External I/O: fs (reviewer/spec-command/scope-check/selectors/bug-spec/spec-archive/state/checkpoint/spec-path), child_process (reviewer/gates/scope-check/git-workflow/git-state/baseline/commit), env `PI_LOOP_RUNNER` only. No network.
+
+### Smells / hotspots (ranked by pain × risk — what's left)
+1. **`CommandContext` defined twice** (`types.ts` exported vs `spec-command.ts`
+   local). **Not a clean dedup:** `types.ts` has `notify(..., level?: string)`
+   (optional) while `spec-command.ts` has `notify(..., level: string)` (required).
+   Which matches the host's real `ctx` is ambiguous → **stop-and-ask**, don't
+   silently unify. (Prior round mislabeled them "structurally identical"; they
+   differ in `level` optionality.)
+2. **`escalateTo(fromPhase: string)`** in `transitions.ts` is looser than its
+   call sites (`Phase`). Tightening to `Phase` is a safe pure-type change but
+   **very low value**; defer.
+3. **`transitions.ts` (390)** — pure, cohesive, well-tested. Splitting the
+   effect/state-builder halves is possible but low value. **Deferred.**
+4. **`before-agent.ts` (317)** — mostly verbatim prompt strings; the one
+   non-string function (`buildDisputeFixPrompt`) has a documented, pinned
+   state-mutation+commit. **Not splitting.**
+5. **`gates.ts` / `scope-check.ts` / `git-workflow.ts`** — I/O-bound with pinned
+   behavior (exit code is the gate signal; git workflow is opt-in `--branch`).
+   Logic is already separated from I/O within each. **No safe extraction.**
+
+### Prioritized remaining plan (conservative)
+| # | Step | Scope | Benefit | Risk |
+|---|---|---|---|---|
+| R3-1 | Resolve `CommandContext` duplication | Determine host contract; if safe, make `spec-command.ts` import the exported `types.ts` version (or vice-versa) | removes a real duplicate type | **medium** — host-contract ambiguity; needs a decision (stop-and-ask) |
+| R3-2 (optional) | Tighten `escalateTo(fromPhase: string)` → `Phase` | pure type narrowing in `transitions.ts` | marginally clearer types | low — but low value |
+| — | `transitions.ts` / `before-agent.ts` / gates / scope-check / git-workflow | — | — | **Deferred**: pure-cohesive or I/O-pinned, low value/risk ratio |
+
+**Recommendation:** the high-value refactor is complete. The only genuinely
+useful remaining item (R3-1) carries host-contract ambiguity and needs a human
+decision before any edit. Nothing here warrants a large effort. Propose R3-1 and
+R3-2 only if Hailey wants to reduce the remaining minor debt; otherwise the
+correct outcome is **no further changes**.
+
+### Stop-and-ask triggers that apply here
+- R3-1 would change a type consumed by the host's `ctx` — must confirm the host
+  contract before editing (uncertain whether relied on externally).
+- Any `transitions.ts`/`types.ts` change touches the core state machine — verify
+  against the full suite after every step and diff the public surface.
+
+---
+
+## Prior rounds (historical record — all committed to `main`)
 
 Branch: `refactor/split-index` (from `main` @ `cfa0d64`)
 
