@@ -18,6 +18,7 @@ import { getWorkspaceRoot } from "../types";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { DebugFn } from "./index";
 import { getLanguageConfig } from "../languages";
+import { LOCATION_ANCHOR_RULE } from "../generic-prompts";
 import { commit } from "../commit";
 
 // --- Types ---
@@ -138,7 +139,9 @@ function buildPhasePrompt(
 // --- Prompt builders (bare-LoopState scope; strings are behavior — verbatim) ---
 
 function buildContextMessage(content: string): Record<string, unknown> {
-  return { customType: "loop-context", content, display: false };
+  // Durable guardrail: every per-turn role message carries the location
+  // anchor so the agent locates code by symbol/anchor, not line number.
+  return { customType: "loop-context", content: content + "\n\n" + LOCATION_ANCHOR_RULE, display: false };
 }
 
 function buildReviewPrompt(systemPrompt: string): BeforeAgentHandlerOutput {

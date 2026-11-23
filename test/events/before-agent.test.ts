@@ -8,6 +8,7 @@ import { handleBeforeAgent } from "../../src/events/before-agent";
 import type { LoopState } from "../../src/types";
 import type { BeforeAgentHandlerInput } from "../../src/events/before-agent";
 import { createMockExtensionAPI } from "../__mocks__/@earendil-works/pi-coding-agent";
+import { LOCATION_ANCHOR_RULE } from "../../src/generic-prompts";
 
 // --- Fixtures ---
 
@@ -109,7 +110,10 @@ function makeInput(overrides: Partial<BeforeAgentHandlerInput> = {}): BeforeAgen
 }
 
 function msg(content: string): Record<string, unknown> {
-  return { customType: "loop-context", content, display: false };
+  // Mirrors buildContextMessage: the per-turn role message carries the
+  // durable location anchor. Reference the shared constant so the expected
+  // content stays in lockstep with production (no duplicated rule text).
+  return { customType: "loop-context", content: content + "\n\n" + LOCATION_ANCHOR_RULE, display: false };
 }
 
 // --- Entry order (S1): idle short-circuit BEFORE lang resolution ---

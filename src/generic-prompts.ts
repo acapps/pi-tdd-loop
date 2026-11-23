@@ -2,6 +2,14 @@
 // Negotiation, dispute, and generic flow prompts shared across all languages.
 // Language-specific patterns are injected via parameters.
 
+// Durable location anchor (loop guardrail): locate code by symbol, not line
+// number. Line numbers rot on the next edit; symbols, unique text anchors, and
+// the knowledge graph do not. Injected into every per-turn role message so the
+// agent stops burning cycles pinning file:line. Exported so tests reference it
+// instead of duplicating the text.
+export const LOCATION_ANCHOR_RULE =
+  "Locate code by symbol, not line number. Name the function/symbol and file (e.g. loadSettings() in index.ts), never 'index.ts:233' — line numbers rot on the next edit. For edits, grep for a unique text anchor first, then edit on that exact text; never guess the match. To find where a concept lives or what a file depends on, use graphify_query / graphify_affected instead of hunting line numbers.";
+
 // --- Untrusted data delimiting (fix-prompt-injection-untrusted-text) ---
 // Wraps external text (test output, compile errors, model-generated
 // resolutions) in explicit markers so the agent treats it as data, not

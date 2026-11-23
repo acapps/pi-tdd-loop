@@ -29,12 +29,14 @@ Phase 0 reviews your spec for ambiguities and missing edge cases before any code
 
 ## Problem
 Verified current state as of writing: what exists, where, and the gap to the
-target. Static claims cite file:line; behavior claims cite the observed
+target. Static claims cite symbol + file (never a bare line number — line
+numbers rot, especially across a spec backlog where implementing one spec
+shifts the lines the others were written against); behavior claims cite the observed
 artifact (session log, captured message, command output) and name it —
-file:line and runtime evidence are complementary, not competing; a process
+symbol + file and runtime evidence are complementary, not competing; a process
 bug is usually proven by a log, not a file. Every claim is checked against
 the repo BEFORE writing, not remembered — and re-verified AFTER drafting
-(numbers typed from memory rot).
+(the cited symbol still resolves).
 
 ## Target
 One paragraph: the shape after. What exists, what does not, what the entry
@@ -193,10 +195,11 @@ docs/spec-authoring.md. The rules below each prevent a real, observed failure
 class — violating any of them costs a review round.
 
 Before writing:
-1. VERIFY, don't remember. Every file, line number, function name, caller
-   count, and import in the spec must be checked against the repo NOW. Mark
-   line references "as of writing". (Failure class A: a spec was written
-   against a file that an upstream spec had already moved.)
+1. VERIFY, don't remember. Every file, function/symbol name, caller count,
+   and import in the spec must be checked against the repo NOW. Locate each
+   claim by symbol + file, never a line number (line numbers rot, especially
+   across a spec backlog). (Failure class A: a spec was written against a
+   file that an upstream spec had already moved.)
 2. CHECK THE TEST SUITE'S SIGHTS. What does the test runner actually see?
    (Many runners don't type-check; some ignore unused imports. Name the
    checker that can see each pinned item.) (Class I.)
@@ -247,9 +250,9 @@ While writing:
     unpassable test.)
 
 Self-check before submitting:
-- Can I name a line number for every factual claim? (A)
-- After drafting, did I re-run every cited line number and grep against the
-  repo? Numbers typed from memory rot. (A)
+- Can I name the symbol + file for every factual claim? (A)
+- After drafting, did I re-verify every cited symbol still resolves against
+  the repo? Symbols don't rot; line numbers do. (A)
 - Can I name the observed artifact for every behavior claim? (A)
 - Is every list closed — can I prove the last item? (C)
 - Is every user-visible string verbatim, and every order pinned? (B, F)

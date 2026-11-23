@@ -44,6 +44,7 @@ Then I decide. Point = choice on purpose, not by default.
 - Works-on-my-spec-files does not equal works. Test with non-me examples.
 - When unsure: smaller, more general, more removable. Easy to grow later, hard to walk back.
 - Gate messages must be corrective, not just prohibitive. Re-state the role, state what to do, reference the spec. See internal/ruleset-role-compliance.md.
+- Locate code by symbol, not line number. Name the function/symbol and file (e.g. `loadSettings()` in `index.ts`), never `index.ts:233` — line numbers rot on the next edit. For edits, grep for a unique text anchor first, then edit on that exact text; never guess the match. `graphify_query` / `graphify_affected` find where a concept lives or what a file depends on. This rule is injected into every per-turn role prompt as `LOCATION_ANCHOR_RULE` (src/generic-prompts.ts) — if you change it, update the test that mirrors it.
 
 ## TEST SPEED RULE (Tester prompt + all test authors)
 

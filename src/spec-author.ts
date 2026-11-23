@@ -33,9 +33,9 @@ const TEMPLATE_OUTLINE = [
 
 const RULES: string[] = [
   "Rules — each closes an observed spec failure class; violating one costs a review round later:",
-  "1. VERIFY, don't remember. Before writing, check every file, line, function, and caller",
-  "   claim against the repo NOW; re-verify after drafting. Mark line references \"as of",
-  "   writing\". (class A)",
+  "1. VERIFY, don't remember. Before writing, check every file, function/symbol, and caller",
+  "   claim against the repo NOW; re-verify after drafting. Locate each claim by symbol +",
+  "   file, never a line number — line numbers rot across a spec backlog. (class A)",
   "2. PIN VERBATIM. Every user-visible string and every order-sensitive branch goes in the",
   "   spec exactly as written in code. (classes B, F)",
   "3. CLOSE EVERY LIST. Count items, name the last, or state the grep that proves",
@@ -77,7 +77,7 @@ export function renderAuthorPrompt(input: AuthorPromptInput): string {
     "",
     TEMPLATE_OUTLINE,
     "",
-    "Self-check before finishing: every factual claim has a line number or a named observed",
+    "Self-check before finishing: every factual claim has a symbol + file or a named observed",
     "artifact; every list is closed; every user-visible string is verbatim; every acceptance",
     "criterion names a checker that can see it.",
     "",
