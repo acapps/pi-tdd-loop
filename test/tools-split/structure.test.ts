@@ -183,8 +183,8 @@ describe("AC5 — package.json has no new dependencies", () => {
     ]);
   });
 
-  it("has no runtime dependencies block", () => {
-    expect(pkg.dependencies).toBeUndefined();
+  it("dependencies is exactly the one runtime dep (zod, for checkpoint schema)", () => {
+    expect(Object.keys(pkg.dependencies ?? {}).sort()).toEqual(["zod"]);
   });
 });
 
