@@ -1,7 +1,7 @@
 // --- TypeScript language config ---
 
 import type { LanguageConfig } from "./index";
-import { delimitUntrusted, UNTRUSTED_DATA_GUARD } from "../generic-prompts";
+import { delimitUntrusted, UNTRUSTED_DATA_GUARD, promptTesterHoldback as gPromptTesterHoldback, promptWriterHoldbackNotice as gPromptWriterHoldbackNotice, promptConsolidationStatus as gPromptConsolidationStatus } from "../generic-prompts";
 
 // Toolchain commands only — style policy (naming, line limits) is not a role
 // contract and must not be injected into prompts (no-style-policy-bloat).
@@ -20,6 +20,7 @@ const config: LanguageConfig = {
   key: "typescript",
   sourceFilePattern: "*.ts (non-test files)",
   testFilePattern: "*.test.ts",
+  holdbackSubdir: "test/holdback",
   isTestFile: (path: string) => /\.test\.ts$/.test(path) || /\.spec\.ts$/.test(path),
   isPhaseAAllowed: (path: string) => /\.test\.ts$/.test(path) || /\.spec\.ts$/.test(path) || /\.ts$/.test(path) || /tsconfig(\.[^/]+)?\.json$/.test(path) || /package\.json$/.test(path) || /vitest\.config\.ts$/.test(path) || /jest\.config\.[^/]+$/.test(path) || /\.(eslintrc|prettierrc|biomerc)\.[^/]+$/.test(path),
 
@@ -146,6 +147,13 @@ When done, stop producing tool calls.`,
     promptTesterDisputeFix: (workspaceRoot?: string, claim?: string, specPath?: string) =>
 `Conceded dispute. Fix the test in *.test.ts to match the spec.
 ${specPath ? `Spec: ${specPath}\n` : ""}${claim ? delimitUntrusted(claim, "DISPUTE CLAIM") + "\n" : ""}${ws(workspaceRoot)}Do not modify non-test TypeScript files. When done, stop producing tool calls.`,
+
+    promptTesterHoldback: (holdbackSubdir: string) => gPromptTesterHoldback(holdbackSubdir),
+
+    promptWriterHoldbackNotice: (holdbackSubdir: string) => gPromptWriterHoldbackNotice(holdbackSubdir),
+
+    promptConsolidationStatus: (promoted: number, dropped: number, merged: boolean) =>
+      gPromptConsolidationStatus(promoted, dropped, merged),
   },
 
   refusalMessage: {

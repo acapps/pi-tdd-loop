@@ -15,6 +15,7 @@ import { sendPrompt } from "../../prompt";
 import { getLiveMetrics, finalize, formatReport, accumulatePhaseTransition } from "../../metrics";
 import { mergeBranchBack, verifyBranchMerge } from "./merge-back";
 import { buildRetryPrompt, buildAdvancePrompt } from "./prompts";
+import { runConsolidation } from "./consolidate";
 
 // Split (refactor step 4): git merge-back → ./merge-back.ts; prompt builders
 // → ./prompts.ts. Re-exported so every importer (incl. tests importing from
@@ -177,6 +178,33 @@ export function applyDoneEffect(input: EffectInput): EffectResult {
   // branch is set (the common case) it resolves immediately as a no-op.
   if (state.branch && !state.branch.merged) {
     void mergeBranchBack({ current: state }, pi, ctx, debug);
+  }
+
+  // U2 (wire-holdback-test-contract): fold the Tester's two-tier contract before
+  // the loop reports done — promote non-conceded holdback tests, drop conceded
+  // ones. The spec's guarantee is absolute: the loop cannot report green with an
+  // un-promoted holdback tier. A fold failure must therefore NOT report green —
+  // that would be a false success (an un-folded holdback tier reported as done).
+  // Escalate to the human (SPEC Invariant 5) instead: stop in the terminal
+  // "escalated" phase, notify, and send one prompt. reportDone is deliberately
+  // skipped so no completion prompt is ever sent on a fold failure.
+  try {
+    runConsolidation({ state, ctx, pi, debug });
+  } catch (e) {
+    debug(`Fold failed — escalating: ${e}`);
+    // markDone (handlePhaseCTransition) already set lastPhase = "C" before this
+    // done effect ran. Escalate from Phase C — a valid escalation origin
+    // (ORIGIN_GATED_ORIGINS = A/negotiate/B/C). Do NOT overwrite lastPhase with
+    // state.phase ("done"): escalation from "done" is rejected by the
+    // state-machine invariant, which is exactly what stalled the loop. The fold
+    // runs AFTER markDone, so the pre-fold origin ("C") is still carried here.
+    state.phase = "escalated";
+    state.turnsThisPhase = 1;
+    state.dispute = { status: "none" };
+    ctx.ui.notify(`Consolidation (fold) failed: ${e}. Escalating to human.`, "warning");
+    ctx.ui.setStatus("loop", "escalated (fold/consolidation failed)");
+    sendPrompt(pi, GP.promptConsolidationFailed(String(e)), state, debug);
+    return { applied: true };
   }
 
   reportDone(state, effect, pi, ctx);

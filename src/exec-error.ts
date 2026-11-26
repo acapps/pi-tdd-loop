@@ -13,7 +13,7 @@ export interface ExecError extends Error {
  * stdout, then the error message.
  */
 export function execErrorMessage(err: unknown): string {
-  const e = err as Partial<ExecError>;
+  const e = (err as Partial<ExecError>) ?? {};
   const parts = [e.stderr, e.stdout, e.message].filter(
     (p): p is string | Buffer => typeof p === "string" || Buffer.isBuffer(p),
   );

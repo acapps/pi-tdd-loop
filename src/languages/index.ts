@@ -13,6 +13,11 @@ export interface LanguageConfig {
   key: LanguageKey;
   sourceFilePattern: string;
   testFilePattern: string;
+  /**
+   * Subdir of the canonical test tree that holds the withheld (holdback) tier.
+   * Inside the runner's test root so the normal gate executes those tests.
+   */
+  holdbackSubdir: string;
   isTestFile: (path: string) => boolean;
   isPhaseAAllowed: (path: string) => boolean;
   prompts: LanguagePrompts;
@@ -37,6 +42,11 @@ interface LanguagePrompts {
   promptCleanerRetry: (failureSummary: string, failureCount: number, workspaceRoot?: string) => string;
   promptCleanerRestart: (workspaceRoot?: string) => string;
   promptTesterDisputeFix: (workspaceRoot?: string, claim?: string, specPath?: string) => string;
+  // Two-tier contract (holdback): Phase A writes the withheld tier here; B/C
+  // the Writer is told never to read/modify it; settle reports what folded.
+  promptTesterHoldback: (holdbackSubdir: string) => string;
+  promptWriterHoldbackNotice: (holdbackSubdir: string) => string;
+  promptConsolidationStatus: (promoted: number, dropped: number, merged: boolean) => string;
 }
 
 // --- Registry ---

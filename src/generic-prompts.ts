@@ -171,3 +171,31 @@ export function promptGateError(error: string): string {
 export function promptCoverageBelowThreshold(coverage: number, threshold: number): string {
   return `Coverage ${coverage}% is below the ${threshold}% threshold.`;
 }
+
+// --- Two-tier contract (holdback) ---
+//
+// Spec: internal/wire-holdback-test-contract.md. The Tester writes the withheld
+// tier into the language's holdback subdir; the Writer is told never to read or
+// modify it; settle reports what folded. Language-agnostic (same section as the
+// other flow prompts). STUB bodies — the Writer implements.
+
+export function promptTesterHoldback(holdbackSubdir: string): string {
+  return `You are the TESTER (Phase A). Write the withheld (holdback) tier of the contract into ${holdbackSubdir}, tagged [holdback] in the spec's ## Inventory. Complete the holdback set in Phase A — it is a pre-committed holdout, withheld from the Writer. Do not expose it to the Writer.`;
+}
+
+export function promptWriterHoldbackNotice(holdbackSubdir: string): string {
+  return `${holdbackSubdir} is the Tester's withheld (holdback) tier. Do not read or modify it — it is outside your contract and outside your view. Your contract is the visible Inventory only.`;
+}
+
+export function promptConsolidationStatus(promoted: number, dropped: number, merged: boolean): string {
+  return `Fold complete: ${promoted} holdback test(s) promoted to the visible contract, ${dropped} conceded test(s) dropped, ${merged ? "holdback subdir merged" : "holdback subdir retained"}.`;
+}
+
+// Fold (consolidation) failure. Emitted when the settle-time fold throws: the
+// two-tier contract could not be unified, so the loop must NOT report green
+// (that would be a false success — an un-promoted holdback tier). It escalates
+// to the human instead (SPEC Invariant 5). See applyDoneEffect in
+// effect-applicator.ts.
+export function promptConsolidationFailed(message: string): string {
+  return `Loop completion blocked: the holdback-tier fold (consolidation) failed and the contract could not be unified.\nFailure: ${message}\nThe loop has escalated to you. Inspect the fold failure, fix the consolidation, and restart from the current phase.`;
+}

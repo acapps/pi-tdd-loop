@@ -28,6 +28,7 @@ import { RETRY_PROMPTS, ADVANCE_PROMPTS } from "../../../src/constants";
 import * as archive from "../../../src/spec-archive";
 import { formatFailures } from "../../../src/gates";import { createMockExtensionAPI } from "../../__mocks__/@earendil-works/pi-coding-agent";
 import type { MockExtensionAPI } from "../../__mocks__/@earendil-works/pi-coding-agent";
+import * as consolidate from "../../../src/events/agent-settled/consolidate";
 
 // Bridges EffectInput.pi (typed as the package ExtensionAPI) to the mock's
 // capture arrays (sentMessages).
@@ -657,6 +658,29 @@ describe("applyDoneEffect", () => {
       effect: { type: "done", status: "s", notify: "n" }});
     applyDoneEffect(input);
     expect(state.phase).toBe("C");
+  });
+
+  // U2 (wire-holdback-test-contract): the fold is a settle-time precondition of
+  // completion. The done effect folds the Tester's two-tier contract before the
+  // loop reports done, so the loop cannot report green with an un-promoted
+  // holdback tier.
+  it("folds the holdback tier before reporting done", () => {
+    const spy = vi.spyOn(consolidate, "runConsolidation").mockReturnValue({ promoted: 1, dropped: 0, merged: false });
+    const input = makeInput({
+      effect: { type: "done", status: "All phases complete.", notify: "Loop complete." }});
+    const result = applyDoneEffect(input);
+    expect(result.applied).toBe(true);
+    expect(spy).toHaveBeenCalledTimes(1);
+    spy.mockRestore();
+  });
+
+  it("a fold hiccup does not crash completion", () => {
+    vi.spyOn(consolidate, "runConsolidation").mockImplementation(() => { throw new Error("fold boom"); });
+    const input = makeInput({
+      effect: { type: "done", status: "All phases complete.", notify: "Loop complete." }});
+    const result = applyDoneEffect(input);
+    expect(result.applied).toBe(true);
+    expect(piOf(input).sentMessages).toHaveLength(1);
   });
 });
 

@@ -1,7 +1,7 @@
 // --- Go language config ---
 
 import type { LanguageConfig } from "./index";
-import { delimitUntrusted, UNTRUSTED_DATA_GUARD } from "../generic-prompts";
+import { delimitUntrusted, UNTRUSTED_DATA_GUARD, promptTesterHoldback as gPromptTesterHoldback, promptWriterHoldbackNotice as gPromptWriterHoldbackNotice, promptConsolidationStatus as gPromptConsolidationStatus } from "../generic-prompts";
 
 // Toolchain commands only — style policy (naming, line limits) is not a role
 // contract and must not be injected into prompts (no-style-policy-bloat).
@@ -24,6 +24,7 @@ const config: LanguageConfig = {
   key: "go",
   sourceFilePattern: "*.go (non-test files)",
   testFilePattern: "*_test.go",
+  holdbackSubdir: "test/holdback",
   isTestFile: (path: string) => /\b\w+_test\.go$/.test(path),
   isPhaseAAllowed: (path: string) => /\b\w+_test\.go$/.test(path) || /\b\w+\.go$/.test(path) || /go\.(mod|sum)$/.test(path),
 
@@ -150,6 +151,13 @@ When done, stop producing tool calls.`,
     promptTesterDisputeFix: (workspaceRoot?: string, claim?: string, specPath?: string) =>
 `Conceded dispute. Fix the test in *_test.go to match the spec.
 ${specPath ? `Spec: ${specPath}\n` : ""}${claim ? delimitUntrusted(claim, "DISPUTE CLAIM") + "\n" : ""}${ws(workspaceRoot)}Do not modify non-test Go files. When done, stop producing tool calls.`,
+
+    promptTesterHoldback: (holdbackSubdir: string) => gPromptTesterHoldback(holdbackSubdir),
+
+    promptWriterHoldbackNotice: (holdbackSubdir: string) => gPromptWriterHoldbackNotice(holdbackSubdir),
+
+    promptConsolidationStatus: (promoted: number, dropped: number, merged: boolean) =>
+      gPromptConsolidationStatus(promoted, dropped, merged),
   },
 
   refusalMessage: {

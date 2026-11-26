@@ -61,6 +61,7 @@ function makeMockLang(): LanguageConfig {
     key: "go",
     sourceFilePattern: "*.go",
     testFilePattern: "*_test.go",
+    holdbackSubdir: "test/holdback",
     isTestFile: (path: string) => path.endsWith("_test.go"),
     isPhaseAAllowed: () => true,
     prompts: {
@@ -75,6 +76,9 @@ function makeMockLang(): LanguageConfig {
       promptCleanerRetry: () => "",
       promptCleanerRestart: () => "",
       promptTesterDisputeFix: () => "",
+      promptTesterHoldback: () => "",
+      promptWriterHoldbackNotice: () => "",
+      promptConsolidationStatus: () => "",
     },
     refusalMessage: { phaseA: "", negotiate: "", phaseC: "" },
   } as LanguageConfig;

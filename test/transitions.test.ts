@@ -257,6 +257,28 @@ describe("Phase C transitions (via computeTransition)", () => {
   });
 });
 
+describe("Phase C fold at settle (U2 — wire-holdback-test-contract)", () => {
+  it("green produces the done effect that folds the holdback tier before the loop reports done", () => {
+    const state = makeState({ phase: "C", round: 1 });
+    const gateResult = makeGateResult({ compile: true, coverage: 85, allPassed: true });
+    const result = T.computeTransition(state, gateResult);
+
+    // The done effect is what triggers the fold in applyDoneEffect (the fold is a
+    // settle-time precondition of completion, not a separate transition).
+    expect(result.effect.type).toBe("done");
+    expect(result.state.phase).toBe("done");
+  });
+
+  it("a red gate does not fold — it retries", () => {
+    const state = makeState({ phase: "C", round: 1, maxC: 3 });
+    const gateResult = makeGateResult({ compile: true, coverage: 0, failures: [{ test: "T", subtest: "", output: "" }] });
+    const result = T.computeTransition(state, gateResult);
+
+    expect(result.effect.type).toBe("retry");
+    expect(result.state.phase).toBe("C");
+  });
+});
+
 // --- Dispute fix transitions ---
 
 describe("Dispute fix transitions (via computeTransition)", () => {
