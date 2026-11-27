@@ -1,4 +1,8 @@
 import { defineConfig } from "vitest/config";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   test: {
@@ -10,7 +14,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@earendil-works/pi-coding-agent":
-        "/Users/alancapps/.pi/agent/extensions/loop-go-bak/test/__mocks__/@earendil-works/pi-coding-agent.ts",
+        join(__dirname, "test", "__mocks__", "@earendil-works", "pi-coding-agent.ts"),
     },
   },
 });
