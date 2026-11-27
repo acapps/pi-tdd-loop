@@ -31,6 +31,13 @@ vi.mock("../../../src/gates", async (importOriginal) => {
   return { ...actual, runGates: vi.fn() };
 });
 
+// The gate → done path folds the Tester's two-tier contract before reporting
+// done (runConsolidation does real fs I/O on state.specPath). Mock it so the
+// dispatcher's step-9 gate test never depends on a spec.md in process.cwd().
+vi.mock("../../../src/events/agent-settled/consolidate", () => ({
+  runConsolidation: vi.fn(),
+}));
+
 const runGatesMock = vi.mocked(runGates);
 const GO = getLanguageConfig("go");
 

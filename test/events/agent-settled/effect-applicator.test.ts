@@ -30,6 +30,14 @@ import { formatFailures } from "../../../src/gates";import { createMockExtension
 import type { MockExtensionAPI } from "../../__mocks__/@earendil-works/pi-coding-agent";
 import * as consolidate from "../../../src/events/agent-settled/consolidate";
 
+// The fold is settle-time I/O (reads/writes the spec, removes conceded files).
+// These tests cover effect-applicator's done-effect wiring, not the fold — the
+// fold's real fs behavior is exercised by consolidation.test.ts. Mock it here so
+// the done-effect tests never depend on a spec.md existing in process.cwd().
+vi.mock("../../../src/events/agent-settled/consolidate", () => ({
+  runConsolidation: vi.fn(),
+}));
+
 // Bridges EffectInput.pi (typed as the package ExtensionAPI) to the mock's
 // capture arrays (sentMessages).
 function piOf(input: EffectInput): MockExtensionAPI {
@@ -665,17 +673,18 @@ describe("applyDoneEffect", () => {
   // loop reports done, so the loop cannot report green with an un-promoted
   // holdback tier.
   it("folds the holdback tier before reporting done", () => {
-    const spy = vi.spyOn(consolidate, "runConsolidation").mockReturnValue({ promoted: 1, dropped: 0, merged: false });
+    vi.mocked(consolidate.runConsolidation).mockReset();
+    vi.mocked(consolidate.runConsolidation).mockReturnValue({ promoted: 1, dropped: 0, merged: false });
     const input = makeInput({
       effect: { type: "done", status: "All phases complete.", notify: "Loop complete." }});
     const result = applyDoneEffect(input);
     expect(result.applied).toBe(true);
-    expect(spy).toHaveBeenCalledTimes(1);
-    spy.mockRestore();
+    expect(vi.mocked(consolidate.runConsolidation)).toHaveBeenCalledTimes(1);
   });
 
   it("a fold hiccup does not crash completion", () => {
-    vi.spyOn(consolidate, "runConsolidation").mockImplementation(() => { throw new Error("fold boom"); });
+    vi.mocked(consolidate.runConsolidation).mockReset();
+    vi.mocked(consolidate.runConsolidation).mockImplementation(() => { throw new Error("fold boom"); });
     const input = makeInput({
       effect: { type: "done", status: "All phases complete.", notify: "Loop complete." }});
     const result = applyDoneEffect(input);

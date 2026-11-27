@@ -46,6 +46,13 @@ vi.mock("../../../src/scope-check", async (importOriginal) => {
   return { ...actual, checkScope: vi.fn() };
 });
 
+// The done effect folds the Tester's two-tier contract before reporting done
+// (runConsolidation does real fs I/O on state.specPath). Mock it so the
+// Phase-C → done transitions never depend on a spec.md in process.cwd().
+vi.mock("../../../src/events/agent-settled/consolidate", () => ({
+  runConsolidation: vi.fn(),
+}));
+
 const runGatesMock = vi.mocked(runGates);
 const checkScopeMock = vi.mocked(checkScope);
 const GO = getLanguageConfig("go");
