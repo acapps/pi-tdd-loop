@@ -43,8 +43,21 @@ export function isPhaseB(phase: string): phase is "B" {
   return phase === "B";
 }
 
+/**
+ * fix-dispute-verbose-approve (session 01a2113a): a `negotiate_review`
+ * decision is an approval iff its FIRST word (after trim + lowercase) is
+ * "approve" or "approved". The Tester is an LLM and appends explanation —
+ * "approve\n\nThe dispute is correct …" — but the old exact match treated
+ * that as feedback, so a Writer-filed dispute the Tester actually conceded
+ * was marked "defended" and the Writer was told to fix a stale test it can
+ * only resolve by a test change. Word boundary (not `startsWith`) keeps
+ * "approval needed" as feedback. Mirrors isAgreeProposal / isPhaseAApproval.
+ */
 export function isApproval(decision: string): boolean {
-  return decision === "approve" || decision === "approved";
+  // First word is "approve" or "approved", followed by a non-word boundary
+  // (space, punctuation, newline, or end). `(?!\w)` after the optional "d"
+  // keeps "approval needed" as feedback while accepting "approved, but…".
+  return /^approve(d)?(?!\w)/.test(decision.trim().toLowerCase());
 }
 
 /**

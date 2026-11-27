@@ -1317,6 +1317,45 @@ describe("negotiate_review tool", () => {
     expect(lastState.dispute?.status === "conceded").toBe(true);
   });
 
+  it("verbose 'approve\n\n…' dispute review concedes (fix-dispute-verbose-approve, session 01a2113a)", async () => {
+    const restartHandler = findCommand(api, "loop-restart");
+    await restartHandler("B", api._mockCtx);
+
+    // Writer files a dispute against a stale test.
+    const proposeTool = findTool(api, "negotiate_propose");
+    await proposeTool.execute(
+      "call-1",
+      { plan: "Test X is stale and wrong" },
+      undefined,
+      undefined,
+      api._mockExecCtx
+    );
+
+    // Tester approves WITH explanation (an LLM decision, not a bare token).
+    const reviewTool = findTool(api, "negotiate_review");
+    const result = await reviewTool.execute(
+      "call-2",
+      { decision: "approve\n\nThe dispute is correct — the test is stale and I will fix it." },
+      undefined,
+      undefined,
+      api._mockExecCtx
+    );
+
+    expect(result.content[0].text).toBe("Approved.");
+
+    // The concession must be recorded as "conceded" (not "defended"). The
+    // old exact-match isApproval treated a verbose approval as feedback, so a
+    // Writer-filed dispute the Tester actually conceded was marked "defended"
+    // and the loop exhausted + escalated. The fix-prompt itself is delivered
+    // at the next settle; the status is what the tool commits.
+    const stateEntries = api.appendedEntries.filter(
+      (e: any) => e.customType === "loop-state"
+    );
+    const lastState = stateEntries[stateEntries.length - 1]?.data;
+    expect(lastState.dispute?.status === "conceded").toBe(true);
+    expect(lastState.dispute?.status !== "defended").toBe(true);
+  });
+
   it("tester-filed defend → window closes, report-rejected pending (Table 2 row 4)", async () => {
     const restartHandler = findCommand(api, "loop-restart");
     await restartHandler("B", api._mockCtx);

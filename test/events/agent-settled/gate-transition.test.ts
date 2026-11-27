@@ -470,6 +470,28 @@ describe("Phase B", () => {
     expect(result.state.phase).toBe("C");
   });
 
+  it("resolved dispute clears a vitest-style test failure (bare path matches the claim) → advances to C", async () => {
+    // The only gate failure is a vitest failure stored with a "FAIL " prefix;
+    // the resolved dispute recorded it (resolveDisputedFailures strips that
+    // prefix to match the claim's bare path). The suite otherwise passes, so
+    // excluding the resolved failure must advance instead of retry.
+    runGatesMock.mockReturnValue(Promise.resolve(gate({ allPassed: false, coverage: 0, failures: [{ test: "FAIL test/events/agent-settled/effect-applicator.test.ts", subtest: "", output: "" }] })));
+    checkScopeMock.mockReturnValue({ ok: true, skipped: true, outOfScope: [], skipReason: undefined });
+    const { input } = makeInput({
+      state: makeState({
+        phase: "B",
+        round: 3,
+        dispute: {
+          status: "closed",
+          resolvedFailures: [{ test: "FAIL test/events/agent-settled/effect-applicator.test.ts", subtest: "", output: "" }],
+        },
+      }),
+    });
+    const result = await handleGateTransition(input);
+    expect(result.applied).toBe(true);
+    expect(result.state.phase).toBe("C");
+  });
+
   it("resolved dispute does NOT clear an unrelated real failure → still retries", async () => {
     runGatesMock.mockReturnValue(Promise.resolve(gate({ allPassed: false, coverage: 0, failures: [{ test: "TestAdd", subtest: "", output: "boom" }] })));
     checkScopeMock.mockReturnValue({ ok: true, skipped: true, outOfScope: [], skipReason: undefined });

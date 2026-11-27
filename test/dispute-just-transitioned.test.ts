@@ -150,6 +150,37 @@ describe("justTransitioned + dispute interaction", () => {
     ]);
   });
 
+  it("handleBDisputePropose matches a vitest failure whose claim names the bare path (fix-dispute-verbose-approve follow-up)", () => {
+    const state = makeState({
+      dispute: { status: "none" },
+      lastGateResult: {
+        compile: true,
+        compileError: "",
+        allPassed: false,
+        coverage: 0,
+        failures: [
+          // parseGenericFailures stores vitest failures with a "FAIL " prefix.
+          { test: "FAIL test/events/agent-settled/effect-applicator.test.ts", subtest: "", output: "" },
+        ],
+      },
+    });
+
+    handleBDisputePropose(
+      { current: state } as any,
+      makeMockPi(),
+      vi.fn(),
+      makeToolCtx(),
+      'DISPUTE (one stale test blocks a clean pass). Disputed test: "a fold hiccup does not crash completion" in test/events/agent-settled/effect-applicator.test.ts.',
+    );
+
+    // The claim names the bare path (no "FAIL " prefix), so the recorded set
+    // must still include the failure — otherwise the gate re-detects it every
+    // run and pins the loop before the Tester can fix the stale test.
+    expect(state.dispute?.resolvedFailures).toEqual([
+      { test: "FAIL test/events/agent-settled/effect-applicator.test.ts", subtest: "", output: "" },
+    ]);
+  });
+
   it("handleBDisputePropose records nothing when there is no gate result yet", () => {
     const state = makeState({ dispute: { status: "none" }, lastGateResult: undefined });
 

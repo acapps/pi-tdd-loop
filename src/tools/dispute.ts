@@ -76,7 +76,18 @@ export function executeWriterConcedeDispute(
 function resolveDisputedFailures(state: StateRef, claim: string): FailingTest[] | undefined {
   const failures = state.current.lastGateResult?.failures;
   if (!Array.isArray(failures) || failures.length === 0) return undefined;
-  const matched = failures.filter((f) => claim.includes(f.test));
+  // Vitest/maven failures are stored with a "FAIL " prefix on the `test` field
+  // (parseGenericFailures: test = "FAIL test/x.test.ts"), but a dispute claim
+  // names the failing check by its bare path ("test/x.test.ts") or the bare
+  // "scope-check" id. Match the claim against the id with that prefix stripped
+  // (case-insensitively) so a claim that names the file still clears the
+  // failure. Without this the recorded set is empty and a disputed-and-approved
+  // failure is re-detected on every gate run, pinning the loop (session
+  // 01a2113a). The scope-check id has no prefix, so that path is unchanged.
+  const needle = claim.toLowerCase();
+  const matched = failures.filter((f) =>
+    needle.includes(f.test.replace(/^FAIL\s+/, "").toLowerCase())
+  );
   return matched.length > 0
     ? matched.map((f) => ({ test: f.test, subtest: f.subtest, output: f.output }))
     : undefined;

@@ -39,7 +39,7 @@ import { initLiveMetrics, clearLiveMetrics, getLiveMetrics } from "../../src/met
 import { getLanguageConfig } from "../../src/languages";
 import type { LoopState, Phase } from "../../src/types";
 import { createMockExtensionAPI } from "../__mocks__/@earendil-works/pi-coding-agent";
-import { isPhaseAApproval } from "../../src/tools/types";
+import { isApproval, isPhaseAApproval } from "../../src/tools/types";
 import { PROPOSE_POLICY, type ProposePolicy } from "../../src/tools/policy";
 
 // --- Fixtures -----------------------------------------------------------
@@ -373,6 +373,26 @@ describe("policy matrix — propose", () => {
       expect(isPhaseAApproval("")).toBe(false);
       expect(isPhaseAApproval(" ")).toBe(false);
       expect(isPhaseAApproval("agreement")).toBe(false);
+    });
+  });
+
+  describe("isApproval — review decision predicate (fix-dispute-verbose-approve)", () => {
+    it("accepts a bare approve / approved, case-insensitively", () => {
+      expect(isApproval("approve")).toBe(true);
+      expect(isApproval("APPROVE")).toBe(true);
+      expect(isApproval("approved")).toBe(true);
+    });
+
+    it("accepts an approval with trailing explanation (the session 01a2113a case)", () => {
+      expect(isApproval("approve\n\nThe dispute is correct — the test is stale.")).toBe(true);
+      expect(isApproval("approved, but rename the file too")).toBe(true);
+    });
+
+    it("rejects feedback that does not lead with approve / approved", () => {
+      expect(isApproval("approval needed for the edge case")).toBe(false);
+      expect(isApproval("Edge case Y is handled")).toBe(false);
+      expect(isApproval("")).toBe(false);
+      expect(isApproval(" ")).toBe(false);
     });
   });
 

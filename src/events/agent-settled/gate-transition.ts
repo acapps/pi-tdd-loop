@@ -76,11 +76,6 @@ export async function handleGateTransition(
 
     const gate = outcome.kind === "result" ? outcome.result! : null;
 
-    // The test verdict BEFORE the scope-check (a gate-level contamination
-    // check) can override it. Captured here so a resolved dispute can restore
-    // it — see excludeResolvedDisputeFailures below.
-    const intrinsicVerdict = gate?.allPassed ?? false;
-
     // Scope check (cross-spec contamination): a green gate with dirty files
     // outside the active spec's Inventory is a scope violation, not a pass.
     // Skips cleanly when the check cannot run (non-git cwd, no Inventory).
@@ -142,16 +137,21 @@ export async function handleGateTransition(
 
     // bug-dispute-resolves-gate-failure: a conceded / defended / closed dispute
     // has cleared the specific failures it resolved. Re-evaluate the Phase B
-    // gate without them, restoring the test verdict, so a disputed-and-approved
-    // failure (e.g. the false-positive scope-check in session 01a1c72a) can't
-    // be re-detected on every gate run and pin the loop before Phase C. A gate
-    // that failed on a *real* test still has intrinsicVerdict=false, so it does
-    // not advance until that test is actually fixed.
+    // gate without them, so a disputed-and-approved failure (a false-positive
+    // scope-check in session 01a1c72a, or a stale test in 01a2113a) can't be
+    // re-detected on every gate run and pin the loop before Phase C. The
+    // post-exclusion verdict is "compile OK and no failures remain": a gate
+    // that still fails on a *real* test has failures.length > 0, so it does
+    // not advance until that test is actually fixed. (The old
+    // `intrinsicVerdict && failures.length === 0` was wrong for an intrinsic
+    // test failure: intrinsicVerdict is the pre-exclusion verdict, which is
+    // false precisely because of the failure being removed, so a fully-resolved
+    // stale test never restored allPassed.)
     if (gate && phase === "B" && state.dispute && isResolvedDispute(state.dispute)) {
       const { failures, removed } = excludeResolvedDisputeFailures(gate, state.dispute.resolvedFailures);
       if (removed) {
         gate.failures = failures;
-        gate.allPassed = intrinsicVerdict && failures.length === 0;
+        gate.allPassed = gate.compile && failures.length === 0;
         debug(`Dispute resolved: excluded resolved failure(s); ${failures.length} remaining (Phase B gate)`);
       }
     }
